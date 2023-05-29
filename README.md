@@ -1,5 +1,5 @@
 <p align="center" width="100%">
-<img src="assets/logo-aeiva.png" alt="AEIVA" style="width: 100%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
+<img src="assets/aeiva-logo.svg" alt="AEIVA" style="width: 100%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
 # Aeiva
