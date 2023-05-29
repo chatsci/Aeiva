@@ -1,4 +1,4 @@
-<p align="center" width="100%">
+<p align="center" width="40%">
 <img src="assets/aeiva-logo.png" alt="AEIVA" style="width: 100%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
