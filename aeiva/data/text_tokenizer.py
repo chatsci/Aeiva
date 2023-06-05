@@ -1,10 +1,17 @@
 #!/usr/bin/env python
 # coding=utf-8
+"""
+This module contains the class for a text tokenizer.
+
+Copyright (C) 2023 Bang Liu - All Rights Reserved.
+This source code is licensed under the license found in the LICENSE file
+in the root directory of this source tree.
+"""
 from abc import ABC, abstractmethod
 from typing import List, Union
-from transformers import PreTrainedTokenizer
-from tiktoken import Tokenizer
-from tiktoken.models import Model
+from transformers import AutoTokenizer
+import tiktoken
+import pickle
 
 
 class BaseTokenizer(ABC):
@@ -13,78 +20,126 @@ class BaseTokenizer(ABC):
     """
 
     @abstractmethod
-    def tokenize(self, data):
-        """
-        Method to convert data into tokens. Should be implemented by all subclasses.
-        """
+    def encode(self, data: str, **kwargs) -> List[int]:
         pass
+
+    @abstractmethod
+    def decode(self, data: List[int], **kwargs) -> str:
+        pass
+
+
+class TikTokenWrapper(BaseTokenizer):
+    """
+    A wrapper for tiktoken's Tokenizer to make it compatible with TextTokenizer.
+    """
+    def __init__(self, tokenizer: str):
+        self.tokenizer = tiktoken.get_encoding(tokenizer)
+
+    def encode(self, text: str, **kwargs) -> List[int]:
+        tokens = self.tokenizer.encode(text, **kwargs)
+        return tokens
+
+    def decode(self, data: List[int], **kwargs) -> str:
+        return self.tokenizer.decode(data, **kwargs)
+
+
+class HuggingFaceWrapper(BaseTokenizer):
+    """
+    A wrapper for Hugging Face's Tokenizer to make it compatible with TextTokenizer.
+    """
+    def __init__(self, tokenizer: str):
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+
+    def encode(self, text: str, **kwargs) -> List[int]:
+        tokens = self.tokenizer.encode(text, **kwargs)
+        return tokens
+
+    def decode(self, data: List[int], **kwargs) -> str:
+        return self.tokenizer.decode(data, **kwargs)
+
+
+class TokenizerFromPickle(BaseTokenizer):
+    """
+    A wrapper for loading a tokenizer from a pickle file.
+    """
+    def __init__(self, meta_path: str):
+        self.meta_path = meta_path
+        self.stoi = None
+        self.itos = None
+    
+    def _load(self):
+        if not self.stoi or not self.itos:
+            self.meta = pickle.load(open(self.meta_path, 'rb'))
+            self.stoi = self.meta.get('stoi')
+            self.itos = self.meta.get('itos')
+
+            if not self.stoi or not self.itos:
+                raise ValueError(f'Pickle file {self.meta_path} does not contain stoi or itos')
+    
+    def encode(self, text: str, **kwargs) -> List[int]:
+        self._load()
+        tokens = [self.stoi.get(c, self.stoi.get('<UNK>')) for c in text]
+        return tokens
+    
+    def decode(self, data: List[int], **kwargs) -> str:
+        self._load()
+        text = ''.join([self.itos.get(i, '<UNK>') for i in data])
+        return text
 
 
 class TextTokenizer(BaseTokenizer):
     """
-    Create a TextTokenizer that can use either a Hugging Face tokenizer or a custom tokenizer.
-
-    If a string is passed as the tokenizer, the TextTokenizer will use a Hugging Face tokenizer of
-    the specified model. If an instance of a tokenizer is passed, it will be used directly.
-
-    Args:
-        tokenizer (Union[str, PreTrainedTokenizer]): The tokenizer to use.
-            - If str: The model name or path of a Hugging Face tokenizer to use.
-            - If PreTrainedTokenizer: A tokenizer instance that has a `__call__` method to tokenize text.
-
-    Raises:
-        ValueError: If the `tokenizer` argument is not a str or a PreTrainedTokenizer instance.
+    A TextTokenizer that can use a Hugging Face tokenizer, a tiktoken tokenizer or a custom tokenizer.
     """
-    def __init__(self, tokenizer: Union[str, PreTrainedTokenizer]):
+    def __init__(self, tokenizer: Union[str, TikTokenWrapper, HuggingFaceWrapper, TokenizerFromPickle]):
         if isinstance(tokenizer, str):
-            self.tokenizer = PreTrainedTokenizer.from_pretrained(tokenizer)
-        elif isinstance(tokenizer, PreTrainedTokenizer):
+            self.tokenizer = HuggingFaceWrapper(tokenizer)
+        elif isinstance(tokenizer, (TikTokenWrapper, HuggingFaceWrapper, TokenizerFromPickle)):
             self.tokenizer = tokenizer
         else:
-            raise ValueError("tokenizer must be a string or a PreTrainedTokenizer instance")
+            raise ValueError("tokenizer must be a string, a TikTokenWrapper, a HuggingFaceWrapper, or a TokenizerFromPickle.")
 
-    def tokenize(self, text: str) -> List[int]:
-        """
-        Tokenizes a piece of text.
+    def encode(self, text: str, **kwargs) -> List[int]:
+        tokens = self.tokenizer.encode(text, **kwargs)
+        return tokens
+    
+    def decode(self, data: List[int], **kwargs) -> str:
+        return self.tokenizer.decode(data, **kwargs)
 
-        Args:
-            text (str): The text to tokenize.
-
-        Returns:
-            tokens (List[int]): The tokenized text as a list of token ids.
-        """
-        tokens = self.tokenizer(text, truncation=True, padding='longest', return_tensors='pt')
-        return tokens['input_ids']
-
-
-class TikTokenWrapper:
-    """
-    A wrapper for tiktoken's Tokenizer to make it compatible with TextTokenizer.
-
-    The TikTokenWrapper works by tokenizing the input text using tiktoken's Tokenizer,
-    and then converting each token into its corresponding ID using a Model from tiktoken.models.
-
-    Note: The TikTokenWrapper does not handle out-of-vocabulary tokens or special tokens like start-of-sequence 
-    or end-of-sequence tokens. If you need to handle these types of tokens, you would need to modify 
-    the TikTokenWrapper accordingly.
-    """
-    def __init__(self):
-        self.tokenizer = Tokenizer()
-        self.model = Model()
-
-    def __call__(self, text):
-        tokens = self.tokenizer.tokenize(text)
-        token_ids = [self.model.encoder[t] for t in tokens if t in self.model.encoder]
-        return token_ids
+    def encode(self, text: str, **kwargs) -> List[int]:
+        tokens = self.tokenizer.encode(text, **kwargs)
+        return tokens
+    
+    def decode(self, data, **kwargs) -> str:
+        return self.tokenizer.decode(data, **kwargs)
 
 
 if __name__ == '__main__':
     # Test the TextTokenizer
-    tokenizer = TextTokenizer('gpt2-medium')
-    tokens = tokenizer.tokenize('Hello, world!')
+    tokenizer = TextTokenizer('gpt2')
+    tokens = tokenizer.encode('Hello, world!')
     print(tokens)
+    text = tokenizer.decode(tokens)
+    print(text)
 
     # Test the TikTokenWrapper
-    tokenizer = TextTokenizer(TikTokenWrapper())
-    tokens = tokenizer.tokenize('Hello, world!')
+    tokenizer = TextTokenizer(TikTokenWrapper('gpt2'))
+    tokens = tokenizer.encode('Hello, nice to meet you!', allowed_special={"Hello"})
     print(tokens)
+    text = tokenizer.decode(tokens)
+    print(text)
+
+    # Test the HuggingFaceWrapper
+    tokenizer = TextTokenizer(HuggingFaceWrapper('gpt2'))
+    tokens = tokenizer.encode('Hello, nice to meet huggingface!')
+    print(tokens)
+    text = tokenizer.decode(tokens)
+    print(text)
+
+    # Test the TokenizerFromPickle
+    tokenizer = TextTokenizer(TokenizerFromPickle('../data/shakespeare_char/meta.pkl'))
+    tokens = tokenizer.encode('Hello, nice to meet you!')
+    print(tokens)
+    text = tokenizer.decode(tokens)
+    print(text)
+
