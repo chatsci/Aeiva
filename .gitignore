@@ -8,7 +8,7 @@ wandb/
 TODO.txt
 .DS_Store
 
-datasets/*
+datasets/*/*
 !datasets/*/*.py
 !datasets/*/*.ipynb
 !datasets/*/*.md
