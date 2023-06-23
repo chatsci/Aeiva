@@ -1,4 +1,5 @@
 .DS_Store
+**/.DS_Store
 .ipynb_checkpoints/
 __pycache__/
 *.pyc
@@ -6,5 +7,8 @@ out*/
 wandb/
 TODO.txt
 .DS_Store
-**/.DS_Store
 
+datasets/*
+!datasets/*/*.py
+!datasets/*/*.ipynb
+!datasets/*/*.md

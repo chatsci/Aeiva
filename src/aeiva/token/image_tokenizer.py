@@ -7,12 +7,11 @@ Copyright (C) 2023 Bang Liu - All Rights Reserved.
 This source code is licensed under the license found in the LICENSE file
 in the root directory of this source tree.
 """
-from abc import ABC, abstractmethod
-from typing import Union
 from PIL import Image
 from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 import torch
+from base_tokenizer import BaseTokenizer
 
 
 # Define constants for image size and normalization values
@@ -21,21 +20,7 @@ NORMALIZATION_MEAN = [0.485, 0.456, 0.406]
 NORMALIZATION_STD = [0.229, 0.224, 0.225]
 
 
-class BaseImageTokenizer(ABC):
-    """
-    Abstract base class for image tokenizers.
-    """
-
-    @abstractmethod
-    def encode(self, data, **kwargs):
-        pass
-
-    @abstractmethod
-    def decode(self, data, **kwargs):
-        pass
-
-
-class ImageTokenizer(BaseImageTokenizer):
+class ImageTokenizer(BaseTokenizer):
     """
     A basic ImageTokenizer that takes in an image path and returns a PyTorch tensor.
 
@@ -66,7 +51,7 @@ class ImageTokenizer(BaseImageTokenizer):
 if __name__ == '__main__':
     # Test the ImageTokenizer
     tokenizer = ImageTokenizer()
-    image_path = '../data/sample_img.jpg'  # Replace this with your image path
+    image_path = '../../../samples/sample_img.jpg'  # Replace this with your image path
     tensor = tokenizer.encode(image_path)
     print(tensor.shape)  # Should print torch.Size([3, 224, 224])
     print(tensor)

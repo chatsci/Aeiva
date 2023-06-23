@@ -1,37 +1,23 @@
-#!/usr/bin/env python
 # coding=utf-8
+#
+# Copyright (C) 2023 Bang Liu - All Rights Reserved.
+# This source code is licensed under the license found in the LICENSE file
+# in the root directory of this source tree.
 """
 This module contains the class for a text tokenizer.
-
-Copyright (C) 2023 Bang Liu - All Rights Reserved.
-This source code is licensed under the license found in the LICENSE file
-in the root directory of this source tree.
 """
-from abc import ABC, abstractmethod
 from typing import List, Union
 from transformers import AutoTokenizer
 import tiktoken
 import pickle
-
-
-class BaseTokenizer(ABC):
-    """
-    Abstract base class for tokenizers.
-    """
-
-    @abstractmethod
-    def encode(self, data: str, **kwargs) -> List[int]:
-        pass
-
-    @abstractmethod
-    def decode(self, data: List[int], **kwargs) -> str:
-        pass
+from base_tokenizer import BaseTokenizer
 
 
 class TikTokenWrapper(BaseTokenizer):
     """
     A wrapper for tiktoken's Tokenizer to make it compatible with TextTokenizer.
     """
+
     def __init__(self, tokenizer: str):
         self.tokenizer = tiktoken.get_encoding(tokenizer)
 
@@ -47,6 +33,7 @@ class HuggingFaceWrapper(BaseTokenizer):
     """
     A wrapper for Hugging Face's Tokenizer to make it compatible with TextTokenizer.
     """
+
     def __init__(self, tokenizer: str):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
 
@@ -62,6 +49,7 @@ class TokenizerFromPickle(BaseTokenizer):
     """
     A wrapper for loading a tokenizer from a pickle file.
     """
+
     def __init__(self, meta_path: str):
         self.meta_path = meta_path
         self.stoi = None
@@ -91,6 +79,7 @@ class TextTokenizer(BaseTokenizer):
     """
     A TextTokenizer that can use a Hugging Face tokenizer, a tiktoken tokenizer or a custom tokenizer.
     """
+
     def __init__(self, tokenizer: Union[str, TikTokenWrapper, HuggingFaceWrapper, TokenizerFromPickle]):
         if isinstance(tokenizer, str):
             self.tokenizer = HuggingFaceWrapper(tokenizer)
@@ -104,13 +93,6 @@ class TextTokenizer(BaseTokenizer):
         return tokens
     
     def decode(self, data: List[int], **kwargs) -> str:
-        return self.tokenizer.decode(data, **kwargs)
-
-    def encode(self, text: str, **kwargs) -> List[int]:
-        tokens = self.tokenizer.encode(text, **kwargs)
-        return tokens
-    
-    def decode(self, data, **kwargs) -> str:
         return self.tokenizer.decode(data, **kwargs)
 
 
@@ -137,7 +119,7 @@ if __name__ == '__main__':
     print(text)
 
     # Test the TokenizerFromPickle
-    tokenizer = TextTokenizer(TokenizerFromPickle('../data/shakespeare_char/meta.pkl'))
+    tokenizer = TextTokenizer(TokenizerFromPickle('../../../datasets/shakespeare_char/meta.pkl'))
     tokens = tokenizer.encode('Hello, nice to meet you!')
     print(tokens)
     text = tokenizer.decode(tokens)

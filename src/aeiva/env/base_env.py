@@ -12,4 +12,17 @@ from abc import ABC
 class BaseEnv(ABC):
     """ This class is the base class for all environment classes.
     """
-    pass
+
+    def __init__(self, *args, **kwargs):
+        self.state = None
+    
+    def reset(self, *args, **kwargs):
+        """ Reset the environment.
+        """
+        pass
+
+    def step(self, action, *args, **kwargs):
+        """ Take a step in the environment, and return the next state, reward, and done.
+        """
+        pass
+

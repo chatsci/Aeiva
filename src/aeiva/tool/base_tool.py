@@ -12,4 +12,21 @@ from abc import ABC
 class BaseTool(ABC):
     """ This class is the base class for all tool classes.
     """
-    pass
+    
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def reset(self, *args, **kwargs):
+        """ Reset the tool.
+        """
+        pass
+
+    def act(self, *args, **kwargs):
+        """ Act in the environment.
+        """
+        pass
+
+    def sense(self, *args, **kwargs):
+        """ Sense the environment.
+        """
+        pass
