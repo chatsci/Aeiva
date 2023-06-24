@@ -12,3 +12,5 @@ datasets/*/*
 !datasets/*/*.py
 !datasets/*/*.ipynb
 !datasets/*/*.md
+
+pretrained_models/*

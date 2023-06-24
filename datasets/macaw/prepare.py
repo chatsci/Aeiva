@@ -41,6 +41,7 @@ from transformers import AutoTokenizer
 os.environ["LC_ALL"] = "en_US.UTF-8"
 os.environ["LANG"] = "en_US.UTF-8"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"  # NOTE: This is just a workarouond. Ensure a single OpenMP runtime is linked is the best solution.
 
 torch.random.manual_seed(0)
 
@@ -609,7 +610,14 @@ def preprocess_mm_dataset(file_paths, dataset_name, tokenizer, max_length=MAX_LE
 
 def _get_tokenizer():
     # prepare llama tokenizer
-    tokenizer = AutoTokenizer.from_pretrained('yahma/llama-13b-hf')  # !!! take care of the tokenizer.
+    # NOTE: The authors of macaw used https://huggingface.co/decapoda-research/llama-7b-hf. However, this version tokenizer has
+    # some bugs (see: https://github.com/huggingface/transformers/issues/22222).
+    # So we use the tokenizer from https://huggingface.co/yahma/llama-7b-hf.
+    # Also, in many llama tokenizer versions, their bos, eos id seems to be 0, making models hard to learn 
+    # when to stop. Therefore, it is more recommended to use 'yahma/llama-7b-hf' or 'yahma/llama-13b-hf'.
+    # Credit to Yu Song for the bug of LLaMA tokenizer.
+    tokenizer = AutoTokenizer.from_pretrained('yahma/llama-7b-hf')
+
     # special_tokens_dict = {'additional_special_tokens': ['<image>', '</image>', '<audio>', '</audio>', '<video>', '</video>']}
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({'pad_token': DEFAULT_PAD_TOKEN})
@@ -725,64 +733,64 @@ if __name__ == '__main__':
     #     output_path = './all_visual_names.macaw_coco_avsd.json',
     # )
 
-    # Stage 4: process all the datasets (vqa, alpaca, avsd), merge, and sample.
-    input_file_paths = {
-        'vqa_annotations_path': 'vqa/v2_mscoco_train2014_annotations.json',
-        'vqa_questions_path': 'vqa/v2_OpenEnded_mscoco_train2014_questions.json',
-        'alpaca_dataset_path': 'alpaca/alpaca_data.json',
-        'avsd_dataset_path': 'avsd/avsd_train.json',
-        'visual_data_names_path': 'all_visual_names.vqa_avsd.json',
-    }
-    dataset_names = ['vqa', 'alpaca', 'avsd']
-    output_path = 'train.vqa_alpaca_avsd.sampled.pkl'
+    # # Stage 4: process all the datasets (vqa, alpaca, avsd), merge, and sample.
+    # input_file_paths = {
+    #     'vqa_annotations_path': 'vqa/v2_mscoco_train2014_annotations.json',
+    #     'vqa_questions_path': 'vqa/v2_OpenEnded_mscoco_train2014_questions.json',
+    #     'alpaca_dataset_path': 'alpaca/alpaca_data.json',
+    #     'avsd_dataset_path': 'avsd/avsd_train.json',
+    #     'visual_data_names_path': 'all_visual_names.vqa_avsd.json',
+    # }
+    # dataset_names = ['vqa', 'alpaca', 'avsd']
+    # output_path = 'train.vqa_alpaca_avsd.sampled.pkl'
 
-    # debug    
-    DEBUG_MODE = True
-    MAX_NUM_SAMPLES_PER_DATASET = MAX_NUM_RANDOM_DEBUG_SAMPLES
-    NUM_RANDOM_MERGED_SAMPLES = NUM_RANDOM_MERGED_DEBUG_SAMPLES
-    print('DEBUG_MODE: ', DEBUG_MODE)
-    print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
-    print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
+    # # debug    
+    # DEBUG_MODE = True
+    # MAX_NUM_SAMPLES_PER_DATASET = MAX_NUM_RANDOM_DEBUG_SAMPLES
+    # NUM_RANDOM_MERGED_SAMPLES = NUM_RANDOM_MERGED_DEBUG_SAMPLES
+    # print('DEBUG_MODE: ', DEBUG_MODE)
+    # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
+    # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
-    _tests_for_debug(input_file_paths, dataset_names, output_path)
+    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # _tests_for_debug(input_file_paths, dataset_names, output_path)
 
-    # once debug successed, run the following code    
-    DEBUG_MODE = False
-    MAX_NUM_SAMPLES_PER_DATASET = sys.maxsize  # NOTE: same as the top of this file
-    NUM_RANDOM_MERGED_SAMPLES = 50000  # NOTE: same as the top of this file
-    print('DEBUG_MODE: ', DEBUG_MODE)
-    print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
-    print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
+    # # once debug successed, run the following code    
+    # DEBUG_MODE = False
+    # MAX_NUM_SAMPLES_PER_DATASET = sys.maxsize  # NOTE: same as the top of this file
+    # NUM_RANDOM_MERGED_SAMPLES = 50000  # NOTE: same as the top of this file
+    # print('DEBUG_MODE: ', DEBUG_MODE)
+    # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
+    # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
 
-    # Stage 5: process the macaw generated coco and avsd datasets
-    input_file_paths = {
-        'macaw_coco_dataset_path': './generated_examples_coco.json',
-        'macaw_avsd_dataset_path': './generated_examples_avsd.json',
-        'visual_data_names_path': 'all_visual_names.macaw_coco_avsd.json',
-    }
-    dataset_names = ['macaw_coco', 'macaw_avsd']
-    output_path = 'train.macaw_coco_avsd.sampled.pkl'
+    # # Stage 5: process the macaw generated coco and avsd datasets
+    # input_file_paths = {
+    #     'macaw_coco_dataset_path': './generated_examples_coco.json',
+    #     'macaw_avsd_dataset_path': './generated_examples_avsd.json',
+    #     'visual_data_names_path': 'all_visual_names.macaw_coco_avsd.json',
+    # }
+    # dataset_names = ['macaw_coco', 'macaw_avsd']
+    # output_path = 'train.macaw_coco_avsd.sampled.pkl'
 
-    # debug    
-    DEBUG_MODE = True
-    MAX_NUM_SAMPLES_PER_DATASET = MAX_NUM_RANDOM_DEBUG_SAMPLES
-    NUM_RANDOM_MERGED_SAMPLES = NUM_RANDOM_MERGED_DEBUG_SAMPLES
-    print('DEBUG_MODE: ', DEBUG_MODE)
-    print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
-    print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
+    # # debug    
+    # DEBUG_MODE = True
+    # MAX_NUM_SAMPLES_PER_DATASET = MAX_NUM_RANDOM_DEBUG_SAMPLES
+    # NUM_RANDOM_MERGED_SAMPLES = NUM_RANDOM_MERGED_DEBUG_SAMPLES
+    # print('DEBUG_MODE: ', DEBUG_MODE)
+    # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
+    # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
-    _tests_for_debug(input_file_paths, dataset_names, output_path)
+    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # _tests_for_debug(input_file_paths, dataset_names, output_path)
 
-    # once debug successed, run the following code
-    DEBUG_MODE = False
-    MAX_NUM_SAMPLES_PER_DATASET = sys.maxsize  # NOTE: same as the top of this file
-    NUM_RANDOM_MERGED_SAMPLES = 50000  # NOTE: same as the top of this file
-    print('DEBUG_MODE: ', DEBUG_MODE)
-    print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
-    print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
+    # # once debug successed, run the following code
+    # DEBUG_MODE = False
+    # MAX_NUM_SAMPLES_PER_DATASET = sys.maxsize  # NOTE: same as the top of this file
+    # NUM_RANDOM_MERGED_SAMPLES = 50000  # NOTE: same as the top of this file
+    # print('DEBUG_MODE: ', DEBUG_MODE)
+    # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
+    # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
