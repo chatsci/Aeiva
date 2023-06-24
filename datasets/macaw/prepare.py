@@ -72,6 +72,8 @@ PROMPT_DICT = {
 
 
 def _format_text(instruction_text=None, input_text=None, response_text=None):
+    """Format text for prompt.
+    """
     assert isinstance(instruction_text, (str, type(None))), "Instruction text must be a string or None"
     assert isinstance(input_text, (str, type(None))), "Input text must be a string or None"
     assert isinstance(response_text, (str, type(None))), "Response text must be a string or None"
@@ -111,17 +113,10 @@ def save_to_json(data, file_path):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
-def draw_samples(input_list, sample_ratio):
+def draw_samples(input_list, sample_ratio_or_num_samples):
     """ Draw samples from a list.
-    
-    Args:
-        input_list (list): The input list.
-        sample_ratio (float or int): The ratio of samples to draw.
-
-    Returns:
-        sampled_input: The sampled list.
     """
-    num_samples = sample_ratio if sample_ratio > 1 else int(sample_ratio * len(input_list))
+    num_samples = sample_ratio_or_num_samples if sample_ratio_or_num_samples > 1 else int(sample_ratio_or_num_samples * len(input_list))
 
     if num_samples > len(input_list):
         sampled_indices = np.random.choice(len(input_list), num_samples, replace=True)
@@ -459,7 +454,7 @@ def _format_vqa_dataset(file_paths):
             'output': e['multiple_choice_answer'],  # answer from vqa dataset annotation file
             'image_name': image_name,
             'image_id': image_id,
-            'audio_id': -1,
+            'audio_id': -1,  # NOTE: -1 means no audio. Similarly for other modalities.
             'video_id': -1
         }
         all_examples.append(e)
@@ -631,7 +626,7 @@ def _get_tokenizer():
     return tokenizer
     
 
-def preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH):
+def preprocess_merge_and_sample_mm_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH):
     # Prepare tokenizer
     tokenizer = _get_tokenizer()
 
@@ -752,7 +747,7 @@ if __name__ == '__main__':
     # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
     # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # preprocess_merge_and_sample_mm_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
     # _tests_for_debug(input_file_paths, dataset_names, output_path)
 
     # # once debug successed, run the following code    
@@ -763,7 +758,7 @@ if __name__ == '__main__':
     # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
     # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # preprocess_merge_and_sample_mm_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
 
     # # Stage 5: process the macaw generated coco and avsd datasets
     # input_file_paths = {
@@ -782,7 +777,7 @@ if __name__ == '__main__':
     # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
     # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # preprocess_merge_and_sample_mm_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
     # _tests_for_debug(input_file_paths, dataset_names, output_path)
 
     # # once debug successed, run the following code
@@ -793,4 +788,4 @@ if __name__ == '__main__':
     # print('MAX_NUM_SAMPLES_PER_DATASET: ', MAX_NUM_SAMPLES_PER_DATASET)
     # print('NUM_RANDOM_MERGED_SAMPLES: ', NUM_RANDOM_MERGED_SAMPLES)
 
-    # preprocess_merge_and_sample_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
+    # preprocess_merge_and_sample_mm_datasets(input_file_paths, dataset_names, output_path, max_length=MAX_LENGTH)
