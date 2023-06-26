@@ -19,37 +19,80 @@ from transformers.models.whisper.modeling_whisper import WhisperEncoderLayer
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
+# Adapted from transformers.models.bart.modeling_bart._make_causal_mask
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0):
     """
-    Make causal mask used for bi-directional self-attention.
+    Creates a causal mask used for self-attention in transformer models.
+    
+    This mask ensures that during the self-attention calculation, 
+    a token at position `i` doesn't attend to future tokens at position `j > i`.
+
+    Parameters:
+    - input_ids_shape: torch.Size object with the shape of the input tensor. 
+                       It is expected to be a 2D tensor with shape (batch_size, sequence_length).
+    - dtype: torch.dtype, the desired data type of the returned tensor.
+    - device: torch.device, the desired device of the returned tensor.
+    - past_key_values_length: int, the length of past key values used in transformer models. 
+                              This is relevant for autoregressive models where past outputs are cached for efficiency.
+    
+    Returns:
+    - mask: a causal mask with shape (batch_size, 1, tgt_len, tgt_len + past_key_values_length).
     """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+    batch_size, seq_len = input_ids_shape
+    mask = torch.full((seq_len, seq_len), fill_value=torch.finfo(dtype).min, device=device)
+
+    # Create a tensor with indices along the sequence length dimension
+    mask_indices = torch.arange(mask.size(-1), device=device)
+
+    # Set the lower triangle (including diagonal) of the mask to zero
+    mask.masked_fill_(mask_indices < (mask_indices + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
-
+    
+    # If past key values are used, pad the mask to the right with zeros
     if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+        mask = torch.cat([torch.zeros(seq_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+
+    # Expand mask dimensions to match the required shape for attention masks in transformer models
+    # The second dimension 1 is required for multi-head attention
+    mask = mask[None, None, :, :].expand(batch_size, 1, seq_len, seq_len + past_key_values_length)
+
+    return mask
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
+# Adapted from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    This function expands the attention mask tensor from the original size of 
+    [batch_size, sequence_length] to [batch_size, 1, target_sequence_length, source_sequence_length].
+
+    Parameters:
+    - mask (torch.Tensor): The original attention mask tensor of size [batch_size, sequence_length]
+    - dtype (torch.dtype): The data type of the tensor, generally torch.float32
+    - tgt_len (Optional[int]): The target sequence length, default value is the source sequence length
+
+    Returns:
+    - inverted_mask (torch.Tensor): The expanded and inverted attention mask of size 
+    [batch_size, 1, target_sequence_length, source_sequence_length]
     """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    # get the size of the original mask tensor
+    batch_size, source_length = mask.size()
+    
+    # set the target sequence length to source sequence length if it is not provided
+    target_length = tgt_len if tgt_len is not None else source_length
 
+    # expand the original mask tensor to the size of [batch_size, 1, target_length, source_length]
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_length, source_length).to(dtype)
+
+    # invert the values in the expanded mask
     inverted_mask = 1.0 - expanded_mask
 
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+    # replace 1's in the inverted mask tensor with a very small value (torch.finfo(dtype).min)
+    # to emulate the effect of -inf when applying softmax, since 1's are places we want to mask
+    # and applying softmax to -inf yields 0.
+    inverted_mask = inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+    return inverted_mask
 
 
 def rotate_half(x):
@@ -1048,4 +1091,25 @@ class MM_LLMs(PreTrainedModel):
 
 
 if __name__ == '__main__':
-    pass
+    def test_make_causal_mask():
+        # Define the shape, dtype, and device for the input tensor
+        input_ids_shape = torch.Size([2, 3])
+        dtype = torch.float32
+        device = torch.device('cpu')
+
+        # Call the function to create a mask
+        mask = _make_causal_mask(input_ids_shape, dtype, device)
+
+        # Check that the mask has the correct shape
+        print('mask.shape:', mask.shape)
+        assert mask.shape == torch.Size([2, 1, 3, 3])
+
+        # Check that the mask has the correct values.
+        # We expect a lower triangular matrix with 0s on and below the diagonal
+        # and a large negative number (close to negative infinity) above the diagonal.
+        expected_mask = torch.tensor([[[[0., -float('inf'), -float('inf')],
+                                        [0., 0., -float('inf')],
+                                        [0., 0., 0.]]]], device=device)
+        print(mask)
+
+    test_make_causal_mask()
