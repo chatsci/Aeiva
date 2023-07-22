@@ -2,6 +2,9 @@
 **/.DS_Store
 .ipynb_checkpoints/
 __pycache__/
+
+lightning_logs/
+
 **/__pycache__/
 *.pyc
 out*/
@@ -21,7 +24,5 @@ CODING_GUIDELINES.md
 *.egg-info/
 **/*.egg-info/
 
-lightning_logs/
-**/lightning_logs/
 
 
