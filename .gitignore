@@ -2,6 +2,7 @@
 **/.DS_Store
 .ipynb_checkpoints/
 __pycache__/
+**/__pycache__/
 *.pyc
 out*/
 wandb/
@@ -14,3 +15,8 @@ datasets/*/*
 !datasets/*/*.md
 
 pretrained_models/*
+
+CODING_GUIDELINES.md
+
+*.egg-info/
+**/*.egg-info/

@@ -1,76 +1,125 @@
-from dataclasses import dataclass
-from typing import Dict
-from typing import Iterable, Optional
+"""
+This script contains the implementation of the MACAW model.
+MACAW is a multimodal transformer model that combines the CLIP and Whisper models.
 
-import numpy as np
-import torch
-import torch.nn.functional as F
-from torch import Tensor
-from torch import nn
-from transformers import GenerationConfig
-from collections import OrderedDict
-from typing import Tuple, Union
-from typing import List, Optional, Tuple, Union
-import numpy as np
-import torch
-import torch.nn.functional as F
-from torch import nn
-from torch.nn import CrossEntropyLoss
-from transformers import CLIPProcessor, CLIPModel
-from torch import Tensor
-from transformers.utils import logging
+Author: Bang Liu
+Date: 2023-06-22
+
+References:
+- Macaw-LLM code repository: https://github.com/lyuchenyang/Macaw-LLM/blob/main/modeling.py
+"""
+# NOTE [objective]: 
+#
+# NOTE [code design]:
+#
+# NOTE [input]:
+#
+# NOTE [output]:
+#
+# TODO:
+
+
 import math
 import random
+import copy
+import numpy as np
+import torch
+from torch import nn
+from torch.nn import CrossEntropyLoss
+from typing import List, Optional, Tuple, Union
+from transformers import CLIPModel
+from transformers import CLIPConfig, WhisperConfig, LlamaConfig
+from transformers import WhisperPreTrainedModel, WhisperModel
+from transformers.utils import logging
 from transformers.activations import ACT2FN
 from transformers.modeling_utils import PreTrainedModel, PretrainedConfig
-from transformers.modeling_outputs import BaseModelOutput
-import copy
-logger = logging.get_logger(__name__)
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed according to the terms of the GNU General Public License version 3.
-
-from typing import Optional, Tuple
-from dataclasses import dataclass
-import math
-
-from transformers import CLIPConfig, WhisperConfig, LlamaConfig
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from transformers import LlamaConfig, WhisperConfig, WhisperPreTrainedModel, WhisperModel
-from transformers.models.clip.modeling_clip import CLIPVisionTransformer
+from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.models.whisper.modeling_whisper import WhisperEncoderLayer
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
+logger = logging.get_logger(__name__)
+
+
+# Adapted from transformers.models.bart.modeling_bart._make_causal_mask
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0):
     """
-    Make causal mask used for bi-directional self-attention.
+    Creates a causal mask used for self-attention in transformer models.
+    
+    This mask ensures that during the self-attention calculation, 
+    a token at position `i` doesn't attend to future tokens at position `j > i`.
+
+    Parameters:
+    - input_ids_shape: torch.Size object with the shape of the input tensor. 
+                       It is expected to be a 2D tensor with shape (batch_size, sequence_length).
+    - dtype: torch.dtype, the desired data type of the returned tensor.
+    - device: torch.device, the desired device of the returned tensor.
+    - past_key_values_length: int, the length of past key values used in transformer models. 
+                              This is relevant for autoregressive models where past outputs are cached for efficiency.
+    
+    Returns:
+    - mask: a causal mask with shape (batch_size, 1, tgt_len, tgt_len + past_key_values_length).
+            The second dimension 1 is required for multi-head attention.
     """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+    batch_size, seq_len = input_ids_shape
+    mask = torch.full((seq_len, seq_len), fill_value=torch.finfo(dtype).min, device=device)
+
+    # Create a tensor with indices along the sequence length dimension
+    mask_indices = torch.arange(mask.size(-1), device=device)
+
+    # Set the lower triangle (including diagonal) of the mask to zero
+    mask.masked_fill_(mask_indices < (mask_indices + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
-
+    
+    # If past key values are used, pad the mask to the right with zeros
     if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+        mask = torch.cat([torch.zeros(seq_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+
+    # Expand mask dimensions to match the required shape for attention masks in transformer models
+    mask = mask[None, None, :, :].expand(batch_size, 1, seq_len, seq_len + past_key_values_length)
+
+    return mask
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
+# Adapted from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    This function expands the attention mask tensor from the original size of 
+    [batch_size, sequence_length] to [batch_size, 1, target_sequence_length, source_sequence_length].
+
+    Parameters:
+    - mask (torch.Tensor): The original attention mask tensor of size [batch_size, sequence_length]
+                           the mask tensor in such contexts is a binary tensor filled with 1's and 0's. 
+                           The value of 1 indicates that the corresponding position is a valid token 
+                           that should be attended to, while the value of 0 indicates that the corresponding 
+                           position is a padding token and should be ignored or "masked out".
+    - dtype (torch.dtype): The data type of the tensor, generally torch.float32
+    - tgt_len (Optional[int]): The target sequence length, default value is the source sequence length
+
+    Returns:
+    - inverted_mask (torch.Tensor): The expanded and inverted attention mask of size 
+      [batch_size, 1, target_sequence_length, source_sequence_length]
+      After the transformation, positions corresponding to padding tokens will have a 
+      very small value (essentially -inf), which when passed through a softmax function will become 0
     """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    # get the size of the original mask tensor
+    batch_size, source_length = mask.size()
+    
+    # set the target sequence length to source sequence length if it is not provided
+    target_length = tgt_len if tgt_len is not None else source_length
 
+    # expand the original mask tensor to the size of [batch_size, 1, target_length, source_length]
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_length, source_length).to(dtype)
+
+    # invert the values in the expanded mask
     inverted_mask = 1.0 - expanded_mask
 
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+    # replace 1's in the inverted mask tensor with a very small value (torch.finfo(dtype).min)
+    # to emulate the effect of -inf when applying softmax, since 1's are places we want to mask
+    # and applying softmax to -inf yields 0.
+    inverted_mask = inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+    return inverted_mask
 
 
 def rotate_half(x):
@@ -92,23 +141,39 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
 
 
 class LlamaRotaryEmbedding(torch.nn.Module):
+    """
+    Rotary embedding described in: https://arxiv.org/pdf/2104.09864.pdf.
+    It is used to modulate the position information in the input embeddings.
+    Llama used rotary embedding.
+    """
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
+        # Compute the inverse frequencies, which will be used to modulate the position information
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
+        # The register_buffer() function is used in PyTorch to register a tensor that is not a parameter,
+        # but you still want it to be a part of the model's state. It's used for tensors that should
+        # have their state saved in the model's state_dict and should be moved to the device with the rest of the model.
         self.register_buffer("inv_freq", inv_freq)
 
         # Build here to make `torch.jit.trace` work.
+        # max_position_embeddings: max sequence length that this model might ever be used with
         self.max_seq_len_cached = max_position_embeddings
+
+        # Compute the positional encodings (both cos and sin parts)
         t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
 
     def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
         # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
+        # x.shape: [batch_size, num_attention_heads, sequence_length, head_size].
+        # The forward function then outputs two tensors, each of which is a sin or cos embedding representation of the input x. 
+        # Both output tensors will have a shape of [1, 1, sequence_length, head_size].
+        # NOTE: Only the dtype and device attributes of x are relevant here. The values are not used.
         if seq_len > self.max_seq_len_cached:
             self.max_seq_len_cached = seq_len
             t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
@@ -128,7 +193,7 @@ class LlamaMLP(nn.Module):
         self,
         hidden_size: int,
         intermediate_size: int,
-        hidden_act: str,
+        hidden_act: str,  # the activation function can be set by the config of the model, e.g., "gelu", "relu", "swish"
     ):
         super().__init__()
         self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
@@ -137,6 +202,9 @@ class LlamaMLP(nn.Module):
         self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
+        # input shape: [batch_size, hidden_size]
+        # output shape: [batch_size, hidden_size]
+        # below is the SwiGLU function introduced in the paper: https://arxiv.org/pdf/2002.05202.pdf
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
@@ -149,7 +217,7 @@ class LlamaAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = config.max_position_embeddings
+        self.max_position_embeddings = config.max_position_embeddings  # !!! I want to change this variable name.
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -176,16 +244,25 @@ class LlamaAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
+        # By placing the num_heads dimension as the second dimension, it allows for 
+        # efficient batched matrix operations (e.g., matrix multiplication in attention computation) 
+        # across all the heads. It is basically a data layout optimization for computational efficiency 
+        # in the context of multi-head attention.
         query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+        kv_seq_len = key_states.shape[-2]  # the shape is [batch_size, num_heads, seq_len, head_dim], so -2 dimension is 'seq_len'
+        if past_key_value is not None:  
+            # If past_key_value is not None, this means the model is being used in an autoregressive setting, 
+            # where the past key-value pairs are given to the current step.
+            # past_key_value[0] refers to the previously computed key states,
+            # past_key_value[1] refers to the previously computed value states.
+            # The shape of past_key_value[0] and past_key_value[1] is [batch_size, num_heads, seq_len, head_dim].
+            kv_seq_len += past_key_value[0].shape[-2]  # + past seq_len
+
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-        # [bsz, nh, t, hd]
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -208,9 +285,14 @@ class LlamaAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
             attn_weights = attn_weights + attention_mask
+            # This following line is ensuring numerical stability. It caps the minimum value of the attention weights
+            # to be the minimum finite representable number for the data type of attn_weights. This avoids 
+            # potential issues with underflow when these weights are later passed through the softmax function.
             attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
 
         # upcast attention to fp32
+        # This is done to prevent numerical instability that can occur
+        # during operations on very small numbers or very large numbers.
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -221,7 +303,7 @@ class LlamaAttention(nn.Module):
             )
 
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size) # self.hidden_size is equivalent to self.num_heads * self.head_dim
 
         attn_output = self.o_proj(attn_output)
 
@@ -229,6 +311,30 @@ class LlamaAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
+
+class LlamaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        LlamaRMSNorm is equivalent to T5LayerNorm
+        The overall effect of this layer is to ensure that,
+        for each feature in the hidden_states,
+        the activations have zero mean and unit variance across the batch.
+        This can make the training process more stable and faster.
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))  # trainable parameter for affine transformation
+        self.variance_epsilon = eps  # for numerical stability
+
+    def forward(self, hidden_states):
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
 
 
 class LlamaDecoderLayer(nn.Module):
@@ -299,31 +405,28 @@ class LlamaDecoderLayer(nn.Module):
         return outputs
 
 
-class LlamaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        LlamaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
-
-
+# LlamaModel and LlamaPretrainedModel separation follows a common pattern in model implementations 
+# where the architecture-specific components are separated from the pre-training specific components 
+# for better code modularity and reusability. The architecture-specific model (LlamaModel) can be 
+# used independently without any pre-training, while the pre-trained model (LlamaPretrainedModel) 
+# adds features related to pre-training on top of the architecture-specific model.
 class LlamaPreTrainedModel(PreTrainedModel):
+    # This means that the model can be configured using an instance of LlamaConfig.
     config_class = LlamaConfig
+
+    # This is used by PreTrainedModel to identify the attribute name in the class 
+    # which holds the actual base model. In this case, the base model will be stored in self.model.
     base_model_prefix = "model"
+
+    # This attribute indicates that the model supports gradient checkpointing, 
+    # which is a technique for saving memory when training deep models.
     supports_gradient_checkpointing = True
+
+    # Modules listed here won't be split during model parallelism. 
     _no_split_modules = ["LlamaDecoderLayer"]
+
+    # The keys in this list will be ignored when loading model weights if they are unexpected, 
+    # i.e., they are not in the model's state dict.
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
@@ -352,14 +455,28 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
+        # embedding layer, stacked decoder layers, and layer normalization in llama.
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        # Gradient checkpointing is a technique to reduce the memory usage when training deep neural networks.
+        # In deep learning, when you perform backpropagation to compute gradients and update the model parameters,
+        # you need to store the intermediate activations from the forward pass, so you can use them in the backward pass. 
+        # For large models or long sequences, this can consume a lot of memory.
+        # 
+        # Gradient checkpointing addresses this by not storing all the intermediate activations in memory during the forward pass. 
+        # Instead, it stores only a subset of the activations, and recomputes the rest during the backward pass as needed. 
+        # This trades off computation time (because you need to recompute some values) for memory usage.
+        # 
+        # This technique is particularly useful when training large models that would otherwise not fit into GPU memory. 
+        # However, it can slow down training because of the extra computation.
         self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -374,7 +491,7 @@ class LlamaModel(LlamaPreTrainedModel):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
-        if input_shape[-1] > 1:
+        if input_shape[-1] > 1:  # seq_len > 1
             combined_attention_mask = _make_causal_mask(
                 input_shape,
                 inputs_embeds.dtype,
@@ -406,15 +523,13 @@ class LlamaModel(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        # set output and cache flags
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
+        # prepare input_ids/inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
@@ -423,10 +538,13 @@ class LlamaModel(LlamaPreTrainedModel):
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
 
-        seq_length_with_past = seq_length
+        # prepare attention mask and other parameters for decoder layers
         past_key_values_length = 0
-
+        seq_length_with_past = seq_length
+        
         if past_key_values is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
@@ -434,15 +552,12 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+                past_key_values_length, past_key_values_length + seq_length, dtype=torch.long, device=device
             )
             position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
         else:
             position_ids = position_ids.view(-1, seq_length).long()
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-        # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
@@ -460,7 +575,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 )
                 use_cache = False
 
-        # decoder layers
+        # forward through all decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
@@ -472,12 +587,14 @@ class LlamaModel(LlamaPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
+                # define the function for gradient checkpointing
+                # in checkpointing, we need to create a custom function for the forward pass 
+                # (the custom_forward function in your code) and then using the 
+                # torch.utils.checkpoint.checkpoint function to apply this custom function 
+                # with gradient checkpointing.
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, None)
-
+                        return module(*inputs, output_attentions, None)  # None for past_key_value
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
@@ -512,6 +629,8 @@ class LlamaModel(LlamaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
+
+        # output the hidden states, the self attentions and the cache (if needed)
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -525,18 +644,24 @@ class LlamaModel(LlamaPreTrainedModel):
 class LlamaForCausalLM(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        # The llama model transforms the input_ids into hidden states,
+        # along with the attentions, the hidden states of each layer, and the cache.
+        # It contains the embedding layer and the transformer decoder layers.
+        # NOTE: maybe we can separate the embedding layer and the transformer decoder layers in the future.
+        # NOTE: here in LlamaForCausalLM, we separate the llama decoder layers from the lm_head.
         self.model = LlamaModel(config)
 
+        # the lm_head is a linear layer that transforms the hidden states into logits over the vocabulary
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.model.embed_tokens  # the embedding layer is the model's embed_tokens attribute
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.model.embed_tokens = value  # set the model's embedding layer
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -565,20 +690,13 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-
         # Args:
         #     labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
         #         Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
         #         config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
         #         (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        #
+        #     NOTE: IGNORE_INDEX = -100, this is set in the prepare.py file for preparing the macaw datasets.
         # Returns:
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -593,27 +711,34 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs[0]  #!!!! take care! here actually it assumes the return_dict is false..... We should revise it. Let's always use return_dict.
         logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+            # NOTE: the labels are shifted by 1, so that the model predicts the next token
+            # NOTE: the logits are shifted by 1, so that the model predicts the next token
+            # The "shifting" operation is used in the context of language modeling, 
+            # specifically for tasks like next-token prediction.
+            # Consider a simple sentence "I am studying". In this case, if the tokens are ["I", "am", "studying"],
+            # then for each token we want to predict the next one. So the inputs to the model would be ["I", "am"] 
+            # and the labels would be ["am", "studying"].
+            shift_logits = logits[..., :-1, :].contiguous() # (batch_size, sequence_length-1, vocab_size)
+            shift_labels = labels[..., 1:].contiguous() # (batch_size, sequence_length-1)
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)  # (batch_size * （sequence_length-1), vocab_size)
+            shift_labels = shift_labels.view(-1)  # (batch_size * （sequence_length-1))
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+        # if not return_dict:
+        #     output = (logits,) + outputs[1:]
+        #     return (loss,) + output if loss is not None else output
+        #!!!!!!!!! Note that I commented the above to make the model return dict. I need to clean my code later.
 
-        return CausalLMOutputWithPast(
+        return CausalLMOutputWithPast(  # it's a data class that's often used as the output of transformer-based language models
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -621,18 +746,24 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    # !!! seems the following function is not used in the training process
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        # If past_key_values are given (i.e., if this is not the first generation step), 
+        # we only need to process the last token of the input. That is because, when we 
+        # use a method known as "auto-regressive" generation with transformer-based models, 
+        # we generate one token at a time and then feed that token back into the model to 
+        # generate the next one.
         if past_key_values:
             input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids = attention_mask.long().cumsum(-1) - 1  # we subtract 1 to shift the indices
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
+            if past_key_values:  # If we have past_key_values, we only need the last position id.
                 position_ids = position_ids[:, -1].unsqueeze(-1)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
@@ -653,8 +784,16 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
+        # The beam_idx is an index tensor that defines the current order of the sequences in the beam. 
+        # For example, if you have a beam width of 3, the beam_idx might be [2, 0, 1], meaning that 
+        # the 2nd sequence in the previous step is now the first sequence, the 0th sequence is now the 2nd, and so on.
+
+        # The _reorder_cache function is used to rearrange the cached past key and value tensors 
+        # (i.e., past_key_values) to match this new order. Each layer of the transformer has its own cached tensors, 
+        # so we iterate over these with for layer_past in past_key_values.
         reordered_past = ()
         for layer_past in past_key_values:
+            # in index_select, 0 is the batch dimension
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
@@ -674,14 +813,19 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
+        # num_mel_bins corresponds to the number of features extracted from the audio signal for each time step. 
+        # When we convert audio to a Mel spectrogram, each time step (or frame) in the spectrogram 
+        # is represented by a feature vector of size num_mel_bins. 
         self.num_mel_bins = config.num_mel_bins
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_source_positions
+        # embed_scale is a scaling factor that is applied to the embeddings.
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
+        # position embedding layer
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
 
         self.layers = nn.ModuleList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
@@ -736,17 +880,20 @@ class WhisperEncoder(WhisperPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+        # set output flags
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
-        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
-        inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        embed_pos = self.embed_positions.weight
+        # embed audio features
+        # input_features shape: (batch_size, feature_size, sequence_length)
+        inputs_embeds = nn.functional.gelu(self.conv1(input_features))  # (batch_size, embed_dim, sequence_length)
+        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))  # (batch_size, embed_dim, sequence_length/2), because the stride is 2. Downsampling by 2.
+        inputs_embeds = inputs_embeds.permute(0, 2, 1)  #  (batch_size, sequence_length/2, embed_dim)
+        embed_pos = self.embed_positions.weight  # (max_source_positions, embed_dim)
 
+        # add position embedding to audio features embedding
+        # !!!: Do max_source_positions and sequence_length/2 must be the same??? Kind of confusing.
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -759,6 +906,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 len(self.layers)
             ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
 
+        # go through the whisper encoder layers to get the hidden states and attentions in all layers
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -782,6 +930,10 @@ class WhisperEncoder(WhisperPreTrainedModel):
                         (head_mask[idx] if head_mask is not None else None),
                     )
                 else:
+                    # The layer_outputs is a tuple of (hidden_states, attention).
+                    # The attention is None if output_attentions is False.
+                    # hidden_states shape: (batch_size, sequence_length/2, embed_dim), as stride is 2 in the self.conv2
+                    # attention shape: (batch_size, num_heads, sequence_length/2, sequence_length/2)
                     layer_outputs = encoder_layer(
                         hidden_states,
                         None,
@@ -798,39 +950,38 @@ class WhisperEncoder(WhisperPreTrainedModel):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
+        # output
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+
 class MM_LLMs_Config(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a `MM_LLMsModel`.
+    It contains class level and instance level attributes.
+    It also contains the load (from_pretrained) and save (to_dict) methods for saving and loading configuration files.
+    """
+    # general class attributes for all model instances
     model_type = 'mm_llms'
     is_composition = True
 
-    def __init__(self, n_frames=6, attention_heads=8, image_conv_kernel=48, image_conv_stride=36, 
-    video_conv_kernel=36, video_conv_stride=30, audio_conv_kernel=240, audio_conv_stride=220,
-    clip_config=None, whisper_config=None, llm_config=None, **kwargs):
-
+    def __init__(self, n_frames=6, attention_heads=8, clip_config=None, whisper_config=None, llm_config=None, **kwargs):
         self.image_config = clip_config
         self.audio_config = whisper_config
-        self.llm_config = llm_config
-        self.n_frames = n_frames
+        self.llm_config = llm_config  # language model config
+        self.n_frames = n_frames  # video config information. How many frames are used for each video clip.
         self.attention_heads = attention_heads
-        self.image_conv_kernel = image_conv_kernel
-        self.image_conv_stride = image_conv_stride
-        self.video_conv_kernel = video_conv_kernel
-        self.video_conv_stride = video_conv_stride
-        self.audio_conv_kernel = audio_conv_kernel
-        self.audio_conv_stride = audio_conv_stride
-
         self.hidden_size = max(llm_config.hidden_size, clip_config.projection_dim, whisper_config.d_model, clip_config.projection_dim)
-
         super().__init__(**kwargs)
 
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        This method overrides the base class method to include serialization of the 
+        image, audio, and language model configurations along with the base configuration.
 
         Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
@@ -841,15 +992,10 @@ class MM_LLMs_Config(PretrainedConfig):
         output['llm_config'] = self.llm_config.to_dict()
         output['n_frames'] = self.n_frames
         output['attention_heads'] = self.attention_heads
-        output['image_conv_kernel'] = self.image_conv_kernel
-        output['image_conv_stride'] = self.image_conv_stride
-        output['video_conv_kernel'] = self.video_conv_kernel
-        output['video_conv_stride'] = self.video_conv_stride
-        output['audio_conv_kernel'] = self.audio_conv_kernel
-        output['audio_conv_stride'] = self.audio_conv_stride
         output['hidden_size'] = self.hidden_size
         output["model_type"] = self.__class__.model_type
         return output
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -860,70 +1006,69 @@ class MM_LLMs_Config(PretrainedConfig):
 
         return cls(clip_config=clip_config, whisper_config=whisper_config, llm_config=llm_config, **kwargs)
 
+
 class MM_LLMs(PreTrainedModel):
+    """
+    This is the multimodal language model that combines CLIP and Whisper encoders with a language model.
+    We need a config file to specify the multimodal encoder configurations.
+    """
     def __init__(self, config):
         super().__init__(config)
+        # multimodal config
         self.config = config
 
-        self.temporal_position_embeddings = nn.Embedding(config.n_frames, 
-        config.image_config.projection_dim)
-
-        self.image_encoder = CLIPModel(config.image_config)
-
+        # multimodal encoders
+        self.image_encoder = CLIPModel(config.image_config)  # NOTE: here they use CLIP for both image and video.
         self.video_encoder = CLIPModel(config.image_config)
-
         self.audio_encoder = WhisperModel(config.audio_config)
-
         self.llm = LlamaForCausalLM(config.llm_config)
 
+        # video temporal position embedding layer
+        self.temporal_position_embeddings = nn.Embedding(
+            config.n_frames, 
+            config.image_config.projection_dim)
+
+        # multimodal attention layers for mapping multimodal features to the same space
         attn_dropout = 0.1
         is_add_bias_kv = True
         is_add_zero_attn = True
-        self.temporal_self_attention = nn.MultiheadAttention(config.image_config.projection_dim, 
+        self.temporal_self_attention = nn.MultiheadAttention(config.image_config.projection_dim,
                                                              config.attention_heads,
                                                              dropout=attn_dropout,
                                                              add_bias_kv=is_add_bias_kv,
                                                              add_zero_attn=is_add_zero_attn)
-
         self.video_align_attention = nn.MultiheadAttention(config.llm_config.hidden_size, 
-                                                             config.attention_heads * 2,
+                                                             config.attention_heads,
                                                              dropout=attn_dropout,
                                                              add_bias_kv=is_add_bias_kv,
                                                              add_zero_attn=is_add_zero_attn)
-
         self.audio_align_attention = nn.MultiheadAttention(config.llm_config.hidden_size, 
-                                                             config.attention_heads * 2,
+                                                             config.attention_heads,
                                                              dropout=attn_dropout,
                                                              add_bias_kv=is_add_bias_kv,
                                                              add_zero_attn=is_add_zero_attn)
-
         self.image_align_attention = nn.MultiheadAttention(config.llm_config.hidden_size, 
-                                                             config.attention_heads * 2,
+                                                             config.attention_heads,
                                                              dropout=attn_dropout,
                                                              add_bias_kv=is_add_bias_kv,
                                                              add_zero_attn=is_add_zero_attn)
         
-        self.video_long_self_attention = nn.MultiheadAttention(config.image_config.projection_dim,
-                                                            config.attention_heads,
-                                                            dropout=attn_dropout,
-                                                            add_bias_kv=is_add_bias_kv,
-                                                            add_zero_attn=is_add_zero_attn)
-
+        # multimodal projection layers for mapping multimodal features to the same space
         self.transform_video_to_hidden = nn.Linear(config.image_config.projection_dim, 
                                                    config.llm_config.hidden_size)
         self.transform_audio_to_hidden = nn.Linear(config.audio_config.d_model, 
                                                    config.llm_config.hidden_size)
         self.transform_image_to_hidden = nn.Linear(config.image_config.projection_dim, 
                                                    config.llm_config.hidden_size)
-
-        self.project_image = nn.Conv1d(config.image_config.projection_dim, config.image_config.projection_dim, 
-        kernel_size=config.image_conv_kernel, stride=config.image_conv_stride)
-        self.project_video = nn.Conv1d(config.image_config.projection_dim, config.image_config.projection_dim, 
-        kernel_size=config.video_conv_kernel, stride=config.video_conv_stride)
-        self.project_audio = nn.Conv1d(config.audio_config.d_model, config.audio_config.d_model, 
-        kernel_size=config.audio_conv_kernel, stride=config.audio_conv_stride)
-
         
+        self.project_image = nn.Conv1d(config.image_config.projection_dim, config.image_config.projection_dim, 
+        kernel_size=48, stride=36)
+        self.project_video = nn.Conv1d(config.image_config.projection_dim, config.image_config.projection_dim, 
+        kernel_size=36, stride=30)
+        self.project_audio = nn.Conv1d(config.audio_config.d_model, config.audio_config.d_model, 
+        kernel_size=240, stride=220)
+
+        # multimodal fusion layers
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
         self.layer_norm = nn.LayerNorm(config.image_config.projection_dim)
@@ -931,7 +1076,6 @@ class MM_LLMs(PreTrainedModel):
         self.relu = nn.ReLU()
         self.gelu = nn.GELU()
         self.elu = nn.ELU()
-
         self.sigmoid = nn.Sigmoid()
 
         self.loss_fct = CrossEntropyLoss()
@@ -947,7 +1091,7 @@ class MM_LLMs(PreTrainedModel):
         #             input_ids: B x L
         #             labels: B x L
         #
-        # :return: loss when training else None
+        # :return: the output of the language model LlamaForCausalLM.
         # """
         text_embeddings, attention_mask, labels = self.prepare_inputs_for_generation(inputs)
 
@@ -955,78 +1099,125 @@ class MM_LLMs(PreTrainedModel):
             # generate_ids = self.llm.generate(input_ids=inputs['input_ids'], inputs_embeds=text_embeddings, max_new_tokens=128)
             # generate_ids = self.llm.generate(inputs_embeds=text_embeddings, max_new_tokens=128)
 
-            # The code below will possibly trigger an error in : https://github.com/microsoft/DeepSpeed/issues/3156 (the solution only partially resolves the bug for me)
-            generate_ids = self.llm.generate(inputs_embeds=text_embeddings, max_new_tokens=128, eos_token_id=2, bos_token_id=1, pad_token_id=32006)
+            # !!! The code below will possibly trigger an error in : https://github.com/microsoft/DeepSpeed/issues/3156 (the solution only partially resolves the bug for me)
+            generate_ids = self.llm.generate(
+                inputs_embeds=text_embeddings, max_new_tokens=128, eos_token_id=2, bos_token_id=1, pad_token_id=32006  # !!! revise later. use config constants instead.
+                )
             return generate_ids
         outputs = self.llm(inputs_embeds=text_embeddings, attention_mask=attention_mask, labels=labels)
 
         return outputs
 
     def prepare_inputs_for_generation(self, inputs):
+        """
+        The purpose of this method is to integrate the different modalities into the text embeddings 
+        and prepare the associated attention mask and labels for the language model, so the model can 
+        generate text conditioned on all the input modalities.
 
+        inputs is a dictionary containing the following keys: (!!! my hypothesis)
+            video_frames: (B x F)
+            audios: B x 1
+            images: B x 1
+            input_ids: B x L
+            attention_mask: B x L
+            labels: B x L
+            video_starts: B x 1
+            video_ends: B x 1
+            audio_starts: B x 1
+            audio_ends: B x 1
+            image_starts: B x 1
+            image_ends: B x 1
+            inference: True/False
+        """
+        # get multimodal embeddings
         image_features = self.encode_image(inputs['images']) if inputs['images'] is not None else None
         audio_features = self.encode_audio(inputs['audios']) if inputs['audios'] is not None else None
-        video_features = self.encode_video_long(inputs['videos']) if inputs['videos'] is not None else None
-        # embed_tokens = self.llm.model.model.embed_tokens
+        video_features = self.encode_video(inputs['videos']) if inputs['videos'] is not None else None
         embed_tokens = self.llm.model.embed_tokens
+ 
+ 
+        # for debug !!!!!!
+        # Find maximum id in input_ids
+        max_id = torch.max(inputs['input_ids'])
+        print(f"Max ID in input_ids: {max_id.item()}")
+
+        # Get vocab size from embedding layer
+        vocab_size = embed_tokens.num_embeddings
+        print(f"Vocabulary size: {vocab_size}")
+
+
+
         text_embeddings = embed_tokens(inputs['input_ids'])
 
         token_embeddings = embed_tokens.weight.unsqueeze(0).repeat(
             text_embeddings.size(0), 1, 1).transpose(0, 1)
 
+        # ignore_num seems to be a counter that tracks the total size (or length) of the 
+        # multimodal input segments (video, audio, image) added to the original text inputs.
         ingore_num = 0
+
+        # project and merge video features to the same space as text embeddings
         if video_features is not None:
+            # get video starts and ends embeddings
             video_starts = embed_tokens(inputs['video_starts']).unsqueeze(1)
             video_ends = embed_tokens(inputs['video_ends']).unsqueeze(1)
 
-            video_features = self.project_video(video_features.transpose(1, 2).contiguous()).transpose(1, 2).contiguous()
-
+            # project video features to the same space as text embeddings
             video_features = self.transform_video_to_hidden(video_features)
             
-            video_features = self.video_align_attention(video_features.transpose(0, 1), 
-            token_embeddings, token_embeddings)[0].transpose(0, 1).contiguous()
+            video_features = self.video_align_attention(
+                video_features.transpose(0, 1), token_embeddings, token_embeddings)[0].transpose(0, 1).contiguous()
 
+            # concatenate video starts, video features, and video ends embeddings
             video_inputs = torch.cat([torch.cat([video_starts, video_features], dim=1), video_ends], dim=1)
 
+            # concatenate video inputs to the original text embeddings
+            # NOTE: the first token of text_embeddings keeps at the same position
             text_embeddings = torch.cat([torch.cat([text_embeddings[:, 0, :].unsqueeze(1), video_inputs], dim=1), text_embeddings[:, 1:, :]], dim=1)
 
             ingore_num += (video_inputs.size(1))
 
+        # project and merge audio features to the same space as text embeddings
         if audio_features is not None:
+            # get audio starts and ends embeddings
             audio_starts = embed_tokens(inputs['audio_starts']).unsqueeze(1)
             audio_ends = embed_tokens(inputs['audio_ends']).unsqueeze(1)
             
+            # project audio features to the same space as text embeddings
             audio_features = self.project_audio(audio_features.transpose(1, 2).contiguous()).transpose(1, 2).contiguous()
-
             audio_features = self.transform_audio_to_hidden(audio_features)
-            
             # mean pooling
             # audio_features = torch.sum(audio_features, dim=1) / audio_features.size(1) 
             # audio_features = audio_features.unsqueeze(1)
+            audio_features = self.audio_align_attention(
+                audio_features.transpose(0, 1), token_embeddings, token_embeddings)[0].transpose(0, 1).contiguous()
 
-            audio_features = self.audio_align_attention(audio_features.transpose(0, 1), 
-            token_embeddings, token_embeddings)[0].transpose(0, 1).contiguous()
-
+            # concatenate audio starts, audio features, and audio ends embeddings
             audio_inputs = torch.cat([torch.cat([audio_starts, audio_features], dim=1), audio_ends], dim=1)
 
+            # concatenate audio inputs to the original text embeddings
             text_embeddings = torch.cat(
                 [torch.cat([text_embeddings[:, 0, :].unsqueeze(1), audio_inputs], dim=1), text_embeddings[:, 1:, :]],
                 dim=1)
 
             ingore_num += (audio_inputs.size(1))
 
+        # project and merge image features to the same space as text embeddings
         if image_features is not None:
+            # get image starts and ends embeddings
             image_starts = embed_tokens(inputs['image_starts']).unsqueeze(1)
             image_ends = embed_tokens(inputs['image_ends']).unsqueeze(1)
 
+            # project image features to the same space as text embeddings
             image_features = self.project_image(image_features.transpose(1, 2).contiguous()).transpose(1, 2).contiguous()
-
             image_features = self.transform_image_to_hidden(image_features)
-            image_features = self.image_align_attention(image_features.transpose(0, 1),
-             token_embeddings, token_embeddings)[0].transpose(0, 1).contiguous()
+            image_features = self.image_align_attention(
+                image_features.transpose(0, 1), token_embeddings, token_embeddings)[0].transpose(0, 1).contiguous()
 
+            # concatenate image starts, image features, and image ends embeddings
             image_inputs = torch.cat([torch.cat([image_starts, image_features], dim=1), image_ends], dim=1)
 
+            # concatenate image inputs to the original text embeddings
             text_embeddings = torch.cat(
                 [torch.cat([text_embeddings[:, 0, :].unsqueeze(1), image_inputs], dim=1), 
                 text_embeddings[:, 1:, :]], dim=1)
@@ -1034,49 +1225,81 @@ class MM_LLMs(PreTrainedModel):
             ingore_num += (image_inputs.size(1))
 
         if 'attention_mask' in inputs:
-            attention_mask = torch.tensor([1]*ingore_num*text_embeddings.size(0), device=text_embeddings.device).view(text_embeddings.size(0), -1)
+            # increase the length of attention mask by adding the length of multimodal inputs
+            attention_mask = torch.tensor([1]*ingore_num*text_embeddings.size(0), device=text_embeddings.device).view(text_embeddings.size(0), -1)  # (B X ignore_num)
             attention_mask = torch.cat([attention_mask, inputs['attention_mask']], dim=1)
         else:
             attention_mask = None
 
         if 'labels' in inputs and inputs['labels'] is not None:
+            # increase the length of labels by adding the length of labels
+            # we use -100 to ignore the loss of labels in multimodal inputs
+            # !!! we can replace -100 by config constants to make the code better
+
+            # since the tokens corresponding to the image_inputs, audio_inputs, and video_inputs are not part of the original text 
+            # and don't have corresponding labels in the true text sequence, their labels are set to -100. This ensures that 
+            # the model's predictions for these tokens don't affect the loss and, consequently, the gradients and the model's subsequent learning.
             labels = torch.tensor([-100]*ingore_num*text_embeddings.size(0), device=text_embeddings.device).view(text_embeddings.size(0), -1)
             labels = torch.cat([labels, inputs['labels']], dim=1)
         else:
             labels = None
 
+        # text_embeddings: (batch_size, sequence_length + ingore_num, embedding_dim)
+        # attention_mask: (batch_size, sequence_length + ingore_num). 1 denotes we should attend to, and 0 denotes we should not attend to the token.
+        # labels: (batch_size, sequence_length + ingore_num). -100 denotes we should ignore the token.
         return text_embeddings, attention_mask, labels
 
     def encode_video(self, videos):
+        """
+        Encode video features to video embeddings.
+
+        Args:
+            videos: (batch_size, n_frames, n_channels, height, width)
+
+        Returns:
+            video_embeddings: (batch_size, n_frames, embedding_dim)
+        """
         # simple image encoding without temporal embedding and self attention
-        videos = videos.view(-1, videos.size(-3), videos.size(-2), videos.size(-1))
-        video_outputs = self.video_encoder.get_image_features(videos)
+        # Reference: https://huggingface.co/docs/transformers/model_doc/clip
+        videos = videos.view(-1, videos.size(-3), videos.size(-2), videos.size(-1))  # pixel_values (torch.FloatTensor of shape (batch_size * n_frames, num_channels, height, width)) 
+        video_outputs = self.video_encoder.get_image_features(videos)  # image_features (torch.FloatTensor of shape (batch_size * n_frames, output_dim)
         video_features = video_outputs
         temporal_pos = torch.tensor(
             [[i for i in range(self.config.n_frames)] 
             for j in range(videos.size(0) // self.config.n_frames)],
-            dtype=torch.int, device=video_features.device).view(-1)
+            dtype=torch.int, device=video_features.device).view(-1)  # 2d indices to 1d indices, shape: (batch_size * n_frames)
 
         frame_temporal_pos_embed = self.temporal_position_embeddings(temporal_pos)
 
-        video_features = (video_features + frame_temporal_pos_embed).view(videos.size(0) // self.config.n_frames,
-                                                                          self.config.n_frames, -1)
+        video_features = (video_features + frame_temporal_pos_embed).view(
+            videos.size(0) // self.config.n_frames, self.config.n_frames, -1)  # (batch_size, n_frames, output_dim)
 
         video_features = video_features.transpose(0, 1).contiguous()
+        # nn.MultiheadAttention takes query, key, value as inputs. Their shapes are (sequence_length, batch_size, embedding_dim).
+        # The outputs are two elements: attn_output of shape (sequence_length, batch_size, embedding_dim), and attn_output_weights of shape (batch_size, sequence_length, sequence_length).
         self_attn_video_features = self.temporal_self_attention(video_features, video_features, video_features)[0]
 
-        return self_attn_video_features.transpose(0, 1).contiguous()
+        return self_attn_video_features.transpose(0, 1).contiguous() # (batch_size, n_frames, output_dim)
     
     def encode_video_long(self, videos):
+        """
+        Encode video features to video embeddings.
+
+        Args:
+            videos: (batch_size, n_frames, n_channels, height, width)
+
+        Returns:
+            video_embeddings: (batch_size, n_frames, embedding_dim)
+        """
         # simple image encoding without temporal embedding and self attention
-        videos = videos.view(-1, videos.size(-3), videos.size(-2), videos.size(-1))
+        videos = videos.view(-1, videos.size(-3), videos.size(-2), videos.size(-1))  # pixel_values (torch.FloatTensor of shape (batch_size * n_frames, num_channels, height, width))
         video_features = self.video_encoder.visual_projection(self.video_encoder.vision_model(videos)[0])[:, 1:, :]
-        video_features = video_features.reshape(videos.size(0) // self.config.n_frames,
-                                                                          self.config.n_frames * video_features.size(1), -1).contiguous()
+        video_features = video_features.reshape(
+            videos.size(0) // self.config.n_frames,
+            self.config.n_frames * video_features.size(1),
+            -1).contiguous()
         
-        video_features = add_positional_encoding(video_features).transpose(0, 1).contiguous()
-        video_self_attn_features = self.video_long_self_attention(video_features, video_features, video_features)[0].transpose(0, 1).contiguous()
-        return video_self_attn_features
+        return video_features
 
     def encode_audio(self, audios):
         audio_features = self.audio_encoder.encoder(audios)
@@ -1087,32 +1310,34 @@ class MM_LLMs(PreTrainedModel):
         # image_features = vision_outputs  # pooled_output
         # image_features = self.visual_projection(pooled_output)
         # image_features = image_features.unsqueeze(1)
-
-
         image_features = self.image_encoder.visual_projection(self.image_encoder.vision_model(images)[0])[:, 1:, :]
         return image_features
 
-def create_positional_encoding(L, h):
-    # Create a tensor to store the position encoding
-    position_encoding = torch.zeros(L, h)
 
-    # Fill the position encoding tensor
-    for pos in range(L):
-        for i in range(0, h, 2):
-            div_term = torch.exp(torch.tensor(-(math.log(10000.0) / h * (2 * i))))
-            position_encoding[pos, i] = torch.sin(pos * div_term)
-            position_encoding[pos, i + 1] = torch.cos(pos * div_term)
+if __name__ == '__main__':
+    # def test_make_causal_mask():
+    #     # Define the shape, dtype, and device for the input tensor
+    #     input_ids_shape = torch.Size([2, 3])
+    #     dtype = torch.float32
+    #     device = torch.device('cpu')
 
-    return position_encoding
+    #     # Call the function to create a mask
+    #     mask = _make_causal_mask(input_ids_shape, dtype, device)
 
-def add_positional_encoding(tensor):
-    N, L, h = tensor.size()  # batch size, sequence length, and feature dimension
+    #     # Check that the mask has the correct shape
+    #     print('mask.shape:', mask.shape)
+    #     assert mask.shape == torch.Size([2, 1, 3, 3])
 
-    # Create position embedding tensor
-    position_embedding = create_positional_encoding(L, h).to(tensor.device).to(tensor.dtype)
+    #     # Check that the mask has the correct values.
+    #     # We expect a lower triangular matrix with 0s on and below the diagonal
+    #     # and a large negative number (close to negative infinity) above the diagonal.
+    #     expected_mask = torch.tensor([[[[0., -float('inf'), -float('inf')],
+    #                                     [0., 0., -float('inf')],
+    #                                     [0., 0., 0.]]]], device=device)
+    #     print(mask)
 
-    # Expand position embedding to match input tensor dimensions
-    position_embedding = position_embedding.unsqueeze(0).expand(N, -1, -1)
+    # test_make_causal_mask()
 
-    # Add position embedding to the input tensor
-    return tensor + position_embedding
+    pass
+
+

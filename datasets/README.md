@@ -12,18 +12,10 @@ This is the folder where we prepare the datasets.
 
 ## Data formats for formatted data
 
-1. Pure text corpus
-
-	{
-   	 "data": [corpus 1, corpus 2],
-   	 "meta": {meta info}
-	}
-
-2. Data with multiple fields
 
 	{
    	 "data": [{item 1}, {item 2}, ...],
-   	 "meta": {meta info}
+   	 "metadata": {meta info}
 	}
 
 ## TODO
