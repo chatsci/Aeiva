@@ -20,3 +20,8 @@ CODING_GUIDELINES.md
 
 *.egg-info/
 **/*.egg-info/
+
+lightning_logs/
+**/lightning_logs/
+
+
