@@ -128,6 +128,10 @@ def add_file(history, file):
     history = history + [(file.name, None)]
     return history
 
+def after_stop_recording(history, recorded_video):
+    print("video name: ", recorded_video)
+    return recorded_video
+
 def bot(history):
     print("history: ", history)
     instruction = history[-1][0]  #!!!!
@@ -232,6 +236,8 @@ with gr.Blocks(title="Aeiva Chatbot", css=None) as demo:
     file_msg = btn.upload(add_file, [chatbot, btn], [chatbot], queue=False).then(
         bot, chatbot, chatbot
     )  # !!! we can remove .then part if we don't want to let the bot run when we upload a file.
+
+    camera.stop_recording(after_stop_recording, [chatbot, camera], camera, queue=False)
     
     # imagebox.upload(add_image, imagebox, [chatbot], queue=False)
     # videobox.upload(lambda file: add_file2(chatbot, videobox, file, 'video'), [chatbot], queue=False)

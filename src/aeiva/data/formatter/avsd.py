@@ -1,4 +1,4 @@
-from aeiva.data.base import BaseDataFormatter
+from aeiva.data.formatter import BaseDataFormatter
 from aeiva.util.json_utils import load_json, dump_json
 from aeiva.util.file_utils import ensure_dir
 from tqdm import tqdm
@@ -14,7 +14,7 @@ class AvsdDataFormatter(BaseDataFormatter):
         self.max_samples = max_samples
         self.save_output = save_output
     
-    def format(self, input_filepaths_dict: dict[str, str]) -> dict[str, Any]:
+    def execute(self, input_filepaths_dict: dict[str, str]) -> dict[str, Any]:
         output_dir = self.output_dir
         max_samples = self.max_samples
         save_output = self.save_output

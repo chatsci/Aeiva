@@ -57,7 +57,7 @@ device: 'cpu' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' o
 torch_dtype: 'float32' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 torch_compile: True # use PyTorch 2.0 to compile the model to be faster
 
-# data dir
+# macaw custom config
 image_dir: '/Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/coco/train2014/'
 audio_dir: '/Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/avsd/audios/'
 frame_dir: '/Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/avsd/frames/'
@@ -67,5 +67,14 @@ num_frames_to_load: 6
 block_size: 512
 num_samples_per_dataset: 100
 num_samples_per_merged_dataset: 20
-run_time_cache_dir: '/Users/bangliu/Desktop/ChatSCI/Aeiva/outputs/cache/'
 max_seq_len_for_preprocess: 256
+
+tokenizer_name_or_path: '/Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/macaw/'
+clip_model_name_or_path: '/Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/clip_model/'
+whisper_model_name_or_path: '/Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/whisper_model/'
+llama7b_model_name_or_path: '/Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/llama7b_model/'
+macaw_model_name_or_path: "/Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/macaw/"
+
+run_time_cache_dir: '/Users/bangliu/Desktop/ChatSCI/Aeiva/outputs/cache/'
+
+mode: "train"

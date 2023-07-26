@@ -1289,13 +1289,37 @@ class CustomConfig(BaseConfig):
         default=1,
         metadata={"help": "The batch size of model inputs"}
     )
+    max_seq_len_for_preprocess: Optional[int] = field(
+        default=256,
+        metadata={"help": "The maximum sequence length for preprocess"}
+    )
     run_time_cache_dir: Optional[str] = field(
         default=None,
         metadata={"help": "The directory to save running time data, such as video frames, audios, and so on."}
     )
-    max_seq_len_for_preprocess: Optional[int] = field(
-        default=256,
-        metadata={"help": "The maximum sequence length for preprocess"}
+    tokenizer_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name or path of tokenizer"}
+    )
+    clip_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name or path of clip model"}
+    )
+    whisper_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name or path of whisper model"}
+    )
+    llama7b_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name or path of llama7b model"}
+    )
+    macaw_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name or path of macaw model"}
+    )
+    mode: Optional[str] = field(
+        default="train",
+        metadata={"help": "The mode of train, eval, or inference"}
     )
 
 

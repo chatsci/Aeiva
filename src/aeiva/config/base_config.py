@@ -16,6 +16,8 @@ import yaml
 import re
 import pprint
 from dataclasses import dataclass
+import argparse
+from typing import Union
 
 
 class BaseConfig:
@@ -88,3 +90,30 @@ class OmniConfig(BaseConfig):
                 setattr(self, key, kwargs.get(key, default_value))
         OmniConfig.__init__ = __init__
         return OmniConfig
+
+    def update_from_args(self, namespace_args: argparse.Namespace):
+        for key, value in vars(namespace_args).items():
+            if hasattr(self, key) and value is not None:
+                setattr(self, key, value)
+
+    def get_argparse_parser(self):
+        parser = argparse.ArgumentParser()
+        for config_class_name, config_class in BaseConfig.subclasses.items():
+            if config_class_name == "OmniConfig":
+                continue
+            for field, field_obj in config_class.__dataclass_fields__.items():
+                field_type = field_obj.type
+                # Check if the field is Optional
+                if getattr(field_type, "__origin__", None) is Union:
+                    field_type = field_type.__args__[0]
+                if field_type is int:
+                    parser.add_argument('--' + field, type=int, help=field_obj.metadata.get("help", f"{field} (int)"))
+                elif field_type is float:
+                    parser.add_argument('--' + field, type=float, help=field_obj.metadata.get("help", f"{field} (float)"))
+                elif field_type is str:
+                    parser.add_argument('--' + field, type=str, help=field_obj.metadata.get("help", f"{field} (str)"))
+                elif field_type is bool:
+                    parser.add_argument('--' + field, action='store_true', help=field_obj.metadata.get("help", f"{field} (bool)"))
+                else:
+                    print(f"Warning: unsupported type {field_type} for field '{field}'")
+        return parser

@@ -1,10 +1,4 @@
 import os
-from .base_formatter import BaseDataFormatter
-from .alpaca import AlpacaDataFormatter
-from .avsd import AvsdDataFormatter
-from .macaw import MacawCocoDataFormatter, MacawAvsdDataFormatter
-from .vqa import VqaDataFormatter
-
 
 os.environ["LC_ALL"] = "en_US.UTF-8"
 os.environ["LANG"] = "en_US.UTF-8"

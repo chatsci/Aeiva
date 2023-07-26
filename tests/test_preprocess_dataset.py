@@ -1,16 +1,16 @@
 from functools import partial
 from transformers import LlamaTokenizer
 import aeiva.data.formatter  # For registering data formatters and processors.
-from aeiva.data.base import BaseDataFormatter
+from aeiva.data.formatter import BaseDataFormatter
 from aeiva.util.token_utils import get_tokenizer
 from aeiva.util.id_utils import IDGenerator
-from aeiva.data.operator import MultimodalProcessor
-from aeiva.data.util.dataitem_utils import sample_frames_from_video, extract_audio_from_video
-from aeiva.data.util.dataitem_utils import tokenize_and_label_text_for_instruction_tuning
+from aeiva.data.processor import MultimodalProcessor
+from aeiva.data.dataitem_operators import sample_frames_from_video, extract_audio_from_video
+from aeiva.data.dataitem_operators import tokenize_and_label_text_for_instruction_tuning
 from aeiva.util.constants import IGNORE_ID
 from transformers import LlamaTokenizer
 from aeiva.config import OmniConfig
-from aeiva.data.util.dataset_utils import merge_datasets, sample_from_dataset, preserve_keys_in_dataset, save_dataset
+from aeiva.data.dataset_operators import merge_datasets, sample_from_dataset, preserve_keys_in_dataset, save_dataset
 from aeiva.util.json_utils import load_json, dump_json
 from aeiva.util.file_utils import ensure_dir
 

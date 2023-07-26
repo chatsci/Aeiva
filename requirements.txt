@@ -2,7 +2,7 @@ deepspeed==0.9.4
 gradio==3.36.1
 librosa==0.10.0
 moviepy==1.0.3
-numpy==1.25.0
+numpy==1.24.0
 openai_whisper==20230314
 opencv_python==4.7.0.72
 orjson==3.9.2

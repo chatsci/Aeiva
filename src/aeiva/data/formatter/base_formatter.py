@@ -40,11 +40,11 @@ class BaseDataFormatter(ABC):
         return BaseDataFormatter.subclasses[formatter_name]
 
     @abstractmethod
-    def format(self, input_filepaths_dict: dict[str, str], *args, **kwargs) -> dict[str, Any]:
+    def execute(self, input_filepaths_dict: dict[str, str], *args, **kwargs) -> dict[str, Any]:
         """Format the data into a format that can be used by a processor."""
         pass
 
     def __call__(self, input_filepaths_dict: dict[str, str], *args, **kwargs):
         """Call the formatter by instance."""
-        return self.format(input_filepaths_dict, *args, **kwargs)
+        return self.execute(input_filepaths_dict, *args, **kwargs)
 
