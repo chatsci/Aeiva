@@ -212,7 +212,7 @@ if __name__ == "__main__":
 
             with gr.Column(scale=0.5):
                 with gr.Row():
-                    chatbot = gr.Chatbot([], elem_id="chatbot", height=720)
+                    chatbot = gr.Chatbot([], elem_id="chatbot", height=730)
                 with gr.Row():
                     with gr.Column(scale=0.8):
                         txt = gr.Textbox(

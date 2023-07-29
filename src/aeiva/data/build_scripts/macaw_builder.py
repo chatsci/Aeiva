@@ -8,7 +8,7 @@ from aeiva.util.json_utils import dump_json
 from aeiva.util.file_utils import ensure_dir
 from aeiva.util.token_utils import get_tokenizer
 from aeiva.operator.dataitem_ops import sample_frames_from_video, extract_audio_from_video, tokenize_and_label_text_for_instruction_tuning
-from aeiva.operator.dataset_ops import build_dataset, merge_datasets, sample_from_dataset, preserve_keys_in_dataset
+from aeiva.operator.dataset_ops import build_dataset, merge_datasets, sample_dataset, filter_dataset_by_keys
 
 
 if __name__ == "__main__":
@@ -89,8 +89,8 @@ if __name__ == "__main__":
     output_path = "/Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/merge/avsd_alpaca_vqa.json"
     merged_datasets = [processed_datasets[dataset_name] for dataset_name in datasets_to_merge]
     merged_datasets = merge_datasets(merged_datasets)
-    merged_datasets = sample_from_dataset(merged_datasets, CONFIG.num_samples_per_merged_dataset)
-    merged_datasets = preserve_keys_in_dataset(merged_datasets, keys_to_preserve)
+    merged_datasets = sample_dataset(merged_datasets, CONFIG.num_samples_per_merged_dataset)
+    merged_datasets = filter_dataset_by_keys(merged_datasets, keys_to_preserve)
     ensure_dir(output_path)
     dump_json(merged_datasets, output_path)
 
@@ -99,8 +99,8 @@ if __name__ == "__main__":
     output_path = "/Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/merge/macaw_coco_avsd.json"
     merged_datasets = [processed_datasets[dataset_name] for dataset_name in datasets_to_merge]
     merged_datasets = merge_datasets(merged_datasets)
-    merged_datasets = sample_from_dataset(merged_datasets, CONFIG.num_samples_per_merged_dataset)
-    merged_datasets = preserve_keys_in_dataset(merged_datasets, keys_to_preserve)
+    merged_datasets = sample_dataset(merged_datasets, CONFIG.num_samples_per_merged_dataset)
+    merged_datasets = filter_dataset_by_keys(merged_datasets, keys_to_preserve)
     ensure_dir(output_path)
     dump_json(merged_datasets, output_path)
 

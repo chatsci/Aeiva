@@ -2,9 +2,7 @@
 |   |-- demo
 |   |   |-- __init__.py
 |   |   |-- mm_chatbot.py
-|   |   |-- test_demo.py
 |   |-- util
-|   |   |-- video_utils.py
 |   |   |-- __init__.py
 |   |   |-- sample_utils.py
 |   |   |-- file_utils.py
@@ -40,10 +38,9 @@
 |   |   |-- macaw_model.py
 |   |-- command
 |   |   |-- __init__.py
-|   |   |-- test.py
 |   |   |-- train.py
 |   |   |-- infer.py
-|   |   |-- build_dataset.py
+|   |   |-- eval.py
 |   |-- data
 |   |   |-- __init__.py
 |   |   |-- formatters
@@ -54,12 +51,18 @@
 |   |   |   |-- vqa_formatter.py
 |   |   |-- processor.py
 |   |   |-- README.md
+|   |   |-- build_scripts
+|   |   |   |-- macaw_builder.py
 |   |   |-- loader.py
 |   |-- operator
-|   |   |-- task_operators.py
+|   |   |-- custom_ops
+|   |   |   |-- macaw_task_ops.py
+|   |   |   |-- __init__.py
+|   |   |   |-- macaw_dataitem_ops.py
+|   |   |-- dataitem_ops.py
 |   |   |-- __init__.py
-|   |   |-- dataitem_operators.py
-|   |   |-- dataset_operators.py
+|   |   |-- task_ops.py
+|   |   |-- dataset_ops.py
 |   |-- trainer
 |   |   |-- pl_trainer.py
 |   |   |-- __init__.py
