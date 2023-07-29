@@ -78,3 +78,5 @@ macaw_model_name_or_path: "/Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_model
 run_time_cache_dir: '/Users/bangliu/Desktop/ChatSCI/Aeiva/outputs/cache/'
 
 mode: "train"
+model_name: "macaw"
+resource_ready: True

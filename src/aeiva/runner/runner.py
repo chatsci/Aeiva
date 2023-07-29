@@ -1,5 +1,6 @@
 from typing import Callable, Dict, List, Optional, Any
 
+
 class OperatorNode:
     def __init__(self, name: str, func: Callable, input_links: Optional[List[str]] = None, condition=None):
         self.name = name
@@ -60,11 +61,7 @@ class ComputationGraph:
             operator.outputs = None
         self.execution_order = None
         self.context = {}
-
-    def run(self, inputs: Dict[str, Any]):
-        if self.execution_order is None:
-            self.build()
-        
+ 
     def run(self, inputs):
         self.context = inputs
         if self.execution_order is None:
@@ -73,9 +70,6 @@ class ComputationGraph:
             operator = self.operator_nodes[op_name]
             result = operator.execute(self.context)
             if result is not None:
-                #print("result: ", result)
-                #print("context: ", self.context)
-                
                 self.context.update(result)
 
     def __call__(self, inputs: Dict[str, Any]):
@@ -108,6 +102,14 @@ class Runner:
                 self.graph.add_operator(operator)
             self.graph.build()
             self.dirty = False
+    
+    def reset(self):
+        self.graph.reset()
+
+    def clear(self):
+        self.graph = ComputationGraph()
+        self.operators = {}
+        self.dirty = False
 
     def run(self, inputs: Dict[str, Any]):
         self.build_graph()
@@ -116,20 +118,3 @@ class Runner:
     def __call__(self, inputs: Dict[str, Any]):
         self.build_graph()
         return self.graph(inputs)
-
-
-if __name__ == "__main__":
-    def func1(inputs):
-        return {'func1_output': inputs['init'] + 1}
-
-    def func2(inputs):
-        return {'func2_output': inputs['func1_output'] + 2}
-
-    def func3(inputs):
-        return {'func3_output': inputs['func2_output'] + 3}
-
-    runner = Runner()
-    node1 = runner.add_operator('node1', func1)
-    node2 = runner.add_operator('node2', func2)
-    runner.link_operators(node1, node2)
-    print(runner({'init': 2}))

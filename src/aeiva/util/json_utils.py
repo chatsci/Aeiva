@@ -1,9 +1,3 @@
-"""
-TODO:
-    - write docstring
-    - write tests
-    - add type hints
-"""
 import json
 import codecs
 

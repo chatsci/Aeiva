@@ -1,9 +1,3 @@
-"""
-TODO:
-    - add support for sampling with replacement
-    - make draw_samples work for any iterable (not just lists)
-    - write tests
-"""
 import numpy as np
 
 

@@ -1,9 +1,7 @@
 
 import os
 from transformers import AutoTokenizer
-from aeiva.util.constants import (
-    DEFAULT_PAD_TOKEN,
-    )
+from aeiva.common.constants import DEFAULT_PAD_TOKEN
 
 
 def pad_or_truncate_tokens(tokens, max_length, pad_token_id):

@@ -1,8 +1,10 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
-from aeiva.util.json_utils import load_json
-from aeiva.util.pipeline import Pipeline
 from functools import partial
+
+from torch.utils.data import Dataset, DataLoader
+
+from aeiva.util.json_utils import load_json
+from aeiva.common.pipeline import Pipeline
 
 
 class MultiModalDataset(Dataset):
