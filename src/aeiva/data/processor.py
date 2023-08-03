@@ -15,7 +15,7 @@ from typing import Callable, Optional
 from aeiva.util.file_utils import ensure_dir
 from aeiva.util.json_utils import dump_json
 from aeiva.common.pipeline import Pipeline
-from aeiva.common.types import DataSet, DataItem
+from aeiva.common.types import DataSet
 
 
 def process_dataset(formatted_dataset: DataSet,

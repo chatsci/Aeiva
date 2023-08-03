@@ -1,0 +1,39 @@
+|-- datasets/
+|   |-- directory_tree.txt
+|   |-- merge/
+|   |   |-- avsd_alpaca_vqa.json
+|   |   |-- macaw_coco_avsd.json
+|   |-- alpaca/
+|   |   |-- output/
+|   |   |-- alpaca_data.json
+|   |-- README.md
+|   |-- coco/
+|   |   |-- train2014/
+|   |   |-- val2014/
+|   |-- vqa/
+|   |   |-- v2_OpenEnded_mscoco_train2014_questions.pretty.json
+|   |   |-- v2_OpenEnded_mscoco_val2014_questions.json
+|   |   |-- v2_mscoco_train2014_annotations.json
+|   |   |-- v2_mscoco_train2014_annotations.pretty.json
+|   |   |-- v2_OpenEnded_mscoco_val2014_questions.pretty.json
+|   |   |-- output/
+|   |   |-- v2_mscoco_val2014_annotations.json
+|   |   |-- v2_mscoco_val2014_annotations.pretty.json
+|   |   |-- v2_OpenEnded_mscoco_train2014_questions.json
+|   |-- macaw/
+|   |   |-- output/
+|   |   |-- generated_examples_avsd.json
+|   |   |-- generated_examples_coco.json
+|   |-- avsd/
+|   |   |-- train_options.json
+|   |   |-- avsd_val.pretty.json
+|   |   |-- audios/
+|   |   |-- avsd_train.pretty.json
+|   |   |-- avsd_train.json
+|   |   |-- val_options.json
+|   |   |-- output/
+|   |   |-- frames/
+|   |   |-- train_options.pretty.json
+|   |   |-- videos/
+|   |   |-- val_options.pretty.json
+|   |   |-- avsd_val.json

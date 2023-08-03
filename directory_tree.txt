@@ -1,49 +1,49 @@
-|-- aeiva
-|   |-- demo
+|-- aeiva/
+|   |-- demo/
 |   |   |-- __init__.py
 |   |   |-- mm_chatbot.py
-|   |-- util
+|   |-- util/
 |   |   |-- __init__.py
 |   |   |-- sample_utils.py
 |   |   |-- file_utils.py
 |   |   |-- token_utils.py
 |   |   |-- json_utils.py
-|   |-- config
+|   |-- config/
 |   |   |-- base_config.py
 |   |   |-- general_configs.py
 |   |   |-- __init__.py
-|   |   |-- custom_configs
+|   |   |-- custom_configs/
 |   |   |   |-- macaw_config.py
 |   |   |   |-- __init__.py
 |   |   |-- omni_config.py
-|   |-- runner
+|   |-- runner/
 |   |   |-- runner.py
 |   |   |-- __init__.py
 |   |   |-- learnable_runner.py
 |   |-- __init__.py
 |   |-- README.md
-|   |-- common
+|   |-- common/
 |   |   |-- id_generator.py
 |   |   |-- constants.py
 |   |   |-- __init__.py
 |   |   |-- types.py
 |   |   |-- pipeline.py
 |   |   |-- decorators.py
-|   |-- prompt
+|   |-- prompt/
 |   |   |-- __init__.py
 |   |   |-- process_dataset.py
-|   |-- model
+|   |-- model/
 |   |   |-- macaw_model_old.py
 |   |   |-- __init__.py
 |   |   |-- macaw_model.py
-|   |-- command
+|   |-- command/
 |   |   |-- __init__.py
 |   |   |-- train.py
 |   |   |-- infer.py
 |   |   |-- eval.py
-|   |-- data
+|   |-- data/
 |   |   |-- __init__.py
-|   |   |-- formatters
+|   |   |-- formatters/
 |   |   |   |-- alpaca_formatter.py
 |   |   |   |-- macaw_formatter.py
 |   |   |   |-- __init__.py
@@ -51,11 +51,11 @@
 |   |   |   |-- vqa_formatter.py
 |   |   |-- processor.py
 |   |   |-- README.md
-|   |   |-- build_scripts
+|   |   |-- build_scripts/
 |   |   |   |-- macaw_builder.py
 |   |   |-- loader.py
-|   |-- operator
-|   |   |-- custom_ops
+|   |-- operator/
+|   |   |-- custom_ops/
 |   |   |   |-- macaw_task_ops.py
 |   |   |   |-- __init__.py
 |   |   |   |-- macaw_dataitem_ops.py
@@ -63,6 +63,6 @@
 |   |   |-- __init__.py
 |   |   |-- task_ops.py
 |   |   |-- dataset_ops.py
-|   |-- trainer
+|   |-- trainer/
 |   |   |-- pl_trainer.py
 |   |   |-- __init__.py

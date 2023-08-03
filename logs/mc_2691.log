@@ -1,0 +1,242 @@
+[19:02:27] [EnvServerSocketHandler/INFO]: [STDOUT]: Received from localhost:<MissionInit xmlns="http://ProjectMalmo.microsoft.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" SchemaVersion="" PlatformVersion="0.37.0">
+    <Mission xmlns="http://ProjectMalmo.microsoft.com">
+        <About>
+            <Summary>CombatMeta</Summary>
+        </About>
+
+        <ModSettings>
+            <MsPerTick>50</MsPerTick>
+        </ModSettings>
+
+        <ServerSection>
+            <ServerInitialConditions>
+                <!-- Initial Conditions -->
+
+                
+                <Time>
+                   
+                   <StartTime>18000</StartTime>
+                   
+                   <AllowPassageOfTime>false</AllowPassageOfTime>
+                </Time>
+
+                
+                <AllowSpawning>false</AllowSpawning>
+
+                
+
+            </ServerInitialConditions>
+            <ServerHandlers>
+
+                
+                <BiomeGenerator forceReset="true" seed="123" biome="1"/>
+
+                
+
+                
+
+                
+
+
+            </ServerHandlers>
+        </ServerSection>
+
+
+        
+        <AgentSection mode="Survival">
+            <Name>MineDojoAgent0</Name>
+
+            <AgentStart>
+
+                
+                <LowLevelInputs>true</LowLevelInputs>
+
+                
+                <BreakSpeedMultiplier>1.0</BreakSpeedMultiplier>
+
+                
+                <StartingHealth maxHealth="20" health="20.0"/>
+
+                
+                <StartingFood food="20"/>
+
+                
+                <Inventory>
+            
+                <InventoryObject slot="0" type="diamond_sword" metadata="0" quantity="1"/>
+            
+                <InventoryObject slot="36" type="leather_boots" metadata="0" quantity="1"/>
+            
+                <InventoryObject slot="37" type="leather_leggings" metadata="0" quantity="1"/>
+            
+                <InventoryObject slot="38" type="leather_chestplate" metadata="0" quantity="1"/>
+            
+                <InventoryObject slot="39" type="leather_helmet" metadata="0" quantity="1"/>
+            
+                <InventoryObject slot="40" type="shield" metadata="0" quantity="1"/>
+            
+            </Inventory>
+
+                
+
+            </AgentStart>
+            <AgentHandlers>
+                <!-- These area  bit of boilerplate that
+                 we always expect to be included ... -->
+                <FileBasedPerformanceProducer/>
+                <ObservationFromDamage/>
+                <PauseCommand/>
+
+                <!--  Observations     -->
+
+                
+                <VideoProducer want_depth="false">
+                <Width>512 </Width>
+                <Height>288</Height>
+            </VideoProducer>
+
+                
+                <ObservationFromFullInventory flat="false"/>
+
+                
+                <ObservationFromFullStats/>
+
+                
+                <ObservationFromGrid>                      
+                <Grid name="voxels">                        
+                    <min x="-1" y="-1" z="-1"/>                        
+                    <max x="1" y="1" z="1"/>                      
+                </Grid>                  
+            </ObservationFromGrid>
+
+                
+
+                <!--  Monitors     -->
+
+                <!--  Actions   -->
+                <ChatCommands/>
+
+                
+                <CameraCommands/>
+
+                
+                <NearbySmeltCommands/>
+
+                
+                <SimpleCraftCommands/>
+
+                
+                <NearbyCraftCommands/>
+
+                
+                <HumanLevelCommands/>
+
+                
+                <EquipCommands/>
+
+                
+                <PlaceCommands/>
+
+                
+
+                <!--  Rewards   -->
+
+                <!-- Additional Agent Handlers like quitting -->
+                
+
+                <!-- Env Monitors? -->
+            </AgentHandlers>
+        </AgentSection>
+        
+    </Mission>
+    <ExperimentUID>
+        deb7b7ba-1eef-41fa-98de-461de547f520
+    </ExperimentUID>
+    <ClientRole>
+        0
+    </ClientRole>
+    <ClientAgentConnection>
+        <ClientIPAddress>127.0.0.1</ClientIPAddress>
+        <ClientMissionControlPort>0</ClientMissionControlPort>
+        <ClientCommandsPort>0</ClientCommandsPort>
+        <AgentIPAddress>127.0.0.1</AgentIPAddress>
+        <AgentMissionControlPort>0</AgentMissionControlPort>
+        <AgentVideoPort>0</AgentVideoPort>
+        <AgentDepthPort>0</AgentDepthPort>
+        <AgentLuminancePort>0</AgentLuminancePort>
+        <AgentObservationsPort>0</AgentObservationsPort>
+        <AgentRewardsPort>0</AgentRewardsPort>
+        <AgentColourMapPort>0</AgentColourMapPort>
+    </ClientAgentConnection>
+</MissionInit>
+[19:02:28] [Realms Notification Availability checker #1/INFO]: Could not authorize you against Realms server: Invalid session id
+[19:02:28] [EnvServerSocketHandler/INFO]: [STDOUT]: REPLYING WITH: MALMOOK
+[19:02:29] [Client thread/INFO]: [STDOUT]: Mission received: CombatMeta
+[19:02:29] [Client thread/INFO]: [STDOUT]: CLIENT request state: CREATING_HANDLERS
+[19:02:29] [Client thread/INFO]: [STDOUT]: CLIENT enter state: CREATING_HANDLERS
+[19:02:29] [Client thread/INFO]: [STDOUT]: Starting command server.
+[19:02:29] [Thread-10/INFO]: [STDOUT]: INFO: ->com(0) Listening for messages on port 10813
+[19:02:29] [Client thread/INFO]: [STDOUT]: CLIENT request state: EVALUATING_WORLD_REQUIREMENTS
+[19:02:29] [Client thread/INFO]: [STDOUT]: CLIENT enter state: EVALUATING_WORLD_REQUIREMENTS
+[19:02:29] [Client thread/INFO]: [STDOUT]: CLIENT request state: CREATING_NEW_WORLD
+[19:02:29] [Client thread/INFO]: [STDOUT]: CLIENT enter state: CREATING_NEW_WORLD
+[19:02:29] [Client thread/INFO]: Mixing MixinWorldProviderSpawn from mixins.overclocking.malmomod.json into net.minecraft.world.WorldProvider
+[19:02:30] [Server thread/INFO]: Starting integrated minecraft server version 1.11.2
+[19:02:30] [Server thread/INFO]: Generating keypair
+[19:02:31] [Server thread/INFO]: Injecting existing block and item data into this server instance
+[19:02:31] [Server thread/INFO]: Applying holder lookups
+[19:02:31] [Server thread/INFO]: Holder lookups applied
+[19:02:31] [Server thread/INFO]: Loading dimension 0 (TEMP_0_47f439d8-95df-41a4-aced-b78b3345bc99) (net.minecraft.server.integrated.IntegratedServer@1c805719)
+[19:02:32] [Server thread/INFO]: Loading dimension 1 (TEMP_0_47f439d8-95df-41a4-aced-b78b3345bc99) (net.minecraft.server.integrated.IntegratedServer@1c805719)
+[19:02:32] [Server thread/INFO]: Loading dimension -1 (TEMP_0_47f439d8-95df-41a4-aced-b78b3345bc99) (net.minecraft.server.integrated.IntegratedServer@1c805719)
+[19:02:32] [Server thread/INFO]: Preparing start region for level 0
+[19:02:33] [Server thread/INFO]: Preparing spawn area: 7%
+[19:02:34] [Server thread/INFO]: Preparing spawn area: 11%
+[19:02:35] [Server thread/INFO]: Preparing spawn area: 21%
+[19:02:36] [Server thread/INFO]: Preparing spawn area: 32%
+[19:02:37] [Server thread/INFO]: Preparing spawn area: 48%
+[19:02:38] [Server thread/INFO]: Preparing spawn area: 61%
+[19:02:39] [Server thread/INFO]: Preparing spawn area: 77%
+[19:02:40] [Server thread/INFO]: Preparing spawn area: 92%
+[19:02:41] [Server thread/INFO]: Changing view distance to 4, from 10
+[19:02:42] [Netty Local Client IO #0/INFO]: [STDOUT]: Transformed Name: net.minecraft.client.entity.EntityOtherPlayerMP
+[19:02:42] [Netty Local Client IO #0/INFO]: [STDOUT]: MALMO: Found EntityOtherPlayerMP, attempting to transform it
+[19:02:42] [Server thread/INFO]: [STDOUT]: SERVER request state: WAITING_FOR_MOD_READY
+[19:02:42] [Server thread/INFO]: [STDOUT]: CLIENT request state: WAITING_FOR_SERVER_READY
+[19:02:42] [Server thread/INFO]: [STDOUT]: SERVER enter state: WAITING_FOR_MOD_READY
+[19:02:42] [Netty Local Client IO #0/INFO]: Server protocol version 2
+[19:02:42] [Netty Server IO #1/INFO]: Client protocol version 2
+[19:02:42] [Netty Server IO #1/INFO]: Client attempting to join with 5 mods : minecraft@1.11.2,FML@8.0.99.99,malmomod@0.37.0,forge@13.20.1.2588,mcp@9.19
+[19:02:42] [Netty Local Client IO #0/INFO]: [Netty Local Client IO #0] Client side modded connection established
+[19:02:42] [Client thread/INFO]: [STDOUT]: CLIENT enter state: WAITING_FOR_SERVER_READY
+[19:02:42] [Server thread/INFO]: [Server thread] Server side modded connection established
+[19:02:42] [Server thread/INFO]: MineDojoAgent0[local:E:0e040e3d] logged in with entity id 928 at (33.5, 72.0, 250.5)
+[19:02:42] [Server thread/INFO]: MineDojoAgent0 joined the game
+[19:02:42] [Server thread/INFO]: [STDOUT]: SERVER request state: DORMANT
+[19:02:42] [Server thread/INFO]: [STDOUT]: SERVER enter state: DORMANT
+[19:02:42] [Server thread/INFO]: [STDOUT]: INCOMING MISSION: Received MissionInit directly through ServerStateMachine constructor.
+[19:02:42] [Server thread/INFO]: [STDOUT]: Mission received: CombatMeta
+[19:02:42] [Server thread/INFO]: Received mission: §9CombatMeta
+[19:02:42] [Server thread/INFO]: Source: §alocalhost
+[19:02:42] [Server thread/INFO]: [STDOUT]: SERVER request state: BUILDING_WORLD
+[19:02:42] [Server thread/INFO]: [STDOUT]: SERVER enter state: BUILDING_WORLD
+[19:02:42] [Server thread/INFO]: [STDOUT]: SERVER request state: WAITING_FOR_AGENTS_TO_ASSEMBLE
+[19:02:43] [Client thread/INFO]: [STDOUT]: ***Telling server we are ready - MineDojoAgent0
+[19:02:43] [Client thread/INFO]: Mixing MixinRandomSkinTexture from mixins.overclocking.malmomod.json into net.minecraft.client.resources.DefaultPlayerSkin
+[19:02:43] [Server thread/INFO]: [STDOUT]: SERVER enter state: WAITING_FOR_AGENTS_TO_ASSEMBLE
+[19:02:43] [Server thread/INFO]: [STDOUT]: Experiment requires: 
+[19:02:43] [Server thread/INFO]: [STDOUT]: >>>> MineDojoAgent0
+[19:02:43] [Client thread/INFO]: [CHAT] Received mission: §9CombatMeta
+[19:02:43] [Client thread/INFO]: [CHAT] Source: §alocalhost
+[19:02:44] [Client thread/INFO]: [STDOUT]: ***Telling server we are ready - MineDojoAgent0
+[19:02:44] [Server thread/INFO]: [STDOUT]: Initializing player with username MineDojoAgent0 and agentname MineDojoAgent0
+[19:02:44] [Client thread/INFO]: [STDOUT]: CLIENT request state: RUNNING
+[19:02:44] [Client thread/INFO]: [STDOUT]: CLIENT enter state: RUNNING
+[19:02:44] [Client thread/INFO]: [STDOUT]: [LOGTOPY] On Mac OSX Catalina make sure to install this OpenJDK 1.8.0_152-release-1056-b12, this prevents the NSDragRegions crash
+[19:02:44] [Server thread/INFO]: [STDOUT]: SERVER request state: RUNNING
+[19:02:44] [Client thread/INFO]: [STDOUT]: Resized the window
+[19:02:44] [Client thread/INFO]: [STDOUT]: Unpausing
+[19:02:44] [Server thread/INFO]: [STDOUT]: SERVER enter state: RUNNING
+[19:02:46] [Server thread/INFO]: [MineDojoAgent0: Object successfully summoned]
+[19:02:46] [Client thread/INFO]: [CHAT] Object successfully summoned
+[19:02:48] [Server thread/INFO]: [STDOUT]: Warning: managed 19/20 ticks this second.

@@ -1,17 +1,14 @@
 #!/usr/bin/env python
 # coding=utf-8
 """ 
-This module contains the base class for all agent classes.
+This module defines a multimodal chatbot demo with gradio.
+
+@Author: Bang Liu (chatsci.ai@gmail.com)
+@Date: 2023-07-13
 
 Copyright (C) 2023 Bang Liu - All Rights Reserved.
 This source code is licensed under the license found in the LICENSE file
 in the root directory of this source tree.
-
-Reference: 
-https://gradio.app/creating-a-chatbot/
-https://github.com/X-PLUG/mPLUG-Owl/blob/main/serve/web_server.py
-
-todo: develop and connect to the aeiva agent.
 """
 import os
 import numpy as np
@@ -33,6 +30,7 @@ from aeiva.runner.runner import Runner
 from aeiva.operator.task_ops import *
 
 
+# ****** Par I - Setup the model runner for chatbot ******
 # setup config
 ctx = {}
 ctx["config_path"] = "/Users/bangliu/Desktop/ChatSCI/Aeiva/configs/train_macaw.yaml"
@@ -60,11 +58,8 @@ op5 = runner.add_operator('infer', infer)
 runner.stack_operators([op4, op5])  # setup runner for inference
 print("Done with setup runner for inference.")
 
-# # run
-# runner(ctx)
-# print("generated_texts: ", ctx["generated_texts"])
 
-
+# ****** Part II - Define the react functions for gradio components ******
 def add_text(history, text):
     global ctx
     history = history + [(text, None)]
@@ -155,6 +150,7 @@ def bot(history):
     return history
 
 
+# ****** Part III - Setup the gradio interface ******
 if __name__ == "__main__":
     # setup gradio
     title_markdown = ("""
@@ -251,4 +247,4 @@ if __name__ == "__main__":
         microphone.stop_recording(after_stop_recording_audio, microphone, None, queue=False)
         microphone.clear(after_clear_audio, None, None, queue=False)
 
-    demo.launch()
+    demo.launch(share=False)

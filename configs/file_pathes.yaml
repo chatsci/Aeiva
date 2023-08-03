@@ -1,0 +1,8 @@
+dataset1:
+  train: path/to/train/file
+  validation: path/to/validation/file
+  test: path/to/test/file
+dataset2:
+  train: path/to/other/train/file
+  validation: path/to/other/validation/file
+  test: path/to/other/test/file

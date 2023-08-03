@@ -213,15 +213,6 @@ def sample_frames_from_video(example: dict, num_frames: int, video_dir: str, fra
 
 
 def _extract_audio_from_video(input_video_path, output_audio_path):
-    """ Convert video to audio.
-
-    Args:
-        input_video_path (str): The path to the input video.
-        output_audio_path (str): The path to save the output audio.
-
-    Returns:
-        None
-    """
     clip = mp.VideoFileClip(input_video_path)
     clip.audio.write_audiofile(output_audio_path)
     clip.close()

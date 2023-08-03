@@ -13,7 +13,6 @@ if __name__ == "__main__":
     # setup config
     ctx = {}
     ctx["config_path"] = "/Users/bangliu/Desktop/ChatSCI/Aeiva/configs/train_macaw.yaml"
-    #!! Note, now I have to revise mode in the config. Later I may want to set some parameters via command arguments.
 
     # setup runner
     runner = Runner()

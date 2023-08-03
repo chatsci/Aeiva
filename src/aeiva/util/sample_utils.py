@@ -2,8 +2,6 @@ import numpy as np
 
 
 def draw_samples(input_list, sample_ratio_or_num_samples):
-    """ Draw samples from a list.
-    """
     num_samples = sample_ratio_or_num_samples if sample_ratio_or_num_samples > 1 else int(sample_ratio_or_num_samples * len(input_list))
 
     if num_samples > len(input_list):

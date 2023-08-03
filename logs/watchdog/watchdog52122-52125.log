@@ -1,0 +1,2 @@
+2023-08-01 11:51:44 BangdeMacBook-Pro.local watchdog[52140] INFO Watchdog started between parent 52122 and child 52125
+2023-08-01 11:52:51 BangdeMacBook-Pro.local watchdog[52140] INFO Parent is not running, hence we need terminate the child.

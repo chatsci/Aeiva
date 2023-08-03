@@ -9,10 +9,18 @@ import pkgutil
 # These could be specific tasks or steps in your data pipeline, like "model_initializer", "data_loader", etc.
 OPERATOR_TYPES = [
     "resource_preparer",
-    "data_formatter", "data_processor", "data_loader", "data_filter", "data_sampler", "data_splitter",
-    "model_loader", "model_initializer", 
+    "data_formatter",
+    "data_processor",
+    "data_loader",
+    "data_filter",
+    "data_sampler",
+    "model_loader",
+    "model_initializer", 
     "dataitem_processor",
-    "trainer", "evaluator", "inferer"]
+    "trainer",
+    "evaluator",
+    "inferer"
+]
 
 # OPERATORS is a dictionary mapping from each operator type to another dictionary, 
 # which will map specific names to the functions decorated with the corresponding decorator.
@@ -36,6 +44,7 @@ def import_submodules(package, recursive=True):
 
     return results
 
+
 def create_decorator(operator_type: str):
     register = OPERATORS[operator_type]
 
@@ -47,6 +56,7 @@ def create_decorator(operator_type: str):
 
     return decorator
 
+
 # Create specific decorators for each operator type
 # These decorators can be used to register functions for each corresponding operation.
 register_resource_preparer = create_decorator("resource_preparer")
@@ -55,7 +65,6 @@ register_data_loader = create_decorator("data_loader")
 register_data_processor = create_decorator("data_processor")
 register_data_filter = create_decorator("data_filter")
 register_data_sampler = create_decorator("data_sampler")
-register_data_splitter = create_decorator("data_splitter")
 register_model_loader = create_decorator("model_loader")
 register_model_initializer = create_decorator("model_initializer")
 register_dataitem_processor = create_decorator("dataitem_processor")

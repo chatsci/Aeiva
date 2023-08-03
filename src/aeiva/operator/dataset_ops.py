@@ -13,8 +13,8 @@ A dataset in aeiva is a dictionary with the following structure:
         ...
     }
 }
-where each sample is a dictionary itself, and metadata is a dictionary that contains the number of samples
-and possibly other fields.
+where each sample is a dictionary itself, and metadata is a dictionary
+that contains the number of samples and possibly other fields.
 
 @Author: Bang Liu (chatsci.ai@gmail.com)
 @Date: 2023-07-13
@@ -26,16 +26,15 @@ in the root directory of this source tree.
 import sys
 import random
 import pickle
+import numpy as np
 from typing import Optional, Callable, Tuple
-
-from sklearn.model_selection import train_test_split
 
 from aeiva.common.types import DataSet
 from aeiva.data.processor import process_dataset
 from aeiva.util.file_utils import ensure_dir
 from aeiva.common.decorators import (
     OPERATORS, import_submodules,
-    register_data_filter, register_data_sampler, register_data_splitter)
+    register_data_filter, register_data_sampler)
 
 
 import_submodules('aeiva.data.formatters')
@@ -114,14 +113,24 @@ def filter_dataset_by_keys(dataset: DataSet, keys_to_preserve: list[str]) -> Dat
     return {"data": filtered_data, "metadata": dataset["metadata"]}
 
 
-def split_dataset(dataset: DataSet, train_ratio: float, seed: int = 42) -> Tuple[DataSet]:
+def split_dataset(dataset: dict, train_ratio: float, seed: int = 42) -> Tuple[dict]:
     r""" Split a dataset into a training set and a validation set.
     """
+    np.random.seed(seed)  # ensures the function is deterministic
+    
     data = dataset["data"]
     metadata = dataset["metadata"]
     
-    # Use sklearn's train_test_split function to split the data.
-    train_data, val_data = train_test_split(data, train_size=train_ratio, random_state=seed)
+    # Create a permutation of indices and shuffle the data.
+    perm = np.random.permutation(len(data))
+    shuffled_data = [data[i] for i in perm]
+    
+    # Calculate split index
+    split_idx = int(train_ratio * len(shuffled_data))
+    
+    # Split the shuffled data
+    train_data = shuffled_data[:split_idx]
+    val_data = shuffled_data[split_idx:]
 
     # Create metadata for training and validation datasets
     train_metadata = metadata.copy()
