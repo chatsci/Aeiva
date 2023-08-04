@@ -22,6 +22,18 @@ def process_dataset(formatted_dataset: DataSet,
                     pipeline: list[Callable],
                     output_dir: Optional[str],
                     dataset_name: Optional[str] = "") -> DataSet:
+    """
+    Process a dataset with a pipeline of functions.
+
+    Args:
+        formatted_dataset (DataSet): the dataset to be processed.
+        pipeline (list[Callable]): a list of functions to be applied to the dataset.
+        output_dir (Optional[str]): the output directory to save the processed dataset.
+        dataset_name (Optional[str], optional): the name of the dataset. Defaults to "".
+
+    Returns:
+        DataSet: the processed dataset.
+    """
     processed_data = []
     pipeline = Pipeline(pipeline)
     for item in formatted_dataset["data"]:

@@ -1,8 +1,27 @@
-dataset1:
-  train: path/to/train/file
-  validation: path/to/validation/file
-  test: path/to/test/file
-dataset2:
-  train: path/to/other/train/file
-  validation: path/to/other/validation/file
-  test: path/to/other/test/file
+project_root_dir: /Users/bangliu/Desktop/ChatSCI/Aeiva/
+data_root_dir: /Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/
+model_root_dir: /Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/
+
+datasets:
+  alpaca:
+    alpaca_data.json: /Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/alpaca/alpaca_data.json
+  avsd:
+    avsd_train.json: /Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/avsd/avsd_train.json
+  vqa:
+    v2_mscoco_train2014_annotations.json: /Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/vqa/v2_mscoco_train2014_annotations.json
+    v2_OpenEnded_mscoco_train2014_questions.json: /Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/vqa/v2_OpenEnded_mscoco_train2014_questions.json
+  macaw:
+    generated_examples_coco.json: /Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/macaw/generated_examples_coco.json
+    generated_examples_avsd.json: /Users/bangliu/Desktop/ChatSCI/Aeiva/datasets/macaw/generated_examples_avsd.json
+
+models:
+  macaw:
+    tokenizer: /Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/macaw/
+    model: /Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/macaw/
+  whisper:
+    model: /Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/whisper/
+  llama7b:
+    model: /Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/llama7b/
+  clip:
+    model: /Users/bangliu/Desktop/ChatSCI/Aeiva/pretrained_models/clip/
+  

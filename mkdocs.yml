@@ -1,0 +1,32 @@
+site_name: Aeiva
+site_url: https://aeiva.ai/
+
+plugins:
+- search
+- autorefs
+- mkdocstrings:
+    enabled: !ENV [ENABLE_MKDOCSTRINGS, true]
+    default_handler: python
+    handlers:
+      python:
+        options:
+          show_source: false
+
+nav:
+  - Home: index.md
+  - Get Started:
+    - Introduction: intro.md
+    - Roadmap: roadmp.md
+    - Coding guidelines: coding_guidelines.md
+  - Tutorials: tutorials.md
+  - How-To Guides: how-to-guides.md
+  - API References: reference.md
+  - Explanations: explanation.md
+  - Misc:
+    - How to automatically generate documentation from docstrings: generate_docs.md
+    - Install MineDojo on Mac with M1 chip: install_minedojo.md
+
+theme:
+  name: "material"
+  logo: assets/logo.png
+  custom_dir: docs/overrides/
