@@ -1,3 +1,6 @@
+"""
+This script removes all cache and log directories from the project.
+"""
 import os
 import shutil
 

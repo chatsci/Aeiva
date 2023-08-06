@@ -1,5 +1,10 @@
+"""
+Prints the directory tree of the aeiva source code and datasets.
+The output file will be saved in the project's root directory and the datasets/ directory.
+"""
 import os
 import pathspec
+
 
 def read_gitignore(gitignore_path):
     with open(gitignore_path) as f:

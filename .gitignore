@@ -5,6 +5,8 @@ __pycache__/
 
 lightning_logs/
 
+site/
+
 **/__pycache__/
 *.pyc
 out*/
