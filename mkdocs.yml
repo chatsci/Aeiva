@@ -1,5 +1,7 @@
-site_name: Aeiva
+site_name: "Aeiva: An Evolving Intelligent Virtual Assistant"
 site_url: https://aeiva.ai/
+repo_url: https://github.com/chatsci/Aeiva
+
 
 plugins:
 - search
@@ -22,11 +24,14 @@ nav:
   - How-To Guides: how-to-guides.md
   - API References: reference.md
   - Explanations: explanation.md
-  - Misc:
+  - Blogs:
     - How to automatically generate documentation from docstrings: generate_docs.md
     - Install MineDojo on Mac with M1 chip: install_minedojo.md
 
 theme:
   name: "material"
   logo: assets/logo.png
-  custom_dir: docs/overrides/
+  custom_dir: docs/overrides-material/
+  features:
+    - navigation.tabs
+    
