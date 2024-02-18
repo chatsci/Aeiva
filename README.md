@@ -16,7 +16,7 @@
 </p>
 
 
-This is a project where we're building a smart AI. Our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. A key focus will be on enhancing model interpretability, safety, and conducting thorough analysis to advance research in these areas. Our big goal? To understand the essence of intelligence and use this knowledge to make life better for people.
+In this project, our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. A key focus will be on enhancing model interpretability, safety, and conducting thorough analysis to advance research in these areas. Our big goal? To understand the essence of intelligence and use this knowledge to make life better for people.
 
 
 ## Installation
