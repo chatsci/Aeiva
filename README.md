@@ -2,7 +2,7 @@
 <img src="assets/aeiva-logo-medusa.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
-# AEIVA: An Extendable Intelligent Virtual Assistant
+# AEIVA: An Evolving Intelligent Virtual Assistant
 
 <p align="center">
 <a href="docs/README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
@@ -16,21 +16,81 @@
 </p>
 
 
-This is a project where we're building a smart AI. This AI can learn from and interact with both digital and real-world settings. It's designed to handle different types of data and environments. We're focusing on making sure this AI is safe, easy to control, and understandable. Our big goal? To understand the essence of intelligence and use this knowledge to make life better for people.
+This is a project where we're building a smart AI. Our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. A key focus will be on enhancing model interpretability, safety, and conducting thorough analysis to advance research in these areas. Our big goal? To understand the essence of intelligence and use this knowledge to make life better for people.
 
-
-## Quick start
 
 ## Installation
+To install AEIVA, follow these steps:
+### Prerequisites
+* Python 3.9 or newer
+* pip (Python package manager)
 
-## Example
+### Steps
+1. **Clone the AEIVA Repository**
+
+	First, clone the AEIVA repository to your local machine using Git:
+
+	```bash
+	git clone https://github.com/chatsci/Aeiva.git
+	cd Aeiva
+	```
+
+2. **Create a Virtual Environment (Recommended)**
+It's a good practice to create a virtual environment for Python projects. This keeps dependencies required by different projects separate. Use the following command to create a virtual environment with `conda`:
+
+	```bash
+	conda create --name <my-env>
+	```
+	
+	Replace `<my-env>` with the name of your environment.
+	
+	To acivate your env:
+	
+	```bash
+	conda activate <my-env>
+	```
+	
+	For more advanced configurations or options, please check the online document of `conda`.
+	
+3. **Install Dependencies**
+	Install all dependencies listed in **requirements.txt**:
+	
+	```bash
+	pip install -r requirements.txt
+	```
+
+4. **Install Aeiva**
+	Finally, install AEIVA using the **setup.py** script:
+	
+	```bash
+	python setup.py install
+	```
+	
+5. **Verify Installation**
+	To verify that AEIVA has been installed correctly, you can run the following command:
+	
+	```bash
+	python -c "import aeiva; print(aeiva.__version__)"
+	```
 
 ## Demo
 
-## Contact
+* **Multimodal chatbot**
+	To run a multimodal chatbot, run the following command (assume you are in the project folder `Aeiva/`):
+	
+	```bash
+	python src/aeiva/demo/mm_chatbot.py
+	```
+	Once the demo is running, go to the local URL address indicated in the terminal. You will see a Gradio interface like below:
+	![mm_chatbot](assets/mm_chat_demo.png)	
+	You may change your path if you are in a different folder.
 
+**Note:** We will add more demos or examples.
+
+## Contact
+![contact](assets/contact.png)
 ## Acknowledge
 
-TODO: complete the readme.
+
 
 

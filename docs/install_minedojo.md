@@ -1,5 +1,9 @@
 # Install MineDojo platform on MacBook Pro with M1 Chip
 
+**Author:** Bang Liu
+
+**Date:** 2023-08-01
+
 ## Setup Java Environment
 I followed the instructions on: [https://docs.minedojo.org/sections/getting_started/install.html#prerequisites](https://docs.minedojo.org/sections/getting_started/install.html#prerequisites)
 

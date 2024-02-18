@@ -1,5 +1,9 @@
 # How to generate docs automatically
 
+**Author:** Bang Liu
+
+**Date:** 2023-08-05
+
 In this document, I will introduce how to automatically generate the documentation for your python project with several tools.
 
 ## Install libraries

@@ -19,6 +19,8 @@ import PIL
 import gradio as gr
 
 from aeiva.util.file_utils import is_image_file, is_video_file, is_audio_file
+from aeiva.runner.runner import Runner
+from aeiva.operator.task_ops import *
 
 
 os.environ["LC_ALL"] = "en_US.UTF-8"
@@ -26,14 +28,11 @@ os.environ["LANG"] = "en_US.UTF-8"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"  # NOTE: This is just a workarouond. Ensure a single OpenMP runtime is linked is the best solution.
 
-from aeiva.runner.runner import Runner
-from aeiva.operator.task_ops import *
-
 
 # ****** Par I - Setup the model runner for chatbot ******
 # setup config
 ctx = {}
-ctx["config_path"] = "/Users/bangliu/Desktop/ChatSCI/Aeiva/configs/train_macaw.yaml"
+ctx["config_path"] = "/Users/bangliu/Documents/ChatSCI/Aeiva/configs/train_macaw.yaml"
 
 # setup current input dataitem
 ctx["instruction"] = ""  # will be set during the dialogue
@@ -162,7 +161,7 @@ if __name__ == "__main__":
     </h1>
 
     <h2 align="center">
-        Aeiva: A Multimodal and Embodied Agent that Learns from the Real and Virtual Worlds
+        AEIVA: An Evolving Intelligent Virtual Assistant
     </h2>
 
     <h5 align="center">

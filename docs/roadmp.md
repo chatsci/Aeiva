@@ -1,9 +1,15 @@
 # Roadmap
 
+**Author:** Bang Liu
+
+**Date:** 2023-07-08
+
 In this document, we describe the long- and short-term objectives of this project, as well as show the current plan in achieving the objectives.
 
-## Long-term Objective
-Enable Aeiva to learn from multimodal and embodied environments with high learning efficiency and low-resource requirements. Specifically, we aim to research on the following aspects:
+## Long-term Objectives
+Enable Aeiva to learn from multimodal and embodied environments with high learning efficiency and low-resource requirements. Specifically, we aim to research on the following aspects: (**Note:** the following may be updated based on recent research advances.)
+
+**Input Data and Environment:**
 
 * Multimodal learning
 	* Be able to learn from video data, which is the main modality for human beings.
@@ -14,25 +20,38 @@ Enable Aeiva to learn from multimodal and embodied environments with high learni
 	* Be able to imagine the environment of videos and learn from them.
 	* Unify the learning paradigm in different environments and different modalities.
 
-* AI for Science
-	* Health
-	* Material Science
+**Output Data and Actions:**
 
-* Safe, Controllable, Interpretable AI
-	* Research on techniques to ensure safe, controllable, and interpretable AI
+* Manipulating tools
+	* Enable the models to utilize tools, quickly learn new tools, and interact with different environments with tools
+
+* Multimodal outputs
+	* Enable the models to generate multimodal outputs, e.g., text, images, audios, videos.
+
+**Model Architectures:**
+
+* Small-scale model
+	* Explore the ability limitations of small-scale models
+	* Explore model architectures other than NN. E.g., SNN, more complex single neuron designs, neural science-inspired designs.
+	* Achieving brain-scale model with high energy efficiency.
+	
+**Training Algorithms:**
 
 * Efficient learning
 	* Understand how LLMs learn with large-scale data
 	* Improve the learning efficiency of language models.
-	* Reducing the model size while maintaining the capability of models.
 	* The final goal is approaching or even surpassing the learning and energy efficiency of human brain.
+
+**Better Understanding and Controlling AI:**
 
 * Artificial Neural Science
 	* Understand LLMs and other DL models: what they learned, how they learn, and how to improve.
 	* Intergrating neural science knowledge to improve DL models.
 
-* Manipulating tools
-	* Enable the models to utilize tools, quickly learn new tools, and interact with different environments with tools
+* Safe, Controllable, Interpretable AI
+	* Research on techniques to ensure safe, controllable, and interpretable AI
+
+**AI Society**
 
 * AI Society
 	* Evolving a society of AI agents
@@ -40,8 +59,17 @@ Enable Aeiva to learn from multimodal and embodied environments with high learni
 	* Agents learn to solve problems in real-world
 	* Ensure the human rights
 
-## Short-term objective (keep updating)
-The long-term objective of this project is quite ambitious. At the first place, we want to better understand how the current LLMs learn, and improve the multimodal and embodied learning. Specifically, we want to learn from videos efficiently. Below is a list of milestones we aim to achieve in a short-term (keep updating):
+**Applications:**
+
+* AI for Science
+	* Health
+	* Material Science
+
+The above research objectives are quite ambitious. However, we believe that it would be beneficial if we can develop a comprehensive framework that encompasses all these research objectives. Different researchers can focus on different parts/components. We aim to propose a general framework where each part can be easily replaced and tested. To achieve these, we aim to design a unified yet flexible framework to combine different parts.
+
+## Short-term objectives (keep updating)
+The long-term objective of this project is quite ambitious. At the first place, we want to better understand how the current LLMs learn, and improve the multimodal and embodied learning. Specifically, we want to learn from videos efficiently. Below is a list of milestones we aim to achieve in a short-term (keep updating): (**Note:** the following may be updated based on recent progress.)
+
 
 * Multimodal Learning
 	* Benchmarking several existing multimodal LLMs in a unified manner
@@ -61,4 +89,18 @@ The long-term objective of this project is quite ambitious. At the first place, 
 	* Design AI community and communication protocals
 	* Add visualizatioin UI
 
-......
+More ...
+
+## Recent TODO list
+
+Done? | Task <!--⬜️ Nope, ✅ Yep-->
+:---:| ---
+⬜️| Improve data item operators. Seperate util functions, specific operators, and common operators.
+⬜️| Improve src/aeiva/common/types.py
+⬜️| Support language model finetuning. Refer to NanoGPT.
+⬜️| Incorporate different benchmarks and datasets: we need to easily evaluate different benchmarks to show the comparisions between different models or methods.
+⬜️| Design model framework: how to integrate memory module, world model, etc.
+⬜️| Design LEGO style protocal to construct models: how to easily extend or revise model.
+⬜️| Design message protocal: how to percept different signals, how to output actions/different modalities. Use typed dict?
+⬜️| Test on GPU environments.
+
