@@ -1,5 +1,5 @@
 <p align="center" width="100%">
-<img src="assets/aeiva-logo-medusa.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
+<img src="assets/aeiva-logo-Medusa.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
 # AEIVA: An Evolving Intelligent Virtual Assistant
