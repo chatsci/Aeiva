@@ -1,28 +1,26 @@
 .DS_Store
 **/.DS_Store
-.ipynb_checkpoints/
 __pycache__/
-
-lightning_logs/
-
-site/
-
 **/__pycache__/
 *.pyc
+.ipynb_checkpoints/
+
+lightning_logs/
+site/
 out*/
 wandb/
 build/
-TODO.txt
-.DS_Store
-
+dist/
+flagged/
+logs/
 datasets/*/*
 !datasets/*/*.py
 !datasets/*/*.ipynb
 !datasets/*/*.md
-
 pretrained_models/*
 virtual_worlds/*
 
+TODO.txt
 CODING_GUIDELINES.md
 
 *.egg-info/
