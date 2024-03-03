@@ -11,6 +11,7 @@ site/
 *.pyc
 out*/
 wandb/
+build/
 TODO.txt
 .DS_Store
 
