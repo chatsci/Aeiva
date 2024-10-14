@@ -1,108 +1,138 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type, Union, Optional, Tuple
-from collections import deque
+import asyncio
+from datetime import datetime
 
+class Config:
+    """Placeholder for configuration settings."""
 
-class AgentBase(ABC):
-    def __init__(self, 
-                 id: str, 
-                 name: str, 
-                 perception_system: PerceptionSystem, 
-                 cognitive_system: CognitiveSystem, 
-                 action_system: ActionSystem,
-                 role: Optional[Role] = None,
-                 background: Optional[Background] = None,
-                 relationships: Optional[Dict[str, Relationship]] = None,
-                 *args,
-                 **kwargs):
-        self.id = id
-        self.name = name
-        self.perception_system = perception_system
-        self.cognitive_system = cognitive_system
-        self.action_system = action_system
-        self.memory = {}
-        self.world_model = None
-        self.goal = None
-        self.role = role
-        self.background = background
-        self.relationships = relationships if relationships else {}
+class State:
+    """Placeholder for the agent's state."""
+    def __init__(self):
+        self.data = {}
+
+class BaseSensor(ABC):
+    def __init__(self, config: Config):
+        self.config = config
 
     @abstractmethod
-    def perceive(self, stimuli: Stimuli, *args, **kwargs):
-        """
-        The agent takes in stimuli from the environment and processes it,
-        the result is then passed to the cognitive system for further processing.
-        """
-        processed_data = self.perception_system.process(stimuli)
-        self.memory['last_perception'] = processed_data
-        return processed_data
-
-    @abstractmethod
-    def think(self, *args, **kwargs):
-        """
-        The agent uses its cognitive system to plan actions based on the current state
-        of the world and its goals. It also uses its memory and potentially updates its world model.
-        """
-        cognitive_output = self.cognitive_system.process(self.memory)
-        self.memory['last_cognition'] = cognitive_output
-        return cognitive_output
-
-    @abstractmethod
-    def act(self, *args, **kwargs):
-        """
-        The agent performs an action in the environment using its action system,
-        this action is based on the output from the cognitive system.
-        """
-        action = self.cognitive_system.get_last_action()
-        self.action_system.perform(action)
-
-    @abstractmethod
-    def learn(self, *args, **kwargs):
-        """
-        The agent updates its perception, cognition, and action systems based on the feedback it gets from the environment,
-        this could be done using various machine learning techniques.
-        """
+    async def perceive(self):
         pass
 
-    @abstractmethod
-    def set_goal(self, goal: Any, *args, **kwargs):
-        """
-        The agent sets its goal, which could guide its cognitive system in making decisions.
-        """
-        self.goal = goal
+class BaseBrain(ABC):
+    def __init__(self, config: Config):
+        self.config = config
 
     @abstractmethod
-    def update_world_model(self, world_model: WorldModel, *args, **kwargs):
-        """
-        The agent updates its world model, which could be used in the cognitive system for making decisions.
-        """
-        self.world_model = world_model
+    async def think(self, state):
+        pass
+
+class BaseActor(ABC):
+    def __init__(self, config: Config):
+        self.config = config
 
     @abstractmethod
-    def set_role(self, role: Role):
-        """
-        The agent sets its role in the society, which could guide its actions and interactions with other agents.
-        """
-        self.role = role
+    async def act(self, action):
+        pass
+
+class BaseEvolver(ABC):
+    def __init__(self, config: Config):
+        self.config = config
 
     @abstractmethod
-    def set_background(self, background: Background):
-        """
-        The agent sets its background, which could influence its behavior and interactions with other agents.
-        """
-        self.background = background
+    async def evolve(self):
+        pass
+
+class BaseAgent(ABC):
+    def __init__(self, config: Config):
+        self.config = config
+        self.state = State()
+        self.stop_event = None
+        self.sensor = None
+        self.brain = None
+        self.actor = None
+        self.evolver = None
 
     @abstractmethod
-    def add_relationship(self, other_agent_id: str, relationship: Relationship):
-        """
-        The agent adds a relationship with another agent, which could influence its behavior and interactions with the other agent.
-        """
-        self.relationships[other_agent_id] = relationship
+    async def run(self):
+        pass
 
-    @abstractmethod
-    def remove_relationship(self, other_agent_id: str):
-        """
-        The agent removes a relationship with another agent.
-        """
-        if other_agent_id in self.relationships:
-            del self.relationships[other_agent_id]
+class ToySensor(BaseSensor):
+    def __init__(self, config: Config):
+        self.config = config
+
+    async def perceive(self):
+        now = datetime.now()
+        return {"time": now}
+
+class ToyBrain(BaseBrain):
+    def __init__(self, config: Config):
+        self.config = config
+
+    async def think(self, state):
+        current_time = state.data.get("time")
+        return f"The current time is {current_time}"
+
+class ToyActor(BaseActor):
+    def __init__(self, config: Config):
+        self.config = config
+
+    async def act(self, action):
+        now = datetime.now()
+        print(f"{action} - perform action at time {now}")
+
+class ToyEvolver(BaseEvolver):
+    def __init__(self, config: Config):
+        self.config = config
+
+    async def evolve(self):
+        now = datetime.now()
+        print(f"Evolve the model at {now}")
+
+class ToyAgent:
+    """Toy agent class that orchestrates the sensor, brain, actor, and evolver components."""
+    def __init__(self, config: Config):
+        self.config = config
+        self.state = State()
+        self.stop_event = asyncio.Event()
+        self.sensor = ToySensor(config)
+        self.brain = ToyBrain(config)
+        self.actor = ToyActor(config)
+        self.evolver = ToyEvolver(config)
+
+    async def cycle(self):
+        perception = await self.sensor.perceive()
+        self.state.data.update(perception)
+        
+        decision = await self.brain.think(self.state)
+        await self.actor.act(decision)
+        await self.evolver.evolve()
+
+    async def run(self):
+        while not self.stop_event.is_set():
+            await self.cycle()
+            await asyncio.sleep(1)
+    
+    def stop(self):
+        """Method to signal the agent to stop."""
+        self.stop_event.set()
+
+
+async def main():
+    config = Config()
+
+    agent = ToyAgent(config)
+    
+    # Run the agent in the background
+    agent_task = asyncio.create_task(agent.run())
+
+    # Example stop condition: stop after 5 seconds
+    await asyncio.sleep(5)
+    agent.stop()
+
+    # Wait for the agent to gracefully finish its current cycle before stopping
+    await agent_task
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+

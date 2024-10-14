@@ -22,6 +22,7 @@ virtual_worlds/*
 
 TODO.txt
 CODING_GUIDELINES.md
+TODO.md
 
 *.egg-info/
 **/*.egg-info/
