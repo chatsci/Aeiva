@@ -25,7 +25,7 @@ To realize our long-term vision, we will begin with the following foundational s
 
 - **Objective**: Create basic functionalities for each module:
 
-  - **Cognition**: Represents the core cognitive capabilities of the AI agent, including decision-making, reasoning, planning, and memory.
+   - **Cognition**: Represents the core cognitive capabilities of the AI agent, including decision-making, reasoning, planning, and memory.
     - **Core**: (Meta Layer) Abstract interfaces and definitions for cognitive functions, independent of specific models or technologies.
     - **Architecture**: (Technique Layer) General classes and techniques for cognitive architectures.
         - **LLM**: General classes for working with Large Language Models.

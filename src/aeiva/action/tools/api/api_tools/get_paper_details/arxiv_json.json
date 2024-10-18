@@ -1,0 +1,20 @@
+{
+    "type": "function",
+    "function": {
+        "name": "get_paper_details",
+        "description": "Fetches details of a paper from Arxiv using its ID.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "paper_id": {
+                    "type": "string",
+                    "description": "The ID of the paper on Arxiv."
+                }
+            },
+            "required": ["paper_id"]
+        }
+    },
+    "tool_name": "arxiv_json",
+    "tool_description": "Fetches details of a paper from Arxiv using its ID.",
+    "title": "Arxiv Paper Fetch"
+}

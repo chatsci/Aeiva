@@ -20,12 +20,16 @@ datasets/*/*
 pretrained_models/*
 virtual_worlds/*
 
+configs/llm_api_keys.yaml
+
 TODO.txt
 CODING_GUIDELINES.md
 TODO.md
 
 *.egg-info/
 **/*.egg-info/
+
+.env
 
 
 

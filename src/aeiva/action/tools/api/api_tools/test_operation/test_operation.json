@@ -1,0 +1,15 @@
+{
+    "type": "function",
+    "function": {
+        "name": "test_operation",
+        "description": "Performs a test operation: a + b + a * b.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "a": {"type": "number", "description": "The first number."},
+                "b": {"type": "number", "description": "The second number."}
+            },
+            "required": ["a", "b"]
+        }
+    }
+}
