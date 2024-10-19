@@ -1,79 +1,101 @@
+# File: cognition/memory.py
+
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type, Union, Optional, Tuple
-from collections import deque
+from typing import Any
 
 
 class Memory(ABC):
     """
-    Abstract base class for the memory of an agent. This incorporates concepts from neuroscience and machine learning.
+    Abstract base class representing the Memory system of an agent.
+
+    The Memory system is responsible for storing, retrieving, and managing the agent's
+    knowledge, experiences, and historical data.
+
+    Attributes:
+        config (Any): Configuration settings for the Memory system.
+        state (Any): The internal state of the Memory system.
     """
-    def __init__(self, short_term_capacity: int, long_term_capacity: int):
-        self.short_term_memory = {}  # Working memory, storing temporary information
-        self.long_term_memory = {}  # Long term memory, storing persisting information
-        self.short_term_capacity = short_term_capacity
-        self.long_term_capacity = long_term_capacity
-        self.access_times = {}  # Keep track of access times for each memory item
-        self.short_term_queue = deque(maxlen=short_term_capacity)  # Queue to keep track of addition order in short term memory
-        self.long_term_queue = deque(maxlen=long_term_capacity)  # Queue to keep track of addition order in long term memory
 
-    def remember(self, key: str, value: Any, term: str = "short"):
-        if term == "short":
-            self.short_term_queue.append(key)
-            if len(self.short_term_memory) >= self.short_term_capacity:
-                self.forget("short")
-            self.short_term_memory[key] = value
-        else:
-            self.long_term_queue.append(key)
-            if len(self.long_term_memory) >= self.long_term_capacity:
-                self.forget("long")
-            self.long_term_memory[key] = value
-        self.access_times[key] = 0  # Initialize access times
+    def __init__(self, config: Any):
+        """
+        Initialize the Memory system with the provided configuration.
 
-    def retrieve(self, key: str, term: str = "short"):
-        if term == "short":
-            self.access_times[key] += 1  # Increase access times
-            return self.short_term_memory.get(key)
-        else:
-            self.access_times[key] += 1  # Increase access times
-            return self.long_term_memory.get(key)
-
-    def forget(self, term: str = "short"):
-        # Forget based on 'use-it-or-lose-it' principle
-        if term == "short":
-            oldest_item_key = self.short_term_queue.popleft()
-            self.short_term_memory.pop(oldest_item_key)
-            self.access_times.pop(oldest_item_key)
-        else:
-            oldest_item_key = self.long_term_queue.popleft()
-            self.long_term_memory.pop(oldest_item_key)
-            self.access_times.pop(oldest_item_key)
+        Args:
+            config (Any): Configuration settings for the Memory system.
+        """
+        self.config = config
+        self.state = self.init_state()
 
     @abstractmethod
-    def decay(self):
+    def init_state(self) -> Any:
         """
-        Abstract method for decay function of memories over time. This should be implemented in a more specific subclass.
+        Initialize the internal state of the Memory system.
+
+        This method should set up the initial state required for the Memory system's operations.
+
+        Returns:
+            Any: The initial state of the Memory system.
         """
         pass
 
     @abstractmethod
-    def reinforce(self, key: str):
+    async def setup(self) -> None:
         """
-        Abstract method for reinforcement function of memories over time. This should be implemented in a more specific subclass.
+        Asynchronously set up the Memory system's components.
+
+        This method should initialize any necessary components or resources based on the provided configuration.
+
+        Raises:
+            ConfigurationError: If the configuration is invalid or incomplete.
         """
         pass
 
     @abstractmethod
-    def search_memory(self, query: Any) -> Tuple[Optional[Dict], Optional[Dict]]:
+    async def retrieve(self, query: Any) -> Any:
         """
-        Abstract method for searching both short and long term memories for the query and returns the found item. 
-        This should be implemented in a more specific subclass using ML techniques.
+        Asynchronously retrieve data from memory based on a query.
+
+        Args:
+            query (Any): The query or criteria to retrieve specific memory data.
+
+        Returns:
+            Any: The retrieved memory data.
+
+        Raises:
+            RetrievalError: If the retrieval process fails.
         """
         pass
 
     @abstractmethod
-    def self_organize(self):
+    async def store(self, data: Any) -> None:
         """
-        Abstract method for self-organizing memory.
-        This should be implemented in a more specific subclass.
+        Asynchronously store data into memory.
+
+        Args:
+            data (Any): The data to be stored in memory.
+
+        Raises:
+            StorageError: If the storage process fails.
         """
         pass
+
+    def get_current_state(self) -> Any:
+        """
+        Retrieve the current internal state of the Memory system.
+
+        Returns:
+            Any: The current internal state.
+        """
+        return self.state
+
+    def handle_error(self, error: Exception) -> None:
+        """
+        Handle errors that occur during memory operations.
+
+        This method can be overridden to implement custom error handling logic.
+
+        Args:
+            error (Exception): The exception that was raised.
+        """
+        # Default error handling: log the error
+        print(f"Memory system encountered an error: {error}")

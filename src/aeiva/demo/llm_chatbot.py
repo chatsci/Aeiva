@@ -20,7 +20,7 @@ import gradio as gr
 from datetime import datetime
 from dotenv import load_dotenv
 
-from aeiva.cognition.brain.llm.llm_client import LLMClient
+from aeiva.cognition.brain.llm.llm_client_old import LLMClient
 from aeiva.cognition.brain.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.cognition.brain.llm.llm_gateway_exceptions import LLMGatewayError
 from aeiva.util.file_utils import is_image_file, is_video_file, is_audio_file

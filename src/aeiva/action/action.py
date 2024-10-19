@@ -1,27 +1,23 @@
+# File: actions/action.py
+
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type, Union, Optional, Tuple
-from collections import deque
+from typing import Any, Dict, Optional
 
 
 class Action(ABC):
     """
-    Abstract base class for actions. This represents a behavior or operation carried out by the agent, based on its decision.
+    Abstract base class for actions that an agent can perform.
     """
-    def __init__(self, *args, **kwargs):
-        self.actions = self.perform_action(*args, **kwargs)
-
-    @property
-    def actions(self) -> List[str]:
-        return self._actions
-
-    @actions.setter
-    def actions(self, value: List[str]):
-        self._actions = value
+    def __init__(self, name: str, parameters: Optional[Dict[str, Any]] = None):
+        self.name = name
+        self.parameters = parameters or {}
 
     @abstractmethod
-    def perform_action(self, *args, **kwargs) -> List[str]:
+    def execute(self) -> Any:
         """
-        Abstract method for performing an action based on the agent's decision.
-        Should return a list of actions to be performed by the agent.
+        Execute the action.
+
+        Returns:
+            Any: The result of the action execution.
         """
         pass
