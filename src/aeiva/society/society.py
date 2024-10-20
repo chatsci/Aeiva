@@ -1,56 +1,102 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Any
+from typing import Any, List, Dict
+import asyncio
 
 
 class Society(ABC):
     """
-    Abstract base class for a society of agents.
+    Abstract base class representing a Society that connects an environment and agents.
+
+    The Society enables agents to interact with each other and with the environment, providing
+    mechanisms for integrating social systems, such as communication or economy.
+
+    Attributes:
+        config (Any): Configuration settings for the society.
+        env (Environment): The environment in which agents operate.
+        agents (Dict[str, Any]): A dictionary of agents within the society.
+        social_systems (Dict[str, Any]): A dictionary representing various social systems (e.g., communication).
     """
 
-    def __init__(self, society_name: str, society_description: Optional[str] = None, *args, **kwargs):
-        self._society_name = society_name
-        self._society_description = society_description
-        self._members = []  # List to store members of the society
-        self._norms = {}  # Dictionary to store societal norms/rules
-        self._relationships = {}  # Dictionary to store relationships between members
+    def __init__(self, config: Any, env: Any, agents: Dict[str, Any]):
+        """
+        Initialize the Society with the provided configuration, environment, and agents.
 
-    @property
-    def society_name(self) -> str:
-        return self._society_name
-
-    @property
-    def society_description(self) -> Optional[str]:
-        return self._society_description
+        Args:
+            config (Any): Configuration settings for the society.
+            env (Environment): The environment in which agents operate.
+            agents (Dict[str, Any]): A dictionary of agents within the society, keyed by their IDs.
+        """
+        self.config = config
+        self.env = env
+        self.agents = agents  # Agents are stored in a dictionary with IDs as keys
+        self.social_systems = self.init_social_systems()
 
     @abstractmethod
-    def add_member(self, agent: 'Agent'):
+    def init_social_systems(self) -> Dict[str, Any]:
         """
-        Abstract method for adding an agent to the society. This should be implemented in a concrete subclass
-        according to the specific behavior of the society.
+        Initialize the social systems that operate within the society (e.g., communication, financial, law, political, social network systems).
+
+        Returns:
+            Dict[str, Any]: A dictionary of initialized social systems.
         """
         pass
 
     @abstractmethod
-    def remove_member(self, agent: 'Agent'):
+    async def setup(self) -> None:
         """
-        Abstract method for removing an agent from the society. This should be implemented in a concrete subclass
-        according to the specific behavior of the society.
+        Asynchronously set up the society's components, such as initializing the environment and agents.
+        """
+        await self.env.setup()
+        await asyncio.gather(*(agent.setup() for agent in self.agents.values()))
+        print("Society: Setup completed.")
+
+    @abstractmethod
+    async def run(self) -> None:
+        """
+        Asynchronously run the society, managing interactions between agents and the environment.
+
+        This method should control the flow of interactions between agents and the environment,
+        and it can be designed as a continuous loop or a task-based execution.
         """
         pass
 
-    @abstractmethod
-    def get_relationships(self, agent: 'Agent') -> list[Tuple['Agent', str, float]]:
+    def add_agent(self, agent_id: str, agent: Any) -> None:
         """
-        Abstract method for getting the relationships of an agent in the society. This should return a list of tuples,
-        where each tuple contains an agent, the type of relationship, and the strength of the relationship. This should 
-        be implemented in a concrete subclass according to the specific behavior of the society.
-        """
-        pass
+        Add a new agent to the society.
 
-    @abstractmethod
-    def set_norms(self, norms: dict[str, Any]):
+        Args:
+            agent_id (str): The unique identifier of the agent.
+            agent (Any): The agent object to add to the society.
         """
-        Abstract method for setting societal norms/rules. This should be implemented in a concrete subclass according 
-        to the specific behavior of the society.
+        self.agents[agent_id] = agent
+
+    def remove_agent(self, agent_id: str) -> None:
         """
-        pass
+        Remove an agent from the society by its ID.
+
+        Args:
+            agent_id (str): The unique identifier of the agent.
+        """
+        if agent_id in self.agents:
+            del self.agents[agent_id]
+
+    def get_agent(self, agent_id: str) -> Any:
+        """
+        Retrieve an agent by its ID.
+
+        Args:
+            agent_id (str): The unique identifier of the agent.
+
+        Returns:
+            Any: The agent object, if found.
+        """
+        return self.agents.get(agent_id, None)
+
+    def handle_error(self, error: Exception) -> None:
+        """
+        Handle errors that occur during society operations.
+
+        Args:
+            error (Exception): The exception that was raised.
+        """
+        print(f"Society encountered an error: {error}")

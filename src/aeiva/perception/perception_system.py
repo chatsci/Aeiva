@@ -91,7 +91,7 @@ class PerceptionSystem(ABC):
         try:
             await self.capture(raw_data)
             await self.process()
-        except (CaptureError, ProcessingError) as e:
+        except Exception as e:
             self.handle_error(e)
             raise e
 

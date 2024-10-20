@@ -77,7 +77,7 @@ class ToyAgent(Agent):
             print(f"Agent: Perceived observations - {observations}")
             
             # Cognitive processing based on the observations
-            cognitive_response = await self.cognition_system.think(observations)
+            cognitive_response = await self.cognition_system.process_observation(observations)
             print(f"Agent: Cognitive response - {cognitive_response}")
             
             # Choose and execute an action based on the cognitive response

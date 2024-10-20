@@ -25,7 +25,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your_default_api_key_here")
 
 # Initialize LLM client with function call capability
 llm_gateway_config = LLMGatewayConfig(
-    llm_model_name="gpt-4-turbo",  # Use the model that supports litellm's function calling and streaming
+    llm_model_name="gpt-4o-mini",  # Use the model that supports litellm's function calling and streaming
     llm_api_key=OPENAI_API_KEY,
     llm_base_url="https://api.openai.com/v1",
     llm_max_input_tokens=2048,
