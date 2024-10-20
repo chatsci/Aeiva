@@ -12,12 +12,12 @@ class Society(ABC):
 
     Attributes:
         config (Any): Configuration settings for the society.
-        env (Environment): The environment in which agents operate.
+        environment (Environment): The environment in which agents operate.
         agents (Dict[str, Any]): A dictionary of agents within the society.
         social_systems (Dict[str, Any]): A dictionary representing various social systems (e.g., communication).
     """
 
-    def __init__(self, config: Any, env: Any, agents: Dict[str, Any]):
+    def __init__(self, config: Any, environment: Any, agents: Dict[str, Any]):
         """
         Initialize the Society with the provided configuration, environment, and agents.
 
@@ -27,7 +27,7 @@ class Society(ABC):
             agents (Dict[str, Any]): A dictionary of agents within the society, keyed by their IDs.
         """
         self.config = config
-        self.env = env
+        self.environment = environment
         self.agents = agents  # Agents are stored in a dictionary with IDs as keys
         self.social_systems = self.init_social_systems()
 

@@ -1,0 +1,7 @@
+fastapi==0.115.2
+uvicorn==0.31.1
+pandas==2.2.3
+numpy==2.1.2
+python-multipart==0.0.12
+docker==7.1.0
+requests==2.32.3

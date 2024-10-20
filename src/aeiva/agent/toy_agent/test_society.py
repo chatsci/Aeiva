@@ -11,7 +11,7 @@ async def main():
     }
 
     # Create the environment
-    env = ToyEnvironment(config)
+    environment = ToyEnvironment(config)
 
     # Create agents
     agents = {
@@ -20,7 +20,7 @@ async def main():
     }
 
     # Instantiate the ToySociety
-    society = ToySociety(config, env, agents)
+    society = ToySociety(config, environment, agents)
 
     # Set up the society
     await society.setup()

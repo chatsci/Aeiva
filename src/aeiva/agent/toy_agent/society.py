@@ -8,17 +8,17 @@ class ToySociety:
     A simple society that manages an environment and a set of agents, with basic social systems.
     """
     
-    def __init__(self, config: Any, env: ToyEnvironment, agents: Dict[str, ToyAgent]):
+    def __init__(self, config: Any, environment: ToyEnvironment, agents: Dict[str, ToyAgent]):
         """
         Initialize the ToySociety with a configuration, environment, and agents.
 
         Args:
             config (Any): Configuration settings for the society.
-            env (ToyEnvironment): The environment in which agents operate.
+            environment (ToyEnvironment): The environment in which agents operate.
             agents (Dict[str, ToyAgent]): A dictionary of agents, keyed by their IDs.
         """
         self.config = config
-        self.env = env
+        self.environment = environment
         self.agents = agents
         self.social_systems = self.init_social_systems()
 
