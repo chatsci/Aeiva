@@ -1,86 +1,81 @@
 # File: cognition/action_system.py
 
-from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Union, List, Optional
+from aeiva.action.plan import Plan
+from aeiva.action.skill import Skill
+from aeiva.action.task import Task
+from aeiva.action.action import Action
+import asyncio
 
 
-class ActionSystem(ABC):
+class ActionSystem:
     """
-    Abstract base class representing the Action System of an agent.
-
-    The Action System is responsible for executing actions within the environment based on
-    directives from other cognitive components.
-
-    Attributes:
-        config (Any): Configuration settings for the Action System.
-        state (Any): The internal state of the Action System, including the current action.
+    A concrete Action System responsible for translating Plans into executable Skills
+    and managing the execution of Skills.
     """
 
     def __init__(self, config: Any):
-        """
-        Initialize the Action System with the provided configuration.
-
-        Args:
-            config (Any): Configuration settings for the Action System.
-        """
         self.config = config
         self.state = self.init_state()
+        self.skill = None
 
-    @abstractmethod
-    def init_state(self) -> Any:
-        """
-        Initialize the internal state of the Action System.
+    def init_state(self) -> dict:
+        return {
+            "current_skill": None,
+            "execution_status": "Not Started",
+        }
 
-        This method should set up the initial state required for the Action System's operations.
-
-        Returns:
-            Any: The initial state of the Action System.
-        """
-        pass
-
-    @abstractmethod
     async def setup(self) -> None:
-        """
-        Asynchronously set up the Action System's components.
+        print("ActionSystem setup complete.")
 
-        This method should initialize any necessary components or resources based on the provided configuration.
+    def plan_to_skill(self, plan: Plan) -> Skill:
+        actions = []
 
-        Raises:
-            ConfigurationError: If the configuration is invalid or incomplete.
-        """
-        pass
+        for task in plan.steps:
+            if isinstance(task, Task):
+                action = Action(
+                    name=task.name,
+                    params=task.params,
+                    id=task.id,
+                    dependent_ids=task.dependent_ids,
+                    type="Action",
+                    description=task.description,
+                    metadata=task.metadata
+                )
+                actions.append(action)
+            elif isinstance(task, Plan):
+                sub_skill = self.plan_to_skill(task)  # Recursively handle sub-plans
+                actions.append(sub_skill)
+            else:
+                raise TypeError(f"Unexpected step type: {type(task)} in plan {plan.id}")
 
-    @abstractmethod
-    async def execute(self, action: Any) -> None:
-        """
-        Asynchronously execute the specified action within the environment.
+        if not actions:
+            raise ValueError(f"The plan {plan.id} does not contain any valid actions or sub-plans.")
 
-        Args:
-            action (Any): The action to be executed.
+        return Skill(
+            name=plan.name,
+            steps=actions,
+            id=plan.id,
+            dependent_ids=plan.dependent_ids,
+            type="Skill",
+            description=plan.description,
+            metadata=plan.metadata
+        )
 
-        Raises:
-            ExecutionError: If executing the action fails.
-        """
-        pass
+    async def execute(self, plan: Plan) -> None:
+        self.state["execution_status"] = "Executing"
+        
+        try:
+            self.skill = self.plan_to_skill(plan)            
+            await self.skill.execute()            
+            self.state["execution_status"] = "Completed" if self.skill.is_successful else "Failed"
+        except Exception as e:
+            self.state["execution_status"] = "Failed"
+            self.handle_error(e)
+            raise  # Ensure to re-throw the exception
 
-    def get_current_action(self) -> Any:
-        """
-        Retrieve the current action being executed by the Action System.
-
-        Returns:
-            Any: The current action.
-        """
-        return self.state.get("current_action", None)
+    def get_current_skill(self) -> Union[Skill, None]:
+        return self.skill
 
     def handle_error(self, error: Exception) -> None:
-        """
-        Handle errors that occur during action operations.
-
-        This method can be overridden to implement custom error handling logic, such as logging
-        or retry mechanisms.
-
-        Args:
-            error (Exception): The exception that was raised.
-        """
-        # Default error handling: log the error
         print(f"ActionSystem encountered an error: {error}")

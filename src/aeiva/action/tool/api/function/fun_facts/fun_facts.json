@@ -1,0 +1,9 @@
+{
+    "tool_name": "Fun Facts",
+    "tool_type": "local",
+    "description": "Fetches fun facts from the RapidAPI Fun Facts API",
+    "parameters": {
+        "type": "object",
+        "properties": {}
+    }
+}
