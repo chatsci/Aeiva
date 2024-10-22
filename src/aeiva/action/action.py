@@ -1,5 +1,6 @@
 from aeiva.action.step import Step
 from aeiva.action.tool.tool import Tool
+from aeiva.action.status import Status
 from typing import List, Dict, Optional, Any
 
 class Action(Step):
@@ -18,6 +19,14 @@ class Action(Step):
                          metadata=metadata)
         self.type = "Action"
         self.tool = Tool(name)
+        self.result = None
+
+    def reset(self) -> None:
+        """
+        Resets the step status, making it ready for re-execution.
+        """
+        self.result = None
+        self.status = Status.NOT_EXECUTED
 
     async def execute(self, params: Dict[str, Any]) -> Any:
         if self.tool is None:
@@ -27,6 +36,7 @@ class Action(Step):
         try:
             result = await self.tool.execute(params)  # Assuming the tool's execute method is async
             self.end(success=True)
+            self.result = result
             return result
         except Exception as e:
             self.end(success=False)
