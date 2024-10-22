@@ -14,8 +14,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Utility function to dynamically import a module
 def load_api_module(api_name: str):
-    api_path = os.path.join(BASE_DIR, "api_tools", api_name, "api.py")
-    spec = importlib.util.spec_from_file_location(f"api_tools.{api_name}.api", api_path)
+    api_path = os.path.join(BASE_DIR, "function", api_name, "api.py")
+    spec = importlib.util.spec_from_file_location(f"function.{api_name}.api", api_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
