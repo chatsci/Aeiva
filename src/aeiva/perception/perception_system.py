@@ -1,118 +1,77 @@
-# File: cognition/perception_system.py
+# perception_system.py
 
-from abc import ABC, abstractmethod
-from typing import Any
+import asyncio
+import logging
+from typing import Any, List
+from aeiva.perception.sensor import Sensor
+from aeiva.perception.stimuli import Stimuli
+from aeiva.perception.sensation import Signal
+from aeiva.perception.terminal_input_sensor import TerminalInputSensor
 
-
-class PerceptionSystem(ABC):
+class PerceptionSystem:
     """
-    Abstract base class representing the Perception System of an agent.
-
-    The Perception System is responsible for capturing raw sensory data from the environment,
-    processing this data into meaningful observations, and providing access to these observations
-    for other components of the cognitive architecture.
-
-    Attributes:
-        config (Any): Configuration settings for the Perception System.
-        state (Any): The internal state of the Perception System, including raw data and observations.
+    Manages multiple sensors and emits stimuli via the EventBus.
     """
-
-    def __init__(self, config: Any):
+    def __init__(self, config: Any, event_bus):
         """
-        Initialize the Perception System with the provided configuration.
+        Initializes the PerceptionSystem with a list of sensors.
 
         Args:
-            config (Any): Configuration settings for the Perception System.
+            config (Any): Configuration dictionary for the sensors.
+            event_bus: The EventBus instance for emitting events.
         """
         self.config = config
-        self.state = self.init_state()
+        self.event_bus = event_bus
+        self.sensors: List[Sensor] = []
+        self.logger = logging.getLogger('PerceptionSystem')
 
-    @abstractmethod
-    def init_state(self) -> Any:
+    def setup(self) -> None:
         """
-        Initialize the internal state of the Perception System.
+        Sets up the perception system by initializing all configured sensors.
+        """
+        for sensor_config in self.config.get("sensors", []):
+            sensor_name = sensor_config.get("sensor_name")
+            sensor_params = sensor_config.get("sensor_params", {})
+            # TODO: revise later
+            if sensor_name == 'percept_terminal_input':
+                sensor = TerminalInputSensor(sensor_name, sensor_params, self.event_bus)
+                self.sensors.append(sensor)
+            else:
+                self.logger.warning(f"Unknown sensor type: {sensor_name}")
+        self.logger.info("PerceptionSystem setup complete.")
 
-        This method should set up the initial state required for the Perception System's operations.
+    async def start(self) -> None:  # TODO: maybe rename in the future
+        """
+        Starts all sensors asynchronously.
+        """
+        self.logger.info("Starting all sensors.")
+        for sensor in self.sensors:
+            await sensor.start()
+
+    async def stop(self) -> None:
+        """
+        Stops all sensors asynchronously.
+        """
+        self.logger.info("Stopping all sensors.")
+        for sensor in self.sensors:
+            await sensor.stop()
+
+    def signal_to_stimuli(self, data: Any) -> Any:
+        """
+        Processes raw data from sensors into structured stimuli.
+
+        Args:
+            data: The raw data emitted by sensors.
 
         Returns:
-            Any: The initial state of the Perception System.
+            Processed data (stimuli).
         """
-        pass
-
-    @abstractmethod
-    async def setup(self) -> None:
-        """
-        Asynchronously set up the Perception System's components.
-
-        This method should initialize any necessary components or resources based on the provided configuration.
-
-        Raises:
-            ConfigurationError: If the configuration is invalid or incomplete.
-        """
-        pass
-
-    @abstractmethod
-    async def capture(self, raw_data: Any) -> None:
-        """
-        Asynchronously capture raw sensory data from the environment.
-
-        Args:
-            raw_data (Any): The raw sensory data to capture.
-
-        Raises:
-            CaptureError: If capturing the raw data fails.
-        """
-        pass
-
-    @abstractmethod
-    async def process(self) -> None:
-        """
-        Asynchronously process the captured raw sensory data into meaningful observations.
-
-        This method should transform raw data stored in the internal state into structured observations
-        that can be utilized by other components of the cognitive architecture.
-
-        Raises:
-            ProcessingError: If processing the raw data fails.
-        """
-        pass
-
-    async def perceive(self, raw_data: Any) -> None:
-        """
-        Asynchronously perform the full perception cycle: capture and process raw sensory data.
-
-        Args:
-            raw_data (Any): The raw sensory data to perceive.
-
-        Raises:
-            CaptureError: If capturing the raw data fails.
-            ProcessingError: If processing the raw data fails.
-        """
-        try:
-            await self.capture(raw_data)
-            await self.process()
-        except Exception as e:
-            self.handle_error(e)
-            raise e
-
-    def get_observations(self) -> Any:
-        """
-        Retrieve the current processed observations from the Perception System.
-
-        Returns:
-            Any: The current observations.
-        """
-        return self.state.get("observations", None)
-
-    def handle_error(self, error: Exception) -> None:
-        """
-        Handle errors that occur during perception operations.
-
-        This method can be overridden to implement custom error handling logic, such as logging
-        or retry mechanisms.
-
-        Args:
-            error (Exception): The exception that was raised.
-        """
-        # Default error handling: log the error
-        print(f"PerceptionSystem encountered an error: {error}")
+        # Implement your data processing logic here
+        signal = Signal(
+            data=data,
+            modularity="text",  # Or appropriate modality
+            type="input",       # Or appropriate type
+            # TODO: After revised Sensor class, Include other metadata as needed
+        )
+        stimuli = Stimuli(signals=[signal])  # TODO: add more fields
+        return stimuli

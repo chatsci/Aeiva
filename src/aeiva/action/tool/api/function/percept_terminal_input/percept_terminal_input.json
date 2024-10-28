@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+        "name": "percept_terminal_input",
+        "description": "Reads a string input from the terminal when the user presses Enter.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt_message": {
+                    "type": "string",
+                    "description": "A message to display as a prompt for the user input.",
+                    "default": "Please enter input: "
+                }
+            }
+        },
+        "required": []
+    }
+}

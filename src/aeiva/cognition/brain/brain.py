@@ -39,7 +39,7 @@ class Brain(ABC):
         pass
 
     @abstractmethod
-    async def setup(self) -> None:
+    def setup(self) -> None:
         """
         Asynchronously set up the Brain's components.
 
@@ -52,7 +52,7 @@ class Brain(ABC):
         pass
 
     @abstractmethod
-    async def think(self, stimuli: Any) -> Any:
+    async def think(self, stimuli: Any, *args, **kwargs) -> Any:
         """
         Asynchronously process input stimuli to update the cognitive state.
 

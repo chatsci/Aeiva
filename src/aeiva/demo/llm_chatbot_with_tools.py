@@ -43,7 +43,7 @@ def load_tool_schema(api_name):
     project_root = os.path.abspath(os.path.join(current_path, "../../.."))
     path = os.path.join(
         project_root,
-        f"src/aeiva/action/tools/api/function/{api_name}/{api_name}.json",
+        f"src/aeiva/action/tool/api/function/{api_name}/{api_name}.json",
     )
     with open(path, "r") as file:
         return json.load(file)

@@ -39,7 +39,7 @@ class WorldModel(ABC):
         pass
 
     @abstractmethod
-    async def setup(self) -> None:
+    def setup(self) -> None:
         """
         Asynchronously set up the World Model system's components.
 

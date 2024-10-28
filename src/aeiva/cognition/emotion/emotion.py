@@ -40,7 +40,7 @@ class Emotion(ABC):
         pass
 
     @abstractmethod
-    async def setup(self) -> None:
+    def setup(self) -> None:
         """
         Asynchronously set up the Emotion system's components.
 

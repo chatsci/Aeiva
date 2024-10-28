@@ -18,6 +18,7 @@ from aeiva.cognition.brain.llm.llm_gateway_exceptions import (
 from aeiva.cognition.brain.llm.fault_tolerance import retry_async, retry_sync
 from aeiva.logger.logger import get_logger
 from aeiva.cognition.brain.llm.llm_usage_metrics import LLMUsageMetrics
+from aeiva.action.tool.tool import Tool
 
 # Enable verbose logging in litellm for debug
 #litellm.set_verbose = True
@@ -54,7 +55,7 @@ class LLMClient:
             response_message = response.choices[0].message
 
             # Append the assistant's reply to messages
-            messages.append(response_message)  # Append the message object directly
+            messages.append({"role": "assistant", "content": response_message.content})
 
             tool_calls = response_message.tool_calls
 
@@ -66,17 +67,17 @@ class LLMClient:
                     tool_call_id = tool_call.id
                     self.logger.info(f"Tool call id: {tool_call_id}")
                     # Call the function via FastAPI
-                    function_response = self.call_api(
+                    function_response = self.call_tool(  #!!! TODO: fix this. call-tool is async method!!!
                         api_name=function_name, function_name=function_name, params=function_args
                     )
-                    print("the result of self.call_api is: ", function_response)
+                    #print("the result of self.call_tool is: ", function_response)
                     # Append the function response to messages
                     messages.append(
                         {
                             "tool_call_id": tool_call_id,
                             "role": "tool",
                             "name": function_name,
-                            "content": function_response,
+                            "content": str(function_response),  #!!! NOTE: currently it must be string for openai
                         }
                     )
                 # Now send the updated messages to the LLM to get the final response
@@ -107,19 +108,18 @@ class LLMClient:
             self._update_metrics(response)
             response_message = response.choices[0].message
 
-            # Append the assistant's reply to messages
-            messages.append(response_message)  # Append the message object directly
-
             tool_calls = response_message.tool_calls
 
             if tool_calls:
                 # Handle tool calls
+                messages.append({"role": "assistant", "tool_calls": tool_calls})
+
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args = json.loads(tool_call.function.arguments)
                     tool_call_id = tool_call.id
                     # Call the function via FastAPI
-                    function_response = self.call_api(
+                    function_response = await self.call_tool(
                         api_name=function_name, function_name=function_name, params=function_args
                     )
                     # Append the function response to messages
@@ -128,7 +128,7 @@ class LLMClient:
                             "tool_call_id": tool_call_id,
                             "role": "tool",
                             "name": function_name,
-                            "content": function_response,
+                            "content": str(function_response),  #!!! NOTE: currently it must be string for openai
                         }
                     )
                 # Now send the updated messages to the LLM to get the final response
@@ -139,6 +139,8 @@ class LLMClient:
                 messages.append(final_response_message)
                 return final_response_message.content
             else:
+                # Append the assistant's reply to messages
+                messages.append({"role": "assistant", "content": response_message.content})  # Append the message object directly
                 return response_message.content
         except Exception as e:
             self.logger.error(f"LLM Asynchronous Generation Error: {e}")
@@ -196,7 +198,6 @@ class LLMClient:
                         # Handle error if function not found
                         yield f"Function {function_name} does not exist."
                         return
-
                     # Call the function with arguments
                     try:
                         function_args = json.loads(tool_call["function"]["arguments"])
@@ -204,7 +205,7 @@ class LLMClient:
                         self.logger.error(f"Error decoding function arguments: {e}")
                         function_args = {}
 
-                    function_response = self.call_api(
+                    function_response = await self.call_tool(
                         api_name=function_name, function_name=function_name, params=function_args
                     )
 
@@ -213,11 +214,10 @@ class LLMClient:
                         {
                             "role": "tool",
                             "name": function_name,
-                            "content": function_response,
+                            "content": str(function_response),  #!!! NOTE: currently it must be string for openai
                             "tool_call_id": tool_call['id']
                         }
                     )
-
                 # Now send the updated messages to the LLM to get the final response
                 params = self._build_params(messages=messages, tools=tools, stream=True, **kwargs)
                 final_response_stream = await llm_acompletion(**params)
@@ -234,10 +234,10 @@ class LLMClient:
             self.logger.error(f"Streaming LLM Gateway Error: {e}")
             yield "An error occurred during streaming."
 
-    def call_api(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any:
+    def call_tool_via_server(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any:
         """Calls the API via FastAPI server."""
         url = f"http://localhost:8000/api/{api_name}/{function_name}"
-        self.logger.info(f"Calling URL: {url} with params: {params}")
+        self.logger.info(f"Calling {api_name} with params: {params}")
         response = requests.get(url, params=params)
         if response.status_code == 200:
             json_response = response.json()
@@ -247,6 +247,11 @@ class LLMClient:
                 return f"Error from API: {json_response.get('error', 'Unknown error')}"
         else:
             return f"HTTP Error {response.status_code}: {response.text}"
+
+    async def call_tool(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any:
+        """Calls the API via action module."""
+        tool = Tool(api_name)
+        return await tool.execute(params)
 
     def _build_params(
         self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs
@@ -270,7 +275,7 @@ class LLMClient:
 
         return params
 
-    def _update_metrics(self, response: Any, log: bool = True):
+    def _update_metrics(self, response: Any, log: bool = False):  # Note: log is False by default. Adjust according to the need.
         usage = getattr(response, "usage", {})
         self.metrics.add_tokens(
             prompt_tokens=getattr(usage, "prompt_tokens", 0),

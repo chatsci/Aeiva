@@ -7,6 +7,21 @@ from aeiva.action.task import Task
 from aeiva.action.action import Action
 import asyncio
 
+import os
+import json
+
+# Load tool schema from JSON files
+# TODO: move this function to elsewhere
+def load_tool_schema(api_name):
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    # Adjust the project root as necessary
+    project_root = os.path.abspath(os.path.join(current_path, "../../.."))
+    path = os.path.join(
+        project_root,
+        f"src/aeiva/action/tool/api/function/{api_name}/{api_name}.json",
+    )
+    with open(path, "r") as file:
+        return json.load(file)
 
 class ActionSystem:
     """
@@ -16,16 +31,17 @@ class ActionSystem:
 
     def __init__(self, config: Any):
         self.config = config
-        self.state = self.init_state()
-        self.skill = None
-
-    def init_state(self) -> dict:
-        return {
+        self.state = {
             "current_skill": None,
             "execution_status": "Not Started",
         }
+        self.tools = []
+        self.skill = None
 
-    async def setup(self) -> None:
+    def setup(self) -> None:
+        if "tools" in self.config.keys():
+            for tool_name in self.config["tools"]:
+                self.tools.append(load_tool_schema(tool_name))
         print("ActionSystem setup complete.")
 
     def plan_to_skill(self, plan: Plan) -> Skill:
@@ -73,9 +89,6 @@ class ActionSystem:
             self.state["execution_status"] = "Failed"
             self.handle_error(e)
             raise  # Ensure to re-throw the exception
-
-    def get_current_skill(self) -> Union[Skill, None]:
-        return self.skill
 
     def handle_error(self, error: Exception) -> None:
         print(f"ActionSystem encountered an error: {error}")

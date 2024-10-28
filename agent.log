@@ -1,0 +1,7 @@
+2024-10-27 17:23:29,096 INFO:agent:PerceptionSystem setup complete.
+2024-10-27 17:23:29,096 INFO:agent:CognitionSystem setup complete.
+2024-10-27 17:23:29,096 INFO:agent:ActionSystem setup complete.
+2024-10-27 17:23:29,096 INFO:event_bus:Event bus started.
+2024-10-27 17:23:29,096 INFO:event_bus:Subscribed 'handle_stimuli' to pattern 'perception.stimuli' with priority 0.
+2024-10-27 17:23:29,096 INFO:event_bus:Subscribed 'handle_plan' to pattern 'action.plan' with priority 0.
+2024-10-27 17:23:30,728 ERROR:agent:Error in TerminalInputSensor: 'EventBus' object has no attribute 'emit_nowait'

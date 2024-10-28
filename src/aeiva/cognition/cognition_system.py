@@ -1,93 +1,101 @@
 # File: cognition/cognition_system.py
 
-from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any, Optional, List, Dict, Union
+from aeiva.cognition.input_interpreter.input_interpreter import InputInterpreter
+from aeiva.cognition.output_orchestrator.output_orchestrator import OutputOrchestrator
+from aeiva.cognition.brain.brain import Brain
+from aeiva.cognition.memory.memory import Memory
+from aeiva.cognition.emotion.emotion import Emotion
+from aeiva.cognition.world_model.world_model import WorldModel
+from aeiva.perception.stimuli import Stimuli
+from aeiva.cognition.observation import Observation
+from aeiva.cognition.thought import Thought
+from aeiva.action.plan import Plan
 
-
-class CognitionSystem(ABC):
+class CognitionSystem:
     """
-    Abstract base class for cognition systems.
-
-    The CognitionSystem is responsible for processing observations to update the cognitive state
-    and deciding on actions based on the current cognitive state. It comprises several components:
-    brain, world_model, memory, and emotion.
-
-    Attributes:
-        config (Any): Configuration settings for the cognition system.
-        state (Any): The internal state of the cognition system.
-        brain (Any): The cognitive processing unit.
-        world_model (Any): The internal model of the environment/world.
-        memory (Any): The memory system for storing and retrieving information.
-        emotion (Any): The emotion system for managing emotional states.
+    Processes Stimuli into Observations, uses the Brain to generate Thoughts, and orchestrates output into Plans.
     """
-
-    def __init__(self, config: Any):
-        """
-        Initialize the CognitionSystem with the provided configuration.
-
-        Args:
-            config (Any): Configuration settings for the cognition system.
-        """
+    def __init__(self,
+                 input_interpreter: InputInterpreter,
+                 brain: Brain,
+                 output_orchestrator: OutputOrchestrator,
+                 memory: Memory,
+                 emotion: Emotion,
+                 world_model: WorldModel,
+                 config: Optional[Any] = None):
         self.config = config
+        self.input_interpreter = input_interpreter
+        self.brain = brain
+        self.output_orchestrator = output_orchestrator
+        self.memory = memory
+        self.emotion = emotion
+        self.world_model = world_model
         self.state = self.init_state()
-        self.brain = None
-        self.world_model = None
-        self.memory = None
-        self.emotion = None
 
-    @abstractmethod
-    def init_state(self) -> Any:
+    def init_state(self) -> Dict[str, Any]:
+        return {
+            "cognitive_state": None,
+            "last_input": None,
+            "last_output": None
+        }
+
+    def setup(self) -> None:
         """
-        Initialize the internal state of the cognition system.
-
-        This method should set up the initial state required for the cognition system's operations.
-
-        Returns:
-            Any: The initial state of the cognition system.
+        Set up the cognition system's components.
         """
-        pass
+        self.input_interpreter.setup()
+        self.brain.setup()
+        self.memory.setup()
+        self.emotion.setup()
+        self.world_model.setup()
+        self.output_orchestrator.setup()
 
-    @abstractmethod
-    async def setup(self) -> None:
+    async def think(self, stimuli: Stimuli, stream: bool=False, tools: List[Dict[str, Any]] = None) -> Union[Thought, Plan]:
         """
-        Asynchronously set up the cognition system's components.
-
-        This method should initialize the brain, world_model, memory, and emotion components
-        based on the provided configuration.
-
-        Raises:
-            ConfigurationError: If the configuration is invalid or incomplete.
+        Processes stimuli and produces a thought or plan.
         """
-        pass
+        self.state["last_input"] = stimuli
 
-    @abstractmethod
-    async def process_observation(self, observation: Any) -> Any:
-        """
-        Asynchronously process an observation to update the cognitive state.
+        # Step 1: Use InputInterpreter to process stimuli into observation
+        if self.input_interpreter.gate(stimuli):
+            observation = await self.input_interpreter.interpret(stimuli)
+        else:
+            # Directly pass stimuli as observation (assuming it's acceptable)
+            observation = Observation(data=stimuli.to_dict())
 
-        Args:
-            observation (Any): The current observation to process.
+        # Step 2: Brain processes the observation into a thought
+        
+        brain_input = [{"role": "user", "content": observation.data}]
+        # print("############# observation is: ", brain_input)
+        thought_content = await self.brain.think(brain_input, stream, tools=tools)
+        thought = Thought(content=thought_content)
 
-        Returns:
-            Any: The updated cognitive state.
+        self.state["cognitive_state"] = thought
 
-        Raises:
-            ProcessingError: If processing the observation fails.
-        """
-        pass
+        # # Step 3: Update Memory, Emotion, and WorldModel
+        # await self.memory.store({
+        #     'observation': observation.to_dict(),
+        #     'thought': thought.to_dict()
+        # })
+        # await self.emotion.update({
+        #     'observation': observation.to_dict(),
+        #     'thought': thought.to_dict()
+        # })
+        # await self.world_model.update({
+        #     'observation': observation.to_dict(),
+        #     'thought': thought.to_dict()
+        # })
 
-    @abstractmethod
-    async def decide_actions(self, cognitive_state: Any) -> Any:
-        """
-        Asynchronously decide on a list of actions based on the current cognitive state.
+        # Step 4: Use OutputOrchestrator to produce a plan or direct response
+        if self.output_orchestrator.gate(thought):
+            plan = await self.output_orchestrator.orchestrate(thought)
+            self.state["last_output"] = plan
+            return plan
+        else:
+            # Directly return the thought (e.g., as a response to the user)
+            self.state["last_output"] = thought
+            return thought
 
-        Args:
-            cognitive_state (Any): The current cognitive state.
-
-        Returns:
-            Any: E.g., a list of actions to perform.
-
-        Raises:
-            DecisionError: If action decision fails.
-        """
-        pass
+    def handle_error(self, error: Exception) -> None:
+        print(f"CognitionSystem encountered an error: {error}")
