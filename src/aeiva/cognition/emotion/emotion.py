@@ -1,33 +1,52 @@
 # File: cognition/emotion.py
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Dict, TypeVar, Generic
+import logging
 
+# # Configure logging
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
 
-class Emotion(ABC):
+# Define custom exceptions
+class ConfigurationError(Exception):
+    """Exception raised for errors in the configuration."""
+    pass
+
+class UpdateError(Exception):
+    """Exception raised for errors during emotion state updates."""
+    pass
+
+class RegulationError(Exception):
+    """Exception raised for errors during emotion regulation."""
+    pass
+
+T = TypeVar('T')  # Type variable for the state
+
+class Emotion(ABC, Generic[T]):
     """
-    Abstract base class representing the Emotion system of an agent.
+    Abstract base class representing the Emotion system of an agent with generic state type.
 
     The Emotion system manages the agent's emotional states, allowing it to respond
     to various stimuli in an emotionally coherent manner.
 
     Attributes:
-        config (Any): Configuration settings for the Emotion system.
-        state (Any): The internal emotional state of the agent.
+        config (Dict[str, Any]): Configuration settings for the Emotion system.
+        state (T): The internal emotional state of the agent, defined by subclasses.
     """
 
-    def __init__(self, config: Any):
+    def __init__(self, config: Dict[str, Any]):
         """
         Initialize the Emotion system with the provided configuration.
 
         Args:
-            config (Any): Configuration settings for the Emotion system.
+            config (Dict[str, Any]): Configuration settings for the Emotion system.
         """
         self.config = config
         self.state = self.init_state()
 
     @abstractmethod
-    def init_state(self) -> Any:
+    def init_state(self) -> T:
         """
         Initialize the internal emotional state of the Emotion system.
 
@@ -35,12 +54,12 @@ class Emotion(ABC):
         Emotion system's operations.
 
         Returns:
-            Any: The initial emotional state of the agent.
+            T: The initial emotional state of the agent.
         """
         pass
 
     @abstractmethod
-    def setup(self) -> None:
+    async def setup(self) -> None:
         """
         Asynchronously set up the Emotion system's components.
 
@@ -53,24 +72,67 @@ class Emotion(ABC):
         pass
 
     @abstractmethod
-    async def update(self, input_data: Any) -> None:
+    async def update(self, input_data: Dict[str, Any]) -> None:
         """
         Asynchronously update the emotional state based on input data.
 
         Args:
-            input_data (Any): The data or stimuli that influence the emotional state.
+            input_data (Dict[str, Any]): The data or stimuli that influence the emotional state.
 
         Raises:
             UpdateError: If updating the emotional state fails.
         """
         pass
 
-    def get_current_state(self) -> Any:
+    @abstractmethod
+    def regulate(self, strategy: str) -> None:
+        """
+        Regulate the emotional state using a specified strategy.
+
+        Args:
+            strategy (str): The regulation strategy to apply (e.g., 'suppression', 'amplification').
+
+        Raises:
+            RegulationError: If the regulation strategy is invalid or fails.
+        """
+        pass
+
+    @abstractmethod
+    def express(self) -> str:
+        """
+        Generate a representation of the current emotional state.
+
+        Returns:
+            str: A string describing the current emotion (e.g., "I feel happy!").
+        """
+        pass
+
+    @abstractmethod
+    def serialize(self) -> str:
+        """
+        Serialize the current emotional state into a string format.
+
+        Returns:
+            str: Serialized emotional state.
+        """
+        pass
+
+    @abstractmethod
+    def deserialize(self, data: str) -> None:
+        """
+        Deserialize the emotional state from a string format.
+
+        Args:
+            data (str): Serialized emotional state.
+        """
+        pass
+
+    def get_current_state(self) -> T:
         """
         Retrieve the current emotional state of the agent.
 
         Returns:
-            Any: The current emotional state.
+            T: The current emotional state.
         """
         return self.state
 
@@ -83,5 +145,5 @@ class Emotion(ABC):
         Args:
             error (Exception): The exception that was raised.
         """
-        # Default error handling: log the error
-        print(f"Emotion system encountered an error: {error}")
+        pass
+        # logger.error(f"Emotion system encountered an error: {error}", exc_info=True)

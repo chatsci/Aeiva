@@ -79,7 +79,6 @@ class LLMBrain(Brain):
                 # messages = self.state["conversation"].copy()
                 response = await self.llm_client.agenerate(self.state["conversation"], tools=tools) #!! NOTE: llm client will update conversation
                 # self.state["conversation"] += [{"role": "assistant", "content": response}]
-                print("\n\nhistory: ============ ", self.state["conversation"])
                 self.state["cognitive_state"] = response
                 return response
 

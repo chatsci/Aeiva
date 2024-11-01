@@ -4,10 +4,10 @@ from aeiva.cognition.emotion.emotion import Emotion
 from typing import Any, Dict, Optional
 
 
-class SimpleEmotion(Emotion):
+class SimpleEmotion:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        super().__init__(config)
+        # super().__init__(config)
         self.state = self.init_state()
 
     def init_state(self) -> str:
