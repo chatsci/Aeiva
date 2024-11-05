@@ -19,6 +19,8 @@ datasets/*/*
 !datasets/*/*.md
 pretrained_models/*
 virtual_worlds/*
+outputs/
+storage/
 
 configs/llm_api_keys.yaml
 

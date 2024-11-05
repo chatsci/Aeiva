@@ -11,7 +11,7 @@ def main():
     # Example configuration for Milvus
     milvus_config = {
         # 'uri': 'tcp://localhost:19530',  # Milvus server URI
-        'uri': './milvus_demo.db',
+        'uri': 'storage/milvus_demo.db',
         'collection_name': 'my_collection',
         'embedding_model_dims': 128,  # Adjust the dimension according to your embeddings
         'metric_type': 'COSINE',  # 'L2', 'IP', or 'COSINE'

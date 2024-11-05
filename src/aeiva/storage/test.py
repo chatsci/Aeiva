@@ -18,7 +18,7 @@ def test_milvus():
     milvus_config = DatabaseConfigFactory.create(
         'milvus',
         # uri='tcp://localhost:19530',
-        uri='./milvus_demo.db',
+        uri='storage/milvus_demo.db',
         collection_name='test_collection',
         embedding_model_dims=128,
         metric_type='COSINE',
@@ -131,7 +131,7 @@ def test_sqlite():
     # Create configuration for SQLite
     sqlite_config = DatabaseConfigFactory.create(
         'sqlite',
-        database='test_database.db'  # Use a file-based database for persistence
+        database='storage/test_database.db'  # Use a file-based database for persistence
     )
 
     # Create SQLite database instance
