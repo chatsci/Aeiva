@@ -10,14 +10,14 @@ from litellm import (
     supports_function_calling,
 )
 
-from aeiva.cognition.brain.llm.llm_gateway_config import LLMGatewayConfig
-from aeiva.cognition.brain.llm.llm_gateway_exceptions import (
+from aeiva.llm.llm_gateway_config import LLMGatewayConfig
+from aeiva.llm.llm_gateway_exceptions import (
     LLMGatewayError,
     llm_gateway_exception,
 )
-from aeiva.cognition.brain.llm.fault_tolerance import retry_async, retry_sync
+from aeiva.llm.fault_tolerance import retry_async, retry_sync
 from aeiva.logger.logger import get_logger
-from aeiva.cognition.brain.llm.llm_usage_metrics import LLMUsageMetrics
+from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
 from aeiva.action.tool.tool import Tool
 
 # Enable verbose logging in litellm for debug

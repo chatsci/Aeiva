@@ -2,7 +2,7 @@ import asyncio
 from dotenv import load_dotenv
 import os
 from aeiva.cognition.brain.llm_brain import LLMBrain
-from aeiva.cognition.brain.llm.llm_gateway_config import LLMGatewayConfig
+from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
 # Load environment variables from .env
 load_dotenv()

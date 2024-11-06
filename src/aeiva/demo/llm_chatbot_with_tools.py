@@ -12,8 +12,8 @@ import json
 import asyncio
 from dotenv import load_dotenv
 
-from aeiva.cognition.brain.llm.llm_client import LLMClient
-from aeiva.cognition.brain.llm.llm_gateway_config import LLMGatewayConfig
+from aeiva.llm.llm_client import LLMClient
+from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.logger.logger import get_logger
 
 

@@ -2,8 +2,8 @@
 
 from typing import Any, List, Dict
 from aeiva.cognition.brain.brain import Brain
-from aeiva.cognition.brain.llm.llm_client import LLMClient
-from aeiva.cognition.brain.llm.llm_gateway_config import LLMGatewayConfig
+from aeiva.llm.llm_client import LLMClient
+from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 import sys
 
 class LLMBrain(Brain):
