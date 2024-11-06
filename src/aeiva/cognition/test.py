@@ -7,7 +7,7 @@ if __name__ == "__main__":
     from aeiva.cognition.memory.simple_memory import SimpleMemory
     from aeiva.cognition.emotion.simple_emotion import SimpleEmotion
     from aeiva.cognition.world_model.simple_world_model import SimpleWorldModel
-    from aeiva.cognition.brain.llm.llm_gateway_config import LLMGatewayConfig
+    from aeiva.llm.llm_gateway_config import LLMGatewayConfig
     from dotenv import load_dotenv
     import os
 

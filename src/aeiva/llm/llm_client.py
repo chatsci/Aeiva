@@ -20,8 +20,9 @@ from aeiva.logger.logger import get_logger
 from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
 from aeiva.action.tool.tool import Tool
 
-# Enable verbose logging in litellm for debug
-#litellm.set_verbose = True
+# # Enable verbose logging in litellm for debug
+# import litellm
+# litellm.set_verbose = True
 
 class LLMClient:
     """
@@ -50,24 +51,29 @@ class LLMClient:
         try:
             # Build parameters
             params = self._build_params(messages=messages, tools=tools, **kwargs)
+            # print("params are ========", params)
             response = llm_completion(**params)
             self._update_metrics(response)
             response_message = response.choices[0].message
+            # print("response_message are======", response_message)
 
             # Append the assistant's reply to messages
-            messages.append({"role": "assistant", "content": response_message.content})
+            #messages.append({"role": "assistant", "content": response_message.content})
 
             tool_calls = response_message.tool_calls
 
             if tool_calls:
                 # Handle tool calls
+                # Handle tool calls
+                messages.append({"role": "assistant", "tool_calls": tool_calls})
+
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args = json.loads(tool_call.function.arguments)
                     tool_call_id = tool_call.id
                     self.logger.info(f"Tool call id: {tool_call_id}")
                     # Call the function via FastAPI
-                    function_response = self.call_tool(  #!!! TODO: fix this. call-tool is async method!!!
+                    function_response = self.call_tool_sync(  #!!! TODO: fix this. maybe we revise the name of functions using aexecute and execute.
                         api_name=function_name, function_name=function_name, params=function_args
                     )
                     #print("the result of self.call_tool is: ", function_response)
@@ -88,6 +94,8 @@ class LLMClient:
                 messages.append(final_response_message)
                 return final_response_message.content
             else:
+                # Append the assistant's reply to messages
+                messages.append({"role": "assistant", "content": response_message.content})  # Append the message object directly
                 return response_message.content
         except Exception as e:
             self.logger.error(f"LLM Gateway Error: {e}")
@@ -252,6 +260,11 @@ class LLMClient:
         """Calls the API via action module."""
         tool = Tool(api_name)
         return await tool.execute(params)
+    
+    def call_tool_sync(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any:
+        """Calls the API via action module."""
+        tool = Tool(api_name)
+        return tool.execute_sync(params)
 
     def _build_params(
         self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs

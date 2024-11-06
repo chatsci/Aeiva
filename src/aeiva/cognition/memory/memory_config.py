@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, Any
 from aeiva.config.base_config import BaseConfig
-from aeiva.configs.embedder_config import EmbedderConfig
+from aeiva.embedding.embedder_config import EmbedderConfig
 from aeiva.configs.llm_config import LLMConfig
 from aeiva.storage.database_config import DatabaseConfig
 

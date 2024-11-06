@@ -5,9 +5,9 @@ import sys
 import asyncio
 from dotenv import load_dotenv
 
-from aeiva.cognition.brain.llm.llm_client import LLMClient
-from aeiva.cognition.brain.llm.llm_gateway_config import LLMGatewayConfig  # Import LLMGatewayConfig
-from aeiva.cognition.brain.llm.llm_gateway_exceptions import LLMGatewayError
+from aeiva.llm.llm_client import LLMClient
+from aeiva.llm.llm_gateway_config import LLMGatewayConfig  # Import LLMGatewayConfig
+from aeiva.llm.llm_gateway_exceptions import LLMGatewayError
 
 
 def initialize_llm_client(llm_use_async: bool, llm_stream: bool) -> LLMClient:

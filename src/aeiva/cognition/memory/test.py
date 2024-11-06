@@ -14,12 +14,15 @@ logger = logging.getLogger(__name__)
 
 def main():
     # Create configurations for the components
+
+    # Embedder Configuration
     embedder_config = EmbedderConfig(
         provider_name='openai',
-        api_key='your_openai_api_key',  # Replace with actual API key
         model_name='text-embedding-ada-002',
+        api_key='your_openai_api_key',  # Replace with your actual OpenAI API key
     )
 
+    # Vector Database Configuration (Milvus)
     vector_db_config = DatabaseConfig(
         provider_name='milvus',
         host='localhost',
@@ -28,25 +31,29 @@ def main():
         embedding_model_dims=1536,
     )
 
+    # Graph Database Configuration (Neo4j)
     graph_db_config = DatabaseConfig(
         provider_name='neo4j',
-        uri='storage/memory_graph.db',
+        uri='bolt://localhost:7687',
         user='neo4j',
-        password='your_neo4j_password',  # Replace with actual password
+        password='your_neo4j_password',  # Replace with your actual Neo4j password
         database='neo4j',
     )
 
+    # Relational Database Configuration (SQLite)
     relational_db_config = DatabaseConfig(
         provider_name='sqlite',
-        database='storage/memory_events.db'  # Path to the SQLite database file
+        database='memory_events.db'  # Path to the SQLite database file
     )
 
+    # LLM Configuration
     llm_config = LLMConfig(
         provider_name='openai',
-        api_key='your_openai_api_key',  # Replace with actual API key
         model_name='gpt-3.5-turbo',
+        api_key='your_openai_api_key',  # Replace with your actual OpenAI API key
     )
 
+    # Memory Configuration
     memory_config = MemoryConfig(
         embedder_config=embedder_config,
         vector_db_config=vector_db_config,

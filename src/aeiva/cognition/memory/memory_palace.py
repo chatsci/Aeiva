@@ -4,12 +4,15 @@ import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from uuid import uuid4
+from dataclasses import asdict  # Import asdict to convert dataclasses to dicts
 
 from aeiva.cognition.memory.memory_unit import MemoryUnit
 from aeiva.cognition.memory.memory_link import MemoryLink
 from aeiva.cognition.memory.memory import Memory
 from aeiva.cognition.memory.memory_config import MemoryConfig
-from aeiva.utils.factory import EmbedderFactory, LLMFactory, DatabaseFactory
+from aeiva.embedding.embedder_config import EmbedderConfig
+from aeiva.embedding.embedder import Embedder
+from aeiva.storage.database_factory import DatabaseConfigFactory, DatabaseFactory
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +41,12 @@ class MemoryPalace(Memory):
         """
         try:
             # Initialize the embedding model
-            self.embedder = EmbedderFactory.create(
+            embedder_config = EmbedderConfig(
                 provider_name=self.config.embedder_config.provider_name,
-                config=self.config.embedder_config
+                model_name=self.config.embedder_config.model_name,
+                api_key=self.config.embedder_config.api_key  # Replace with your actual API key
             )
+            self.embedder = Embedder(embedder_config)
 
             # Initialize the language model (LLM)
             self.llm = LLMFactory.create(
@@ -49,26 +54,32 @@ class MemoryPalace(Memory):
                 config=self.config.llm_config
             )
 
+            # Convert vector_db_config to dict
+            vector_db_config_dict = asdict(self.config.vector_db_config)
             # Initialize the vector database
             self.vector_db = DatabaseFactory.create(
                 provider_name=self.config.vector_db_config.provider_name,
-                config=self.config.vector_db_config
+                **vector_db_config_dict
             )
 
             # Initialize the graph database if provided
             if self.config.graph_db_config:
+                # Convert graph_db_config to dict
+                graph_db_config_dict = asdict(self.config.graph_db_config)
                 self.graph_db = DatabaseFactory.create(
                     provider_name=self.config.graph_db_config.provider_name,
-                    config=self.config.graph_db_config
+                    **graph_db_config_dict
                 )
             else:
                 self.graph_db = None
 
             # Initialize the relational database if provided
             if self.config.relational_db_config:
+                # Convert relational_db_config to dict
+                relational_db_config_dict = asdict(self.config.relational_db_config)
                 self.relational_db = DatabaseFactory.create(
                     provider_name=self.config.relational_db_config.provider_name,
-                    config=self.config.relational_db_config
+                    **relational_db_config_dict
                 )
             else:
                 self.relational_db = None

@@ -17,7 +17,8 @@ class Tool:
         self.api_name = api_name
         self.schema = self.load_tool_schema(api_name)
 
-    def load_tool_schema(self, api_name: str) -> dict:
+    @classmethod
+    def load_tool_schema(cls, api_name: str) -> dict:
         """
         Load the tool's schema from the JSON file.
         Args:
@@ -50,4 +51,34 @@ class Tool:
         if asyncio.iscoroutinefunction(function):
             return await function(**params)
         else:
+            return function(**params)
+
+    def execute_sync(self, params: dict) -> Any:
+        """
+        Execute the tool synchronously by calling the corresponding function.
+
+        Args:
+            params (dict): Parameters to pass to the tool.
+
+        Returns:
+            Any: The result of the tool execution.
+        """
+        function_module = f"aeiva.action.tool.api.function.{self.api_name}.api"
+        func_module = __import__(function_module, fromlist=[self.api_name])
+
+        function: Callable = getattr(func_module, self.api_name)
+        if asyncio.iscoroutinefunction(function):
+            # If the function is async, run it in an event loop
+            try:
+                loop = asyncio.get_event_loop()
+                return loop.run_until_complete(function(**params))
+            except RuntimeError:
+                # If no event loop is running, create one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(function(**params))
+                loop.close()
+                return result
+        else:
+            # If the function is synchronous, call it directly
             return function(**params)
