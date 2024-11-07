@@ -5,6 +5,7 @@ import json
 from aeiva.action.tool.tool import Tool
 
 def main():
+    # test @simple decorator
     @simple(model='gpt-4', temperature=0.7)
     def greet(name: str):
         """You are a helpful assistant."""
@@ -14,7 +15,7 @@ def main():
     print("\n=== Simple Decorator Response ===")
     print(response)
 
-
+    # test @complex decorator
     tools=["test_operation"]
     tools=[Tool.load_tool_schema(tool) for tool in tools]  # get the list of json dicts for all function tools.
 

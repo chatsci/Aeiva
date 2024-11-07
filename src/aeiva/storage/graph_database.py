@@ -2,13 +2,33 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 
+class NodeNotFoundError(Exception):
+    """Exception raised when a node is not found in the graph database."""
+    pass
+
+
+class RelationshipNotFoundError(Exception):
+    """Exception raised when a relationship is not found in the graph database."""
+    pass
+
+
+class StorageError(Exception):
+    """Exception raised when there is a storage-related error in the graph database."""
+    pass
+
+
 class GraphDatabase(ABC):
     """
     Abstract base class for graph database operations.
     """
 
     @abstractmethod
-    def add_node(self, node_id: str, properties: Optional[Dict[str, Any]] = None, labels: Optional[List[str]] = None) -> None:
+    def add_node(
+        self, 
+        node_id: str, 
+        properties: Optional[Dict[str, Any]] = None, 
+        labels: Optional[List[str]] = None
+    ) -> None:
         """
         Adds a node to the graph.
 
@@ -23,7 +43,13 @@ class GraphDatabase(ABC):
         pass
 
     @abstractmethod
-    def add_edge(self, source_id: str, target_id: str, relationship: str, properties: Optional[Dict[str, Any]] = None) -> None:
+    def add_edge(
+        self, 
+        source_id: str, 
+        target_id: str, 
+        relationship: str, 
+        properties: Optional[Dict[str, Any]] = None
+    ) -> None:
         """
         Adds an edge (relationship) between two nodes.
 
@@ -86,7 +112,113 @@ class GraphDatabase(ABC):
         pass
 
     @abstractmethod
-    def get_neighbors(self, node_id: str, relationship: Optional[str] = None, direction: str = "both") -> List[Dict[str, Any]]:
+    def delete_all(self) -> None:
+        """
+        Deletes all nodes and their associated relationships from the graph.
+
+        Raises:
+            StorageError: If there is an issue deleting all nodes and relationships.
+        """
+        pass
+
+    @abstractmethod
+    def delete_all_edges(self) -> None:
+        """
+        Deletes all edges from the graph without deleting the nodes.
+
+        Raises:
+            StorageError: If there is an issue deleting all relationships.
+        """
+        pass
+
+    @abstractmethod
+    def delete_relationships_by_type(self, relationship: str) -> None:
+        """
+        Deletes all relationships of a specific type from the graph.
+
+        Args:
+            relationship (str): The type of relationships to delete.
+
+        Raises:
+            StorageError: If there is an issue deleting the relationships.
+        """
+        pass
+
+    @abstractmethod
+    def delete_edge(
+        self, 
+        source_id: str, 
+        target_id: str, 
+        relationship: str
+    ) -> None:
+        """
+        Deletes a specific relationship between two nodes.
+
+        Args:
+            source_id (str): Unique identifier of the source node.
+            target_id (str): Unique identifier of the target node.
+            relationship (str): Type of the relationship to delete.
+
+        Raises:
+            RelationshipNotFoundError: If the relationship does not exist.
+            StorageError: If there is an issue deleting the relationship.
+        """
+        pass
+
+    @abstractmethod
+    def update_edge(
+        self, 
+        source_id: str, 
+        target_id: str, 
+        relationship: str, 
+        properties: Dict[str, Any]
+    ) -> None:
+        """
+        Updates properties of a specific relationship between two nodes.
+
+        Args:
+            source_id (str): Unique identifier of the source node.
+            target_id (str): Unique identifier of the target node.
+            relationship (str): Type of the relationship to update.
+            properties (Dict[str, Any]): Properties to update on the relationship.
+
+        Raises:
+            RelationshipNotFoundError: If the relationship does not exist.
+            StorageError: If there is an issue updating the relationship.
+        """
+        pass
+
+    @abstractmethod
+    def get_relationship(
+        self, 
+        source_id: str, 
+        target_id: str, 
+        relationship: str
+    ) -> Dict[str, Any]:
+        """
+        Retrieves a specific relationship between two nodes.
+
+        Args:
+            source_id (str): Unique identifier of the source node.
+            target_id (str): Unique identifier of the target node.
+            relationship (str): Type of the relationship to retrieve.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the relationship's properties.
+
+        Raises:
+            RelationshipNotFoundError: If the relationship does not exist.
+            StorageError: If there is an issue retrieving the relationship.
+        """
+        pass
+
+    @abstractmethod
+    def get_neighbors(
+        self, 
+        node_id: str, 
+        relationship: Optional[str] = None, 
+        direction: str = "both"
+    ) -> List[Dict[str, Any]]:
         """
         Retrieves neighboring nodes connected by edges.
 
@@ -105,7 +237,11 @@ class GraphDatabase(ABC):
         pass
 
     @abstractmethod
-    def query_nodes(self, properties: Dict[str, Any], labels: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def query_nodes(
+        self, 
+        properties: Dict[str, Any], 
+        labels: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Queries nodes based on properties and labels.
 
@@ -122,7 +258,11 @@ class GraphDatabase(ABC):
         pass
 
     @abstractmethod
-    def execute_query(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> Any:
+    def execute_query(
+        self, 
+        query: str, 
+        parameters: Optional[Dict[str, Any]] = None
+    ) -> Any:
         """
         Executes a raw query against the graph database.
 

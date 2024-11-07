@@ -1,65 +1,77 @@
 # test_memory_palace.py
 
 import logging
+import os
 from aeiva.cognition.memory.memory_palace import MemoryPalace
-from aeiva.configs.memory_config import MemoryConfig
-from aeiva.configs.embedder_config import EmbedderConfig
-from aeiva.configs.llm_config import LLMConfig
-from aeiva.storage.database_config import DatabaseConfig
+from aeiva.cognition.memory.memory_config import MemoryConfig
+from aeiva.embedding.embedder_config import EmbedderConfig
+from aeiva.storage.database_factory import DatabaseConfigFactory
+import os
+from dotenv import load_dotenv
+
+
+# Load environment variables (API keys, etc.)
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your_default_api_key_here")
+
+# Ensure 'storage' directory exists
+os.makedirs('storage', exist_ok=True)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def main():
-    # Create configurations for the components
+# embedder_dimensions.py
 
+MODEL_EMBEDDING_DIMENSIONS = {
+    'text-embedding-ada-002': 1536,
+    # Add other models and their embedding dimensions as needed
+}
+
+
+def main():
     # Embedder Configuration
     embedder_config = EmbedderConfig(
         provider_name='openai',
         model_name='text-embedding-ada-002',
-        api_key='your_openai_api_key',  # Replace with your actual OpenAI API key
+        api_key=OPENAI_API_KEY,  # Replace with your actual OpenAI API key
     )
 
     # Vector Database Configuration (Milvus)
-    vector_db_config = DatabaseConfig(
+    vector_db_config = DatabaseConfigFactory.create(
         provider_name='milvus',
-        host='localhost',
-        port=19530,
-        collection_name='memory_units',
-        embedding_model_dims=1536,
+        uri='storage/milvus_demo.db',
+        collection_name='test_collection',
+        embedding_model_dims= MODEL_EMBEDDING_DIMENSIONS.get(embedder_config.model_name), #1536, TODO: this is depending on the embedder_config, the model_name.
+        metric_type='COSINE',
     )
 
     # Graph Database Configuration (Neo4j)
-    graph_db_config = DatabaseConfig(
+    graph_db_config = DatabaseConfigFactory.create(
         provider_name='neo4j',
         uri='bolt://localhost:7687',
         user='neo4j',
-        password='your_neo4j_password',  # Replace with your actual Neo4j password
+        password='cf57bwP9pcdcEK3',  # Replace with your actual password
         database='neo4j',
+        encrypted=False,
     )
 
     # Relational Database Configuration (SQLite)
-    relational_db_config = DatabaseConfig(
+    relational_db_config = DatabaseConfigFactory.create(
         provider_name='sqlite',
-        database='memory_events.db'  # Path to the SQLite database file
-    )
-
-    # LLM Configuration
-    llm_config = LLMConfig(
-        provider_name='openai',
-        model_name='gpt-3.5-turbo',
-        api_key='your_openai_api_key',  # Replace with your actual OpenAI API key
+        database='storage/test_database.db'  # Use a file-based database for persistence
     )
 
     # Memory Configuration
     memory_config = MemoryConfig(
         embedder_config=embedder_config,
+        vector_db_provider='milvus',
         vector_db_config=vector_db_config,
+        graph_db_provider='neo4j',
         graph_db_config=graph_db_config,
+        relational_db_provider='sqlite',
         relational_db_config=relational_db_config,
-        llm_config=llm_config,
     )
 
     # Initialize MemoryPalace
@@ -75,7 +87,7 @@ def main():
             source_role='user',
             source_name='TestUser',
         )
-        print(f"Created MemoryUnit: {memory_unit}")
+        print(f"Created MemoryUnit with id and content: {memory_unit.id} {memory_unit.content}")
 
         # Retrieve the memory unit
         retrieved_unit = memory_palace.get(memory_unit.id)
@@ -90,7 +102,7 @@ def main():
 
         # Retrieve the updated memory unit
         updated_unit = memory_palace.get(memory_unit.id)
-        print(f"Updated MemoryUnit: {updated_unit}")
+        print(f"Updated MemoryUnit with id and content: {memory_unit.id} {memory_unit.content}")
 
         # Retrieve similar memory units
         similar_units = memory_palace.retrieve_similar(
@@ -107,13 +119,21 @@ def main():
         all_units = memory_palace.get_all()
         print(f"Total MemoryUnits after deletion: {len(all_units)}")
 
+    except NotImplementedError as nie:
+        logger.warning(f"Feature not implemented: {nie}")
     except Exception as e:
         logger.error(f"An error occurred during testing: {e}")
 
     finally:
         # Clean up resources if necessary
-        memory_palace.delete_all()
-        print("All memory units deleted.")
+        try:
+            memory_palace.delete_all()
+            print("All memory units deleted.")
+        except NotImplementedError as nie:
+            logger.warning(f"Feature not implemented: {nie}")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+            print("Failed to delete all memory units.")
 
 
 if __name__ == '__main__':

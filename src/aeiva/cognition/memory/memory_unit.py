@@ -1,8 +1,12 @@
+# memory_unit.py
+
 from pydantic import BaseModel, Field
 from typing import Any, Optional, List, Dict, Union
 from uuid import uuid4
 from datetime import datetime
+import json
 from aeiva.cognition.memory.memory_link import MemoryLink
+
 
 class MemoryUnit(BaseModel):
     """
@@ -59,11 +63,60 @@ class MemoryUnit(BaseModel):
     # Additional Metadata
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Dictionary for extensible metadata.")
 
-    def to_dict(self) -> dict:
-        """Converts the MemoryUnit instance to a dictionary format for serialization."""
-        return self.dict()
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Converts the MemoryUnit instance to a dictionary format for serialization.
+        Each field is handled explicitly to ensure proper serialization.
+
+        Returns:
+            Dict[str, Any]: A dictionary representation of the MemoryUnit.
+        """
+        return {
+            "id": self.id,
+            "content": self.content,
+            "timestamp": self.timestamp.isoformat(),  # Convert datetime to string
+            "modality": self.modality,
+            "type": self.type,
+            "status": self.status,
+            "tags": self.tags,
+            "embedding": self.embedding,
+            "location": self.location,
+            "source_role": self.source_role,
+            "source_name": self.source_name,
+            "source_id": self.source_id,
+            "edges": [edge.to_dict() for edge in self.edges],  # Serialize each MemoryLink
+            "metadata": self.metadata
+        }
 
     @classmethod
     def from_dict(cls, data: dict) -> "MemoryUnit":
-        """Creates a MemoryUnit instance from a dictionary."""
-        return cls(**data)
+        """
+        Creates a MemoryUnit instance from a dictionary.
+        Each field is handled explicitly to ensure proper deserialization.
+
+        Args:
+            data (dict): A dictionary containing MemoryUnit data.
+
+        Returns:
+            MemoryUnit: The created MemoryUnit instance.
+        """
+        try:
+            return cls(
+                id=data.get('id', uuid4().hex),
+                content=data.get('content', ""),
+                timestamp=datetime.fromisoformat(data['timestamp']) if 'timestamp' in data else datetime.utcnow(),
+                modality=data.get('modality'),
+                type=data.get('type'),
+                status=data.get('status'),
+                tags=data.get('tags', []),
+                embedding=data.get('embedding'),
+                location=data.get('location'),
+                source_role=data.get('source_role'),
+                source_name=data.get('source_name'),
+                source_id=data.get('source_id', uuid4().hex),
+                edges=[MemoryLink.from_dict(edge) for edge in data.get('edges', [])],
+                metadata=data.get('metadata', {})
+            )
+        except Exception as e:
+            logger.error(f"Error deserializing MemoryUnit from dict: {e}")
+            raise e

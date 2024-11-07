@@ -255,6 +255,173 @@ class Neo4jDatabase(GraphDatabase):
             logger.error(f"Failed to delete node: {e}")
             raise StorageError(f"Failed to delete node: {e}")
 
+    def delete_edge(
+        self,
+        source_id: str,
+        target_id: str,
+        relationship: str
+    ) -> None:
+        """
+        Deletes a specific relationship between two nodes.
+
+        Args:
+            source_id (str): Unique identifier of the source node.
+            target_id (str): Unique identifier of the target node.
+            relationship (str): Type of the relationship to delete.
+
+        Raises:
+            StorageError: If there is an issue deleting the relationship.
+        """
+        cypher = (
+            "MATCH (a {id: $source_id})-[r:%s]->(b {id: $target_id}) "
+            "DELETE r"
+        ) % relationship
+        params = {
+            'source_id': source_id,
+            'target_id': target_id
+        }
+        try:
+            result = self.session.run(cypher, params)
+            if result.consume().counters.relationships_deleted == 0:
+                logger.warning(f"No relationship '{relationship}' found between '{source_id}' and '{target_id}'.")
+                raise StorageError(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' not found.")
+            logger.info(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' deleted.")
+        except exceptions.Neo4jError as e:
+            logger.error(f"Failed to delete relationship: {e}")
+            raise StorageError(f"Failed to delete relationship: {e}")
+
+    def update_edge(
+        self,
+        source_id: str,
+        target_id: str,
+        relationship: str,
+        properties: Dict[str, Any]
+    ) -> None:
+        """
+        Updates properties of a specific relationship between two nodes.
+
+        Args:
+            source_id (str): Unique identifier of the source node.
+            target_id (str): Unique identifier of the target node.
+            relationship (str): Type of the relationship to update.
+            properties (Dict[str, Any]): Properties to update on the relationship.
+
+        Raises:
+            StorageError: If there is an issue updating the relationship.
+        """
+        cypher = (
+            "MATCH (a {id: $source_id})-[r:%s]->(b {id: $target_id}) "
+            "SET r += $properties RETURN r"
+        ) % relationship
+        params = {
+            'source_id': source_id,
+            'target_id': target_id,
+            'properties': properties
+        }
+        try:
+            result = self.session.run(cypher, params)
+            record = result.single()
+            if record:
+                logger.info(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' updated with properties {properties}.")
+            else:
+                logger.warning(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' not found.")
+                raise StorageError(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' not found.")
+        except exceptions.Neo4jError as e:
+            logger.error(f"Failed to update relationship: {e}")
+            raise StorageError(f"Failed to update relationship: {e}")
+
+    def get_relationship(
+        self,
+        source_id: str,
+        target_id: str,
+        relationship: str
+    ) -> Dict[str, Any]:
+        """
+        Retrieves a specific relationship between two nodes.
+
+        Args:
+            source_id (str): Unique identifier of the source node.
+            target_id (str): Unique identifier of the target node.
+            relationship (str): Type of the relationship to retrieve.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the relationship's properties.
+
+        Raises:
+            StorageError: If there is an issue retrieving the relationship.
+        """
+        cypher = (
+            "MATCH (a {id: $source_id})-[r:%s]->(b {id: $target_id}) "
+            "RETURN r"
+        ) % relationship
+        params = {
+            'source_id': source_id,
+            'target_id': target_id
+        }
+        try:
+            result = self.session.run(cypher, params)
+            record = result.single()
+            if record:
+                relationship_data = record['r']
+                properties = dict(relationship_data)
+                properties['type'] = relationship.type  # Include relationship type
+                logger.info(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' retrieved.")
+                return properties
+            else:
+                logger.warning(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' not found.")
+                raise StorageError(f"Relationship '{relationship}' between '{source_id}' and '{target_id}' not found.")
+        except exceptions.Neo4jError as e:
+            logger.error(f"Failed to retrieve relationship: {e}")
+            raise StorageError(f"Failed to retrieve relationship: {e}")
+
+    def delete_all_edges(self) -> None:
+        """
+        Deletes all relationships from the Neo4j graph database without deleting nodes.
+
+        Raises:
+            StorageError: If there is an issue deleting relationships.
+        """
+        cypher = "MATCH ()-[r]->() DELETE r"
+        try:
+            self.session.run(cypher)
+            logger.info("All relationships have been deleted from Neo4j.")
+        except exceptions.Neo4jError as e:
+            logger.error(f"Failed to delete all relationships: {e}")
+            raise StorageError(f"Failed to delete all relationships: {e}")
+
+    def delete_relationships_by_type(self, relationship: str) -> None:
+        """
+        Deletes all relationships of a specific type from the Neo4j graph database.
+
+        Args:
+            relationship (str): The type of relationships to delete.
+
+        Raises:
+            StorageError: If there is an issue deleting the relationships.
+        """
+        cypher = f"MATCH ()-[r:{relationship}]->() DELETE r"
+        try:
+            self.session.run(cypher)
+            logger.info(f"All relationships of type '{relationship}' have been deleted from Neo4j.")
+        except exceptions.Neo4jError as e:
+            logger.error(f"Failed to delete relationships of type '{relationship}': {e}")
+            raise StorageError(f"Failed to delete relationships of type '{relationship}': {e}")
+
+    def delete_all(self) -> None:
+        """
+        Deletes all nodes and relationships from the Neo4j graph database.
+
+        Raises:
+            StorageError: If there is an issue deleting all nodes and relationships.
+        """
+        cypher = "MATCH (n) DETACH DELETE n"
+        try:
+            self.session.run(cypher)
+            logger.info("All nodes and relationships have been deleted from Neo4j.")
+        except exceptions.Neo4jError as e:
+            logger.error(f"Failed to delete all nodes and relationships: {e}")
+            raise StorageError(f"Failed to delete all nodes and relationships: {e}")
+
     def get_neighbors(
         self,
         node_id: str,

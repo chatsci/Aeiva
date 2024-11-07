@@ -1,7 +1,7 @@
 # sqlite_db.py
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from aeiva.storage.relational_database import RelationalDatabase
 
 # Custom Exceptions
@@ -41,7 +41,7 @@ class SQLiteDatabase(RelationalDatabase):
             self.connection = sqlite3.connect(self.database)
             self.connection.row_factory = sqlite3.Row  # To get dict-like rows
             self.cursor = self.connection.cursor()
-            self.connection.execute('PRAGMA foreign_keys = ON')  # Enable foreign key support
+            # self.connection.execute('PRAGMA foreign_keys = ON')  # Enable foreign key support
         except sqlite3.Error as e:
             raise ConnectionError(f"Failed to connect to SQLite database: {e}")
 
@@ -196,34 +196,32 @@ class SQLiteDatabase(RelationalDatabase):
         except sqlite3.Error as e:
             raise StorageError(f"Failed to query records: {e}")
 
-    def execute_sql(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> Any:
+    def execute_sql(self, query: str, params: Optional[Tuple] = None):
         """
-        Executes a raw SQL query.
-
+        Executes a SQL query and returns the cursor.
+        
         Args:
-            query (str): The SQL query string.
-            parameters (Optional[Dict[str, Any]]): Parameters for parameterized queries.
-
+            query (str): The SQL query to execute.
+            params (Optional[Tuple]): Parameters to substitute into the query.
+        
         Returns:
-            Any: The result of the query.
-
-        Raises:
-            StorageError: If there is an issue executing the query.
+            sqlite3.Cursor: The cursor after executing the query.
         """
+        cursor = self.connection.cursor()
         try:
-            if parameters:
-                self.cursor.execute(query, parameters)
+            if params:
+                cursor.execute(query, params)
             else:
-                self.cursor.execute(query)
-            self.connection.commit()
+                cursor.execute(query)
+            # For SELECT queries, do not commit. For INSERT/UPDATE/DELETE, you may need to commit.
             if query.strip().upper().startswith("SELECT"):
-                rows = self.cursor.fetchall()
-                return [dict(row) for row in rows]
+                return cursor
             else:
-                return self.cursor.rowcount
+                self.connection.commit()
+                return cursor
         except sqlite3.Error as e:
-            self.connection.rollback()
-            raise StorageError(f"Failed to execute SQL query: {e}")
+            print(f"SQLite query failed: {e}")
+            raise e
 
     def begin_transaction(self) -> None:
         """

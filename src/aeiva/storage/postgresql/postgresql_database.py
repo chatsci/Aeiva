@@ -212,16 +212,17 @@ class PostgreSQLDatabase(RelationalDatabase):
         Raises:
             StorageError: If there is an issue executing the query.
         """
+        cursor = self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         try:
             if parameters:
-                self.cursor.execute(query, parameters)
+                cursor.execute(query, parameters)
             else:
-                self.cursor.execute(query)
+                cursor.execute(query)
             if query.strip().upper().startswith("SELECT"):
-                rows = self.cursor.fetchall()
-                return [dict(row) for row in rows]
+                return cursor
             else:
-                return self.cursor.rowcount
+                self.connection.commit()
+                return cursor
         except psycopg2.Error as e:
             self.connection.rollback()
             raise StorageError(f"Failed to execute SQL query: {e}")
