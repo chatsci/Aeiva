@@ -1,0 +1,11 @@
+{
+    "type": "function",
+    "function": {
+        "name": "get_system_info",
+        "description": "Retrieves system information.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    }
+}

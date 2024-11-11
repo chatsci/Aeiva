@@ -1,95 +1,110 @@
 from abc import ABC, abstractmethod
-from typing import Any
-import asyncio
-
+from typing import Any, Dict, Optional
+from aeiva.environment.environment_config import EnvironmentConfig
 
 class Environment(ABC):
     """
-    Abstract base class representing an environment in which agents can operate.
+    Abstract base class for an environment in which an intelligent agent operates.
     
-    The environment is responsible for managing its own state and providing mechanisms
-    to observe, interact with, and update its state. It is independent of the agents
-    that interact with it, focusing solely on its own dynamics and properties.
+    Each environment provides context, defines interactions, and manages its own state.
+    Subclasses should implement specific methods for different types of environments.
 
     Attributes:
-        config (Any): Configuration settings for the environment.
-        state (Any): The internal state of the environment.
+        config (EnvironmentConfig): Configuration settings for the environment.
+        state (Any): Current state of the environment, initialized from the config.
+        entities (List[Any]): Entities present within the environment.
+        constraints (Dict[str, Any]): Rules or limitations for interactions in the environment.
+        time (Optional[int]): Time progression within the environment, if enabled.
     """
-
-    def __init__(self, config: Any):
+    
+    def __init__(self, config: EnvironmentConfig):
         """
-        Initialize the environment with the provided configuration.
-
+        Initialize the environment with a given configuration.
+        
         Args:
-            config (Any): Configuration settings for the environment.
+            config (EnvironmentConfig): Configuration settings for the environment.
         """
         self.config = config
-        self.state = self.init_state()
+        self.state = config.initial_state
+        self.entities = config.entities
+        self.constraints = config.constraints
+        self.time = 0 if config.time_enabled else None
+        self.setup()
 
     @abstractmethod
-    def init_state(self) -> Any:
+    def setup(self):
         """
-        Initialize the internal state of the environment.
-
-        This method should set up the initial state required for the environment's operations.
-
-        Returns:
-            Any: The initial state of the environment.
+        Set up the environment based on its configuration.
+        Subclasses should define any initialization logic here.
         """
         pass
 
     @abstractmethod
-    async def setup(self) -> None:
+    def reset(self):
         """
-        Asynchronously set up the environment's components.
-
-        This method should initialize any necessary components or resources based on the provided configuration.
-
-        Raises:
-            EnvironmentSetupError: If the setup process fails.
+        Reset the environment to its initial state as defined by the configuration.
         """
-        pass
+        self.state = self.config.initial_state
+        self.time = 0 if self.config.time_enabled else None
 
     @abstractmethod
-    async def reset(self) -> None:
+    def step(self, actions: Dict[Any, Any]):
         """
-        Asynchronously reset the environment to its initial state.
-
-        This method resets the environment state, preparing it for a new interaction cycle.
-        """
-        pass
-
-    @abstractmethod
-    async def update(self, external_input: Any) -> None:
-        """
-        Asynchronously update the environment based on external inputs.
-
+        Advance the environment by one step based on actions taken by agents.
+        
         Args:
-            external_input (Any): External input (e.g., natural events or user-defined inputs) that affects the environment's state.
-
-        Raises:
-            EnvironmentUpdateError: If updating the environment fails.
+            actions (Dict[Any, Any]): A dictionary of actions performed by agents.
         """
         pass
 
     @abstractmethod
-    def get_observation(self) -> Any:
+    def observe(self, agent: Any) -> Any:
         """
-        Retrieve the current observation of the environment.
-
-        This method allows querying the environment's state, which could be in the form
-        of sensor data, visual data, or other structured observations.
-
+        Provide observations to an agent based on the current state.
+        
+        Args:
+            agent (Any): The agent requesting observation.
+        
         Returns:
-            Any: The current observation of the environment.
+            Any: Observation data formatted according to the agent's perception capabilities.
         """
         pass
 
-    def handle_error(self, error: Exception) -> None:
+    @abstractmethod
+    def act(self, action: Any, target: Optional[Any] = None):
         """
-        Handle errors that occur during environment operations.
-
+        Execute an action in the environment, potentially modifying its state.
+        
         Args:
-            error (Exception): The exception that was raised.
+            action (Any): The action to be executed.
+            target (Optional[Any]): Target entity for the action, if applicable.
         """
-        print(f"Environment encountered an error: {error}")
+        pass
+
+    def render(self):
+        """
+        Visualize or output the environment's current state. Optional for subclasses.
+        """
+        print(f"Environment State: {self.state}")
+
+    def get_context(self) -> Any:
+        """
+        Retrieve relevant context information from the environment, useful for agent processing.
+        
+        Returns:
+            Any: Contextual data or state relevant to the agent's tasks.
+        """
+        return self.state
+
+    def close(self):
+        """
+        Clean up any resources tied to the environment when it's no longer needed.
+        """
+        print("Closing environment and releasing resources.")
+
+    def __repr__(self) -> str:
+        return (f"Environment(type={self.config.environment_type}, "
+                f"state={self.state}, "
+                f"entities={self.entities}, "
+                f"time={self.time}, "
+                f"constraints={self.constraints})")

@@ -1,0 +1,24 @@
+{
+    "type": "function",
+    "function": {
+        "name": "click_on_element",
+        "description": "Clicks on a GUI element at a specified position.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "position": {
+                    "type": "object",
+                    "description": "The position dictionary containing 'x', 'y', 'width', 'height'.",
+                    "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                        "width": {"type": "number"},
+                        "height": {"type": "number"}
+                    },
+                    "required": ["x", "y", "width", "height"]
+                }
+            },
+            "required": ["position"]
+        }
+    }
+}

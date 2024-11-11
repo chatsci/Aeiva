@@ -1,0 +1,26 @@
+{
+    "type": "function",
+    "function": {
+        "name": "move_mouse",
+        "description": "Moves the mouse cursor to a specific screen coordinate.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "x": {
+                    "type": "integer",
+                    "description": "The x-coordinate on the screen."
+                },
+                "y": {
+                    "type": "integer",
+                    "description": "The y-coordinate on the screen."
+                },
+                "duration": {
+                    "type": "number",
+                    "description": "Duration in seconds for the movement.",
+                    "default": 0.5
+                }
+            },
+            "required": ["x", "y"]
+        }
+    }
+}

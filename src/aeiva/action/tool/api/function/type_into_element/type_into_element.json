@@ -1,0 +1,28 @@
+{
+    "type": "function",
+    "function": {
+        "name": "type_into_element",
+        "description": "Types text into a GUI element at a specified position.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "position": {
+                    "type": "object",
+                    "description": "The position dictionary containing 'x', 'y', 'width', 'height'.",
+                    "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                        "width": {"type": "number"},
+                        "height": {"type": "number"}
+                    },
+                    "required": ["x", "y", "width", "height"]
+                },
+                "text": {
+                    "type": "string",
+                    "description": "The text to type into the input field."
+                }
+            },
+            "required": ["position", "text"]
+        }
+    }
+}

@@ -4,10 +4,10 @@ from aeiva.cognition.memory.memory import Memory
 from typing import Any, List
 
 
-class SimpleMemory(Memory):
+class SimpleMemory:
 
     def __init__(self, config: Any = None):
-        super().__init__(config)
+        # super().__init__(config)
         self.state = self.init_state()
 
     def init_state(self) -> List[dict]:

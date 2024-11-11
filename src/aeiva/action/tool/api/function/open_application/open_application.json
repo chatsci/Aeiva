@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+        "name": "open_application",
+        "description": "Launches an application.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "application_path": {
+                    "type": "string",
+                    "description": "The path to the application executable."
+                }
+            },
+            "required": ["application_path"]
+        }
+    }
+}

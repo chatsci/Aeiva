@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "type_keyboard",
+        "description": "Simulates keyboard typing to input text.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The text to type."
+                },
+                "interval": {
+                    "type": "number",
+                    "description": "Time interval between each character.",
+                    "default": 0.05
+                }
+            },
+            "required": ["text"]
+        }
+    }
+}

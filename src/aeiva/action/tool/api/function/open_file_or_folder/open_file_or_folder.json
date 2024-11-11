@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+        "name": "open_file_or_folder",
+        "description": "Opens a file or folder with the default application.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path to the file or folder."
+                }
+            },
+            "required": ["path"]
+        }
+    }
+}

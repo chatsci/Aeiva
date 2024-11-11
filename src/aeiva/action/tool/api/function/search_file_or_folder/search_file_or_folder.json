@@ -1,0 +1,38 @@
+{
+    "type": "function",
+    "function": {
+        "name": "search_file_or_folder",
+        "description": "Searches for files or folders by name.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the file or folder to search for."
+                },
+                "search_path": {
+                    "type": "string",
+                    "description": "The path to start the search from. Defaults to the user's home directory.",
+                    "default": null
+                },
+                "search_type": {
+                    "type": "string",
+                    "description": "Type of search - 'file', 'folder', or 'both'.",
+                    "enum": ["file", "folder", "both"],
+                    "default": "both"
+                },
+                "case_sensitive": {
+                    "type": "boolean",
+                    "description": "Whether the search is case-sensitive.",
+                    "default": true
+                },
+                "partial_match": {
+                    "type": "boolean",
+                    "description": "Whether to allow partial name matching.",
+                    "default": false
+                }
+            },
+            "required": ["name"]
+        }
+    }
+}

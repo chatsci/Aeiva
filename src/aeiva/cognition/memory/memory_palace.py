@@ -273,7 +273,7 @@ class MemoryPalace(Memory):
                 type=derivation_type,
                 source_role="derived",
                 metadata=kwargs.get('metadata')
-            )
+            ) # TODO: add edges in the memory units.
 
             logger.info(f"Derived new memory unit with ID: {derived_unit.id}")
             return derived_unit

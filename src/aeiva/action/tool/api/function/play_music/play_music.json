@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "play_music",
+        "description": "Plays a music file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "The path to the music file."
+                },
+                "loop": {
+                    "type": "boolean",
+                    "description": "Whether to loop the music continuously.",
+                    "default": false
+                }
+            },
+            "required": ["file_path"]
+        }
+    }
+}

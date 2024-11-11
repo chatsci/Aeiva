@@ -1,0 +1,29 @@
+{
+    "type": "function",
+    "function": {
+        "name": "click_mouse",
+        "description": "Performs mouse click actions.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "button": {
+                    "type": "string",
+                    "description": "The mouse button to click.",
+                    "enum": ["left", "right", "middle"],
+                    "default": "left"
+                },
+                "clicks": {
+                    "type": "integer",
+                    "description": "Number of times to click.",
+                    "default": 1
+                },
+                "interval": {
+                    "type": "number",
+                    "description": "Interval between clicks in seconds.",
+                    "default": 0.0
+                }
+            },
+            "required": []
+        }
+    }
+}

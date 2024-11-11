@@ -1,0 +1,23 @@
+{
+    "type": "function",
+    "function": {
+        "name": "execute_script",
+        "description": "Executes a script in a controlled environment.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "script_content": {
+                    "type": "string",
+                    "description": "The content of the script to execute."
+                },
+                "language": {
+                    "type": "string",
+                    "description": "The programming language of the script.",
+                    "enum": ["python", "bash"],
+                    "default": "python"
+                }
+            },
+            "required": ["script_content"]
+        }
+    }
+}

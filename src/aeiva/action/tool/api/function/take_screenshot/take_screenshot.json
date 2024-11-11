@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+        "name": "take_screenshot",
+        "description": "Captures the current screen.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "save_path": {
+                    "type": "string",
+                    "description": "The path to save the screenshot image.",
+                    "default": null
+                }
+            },
+            "required": []
+        }
+    }
+}

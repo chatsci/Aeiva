@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "description": "Performs a web search and returns summarized results.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query string."
+                }
+            },
+            "required": ["query"]
+        }
+    }
+}

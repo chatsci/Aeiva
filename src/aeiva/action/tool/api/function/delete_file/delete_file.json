@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "delete_file",
+        "description": "Deletes a specified file after confirmation.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "The path to the file."
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Confirmation flag to proceed with deletion.",
+                    "default": false
+                }
+            },
+            "required": ["file_path"]
+        }
+    }
+}

@@ -169,7 +169,30 @@ def main():
 
     action_config = {
         # Include any configurations needed for your ActionSystem
-        "tools": ["test_operation"]
+        "tools": [
+            "test_operation",
+            "play_music",
+            "stop_music",
+            "analyze_gui",
+            "click_mouse",
+            "click_on_element",
+            "close_application",
+            "close_application",
+            "delete_file",
+            "execute_script",
+            "get_system_info",
+            "list_files",
+            "move_mouse",
+            "open_application",
+            "open_file_or_folder",
+            "read_file",
+            "search_file_or_folder",
+            "take_screenshot",
+            "type_into_element",
+            "type_keyboard",
+            "web_search",
+            "write_file"
+        ]
     }
 
     # Create agent instance

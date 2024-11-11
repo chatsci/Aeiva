@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+        "name": "list_files",
+        "description": "Lists files and directories in a specified path.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "directory": {
+                    "type": "string",
+                    "description": "The directory to list files from.",
+                    "default": null
+                }
+            },
+            "required": []
+        }
+    }
+}

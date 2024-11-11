@@ -1,0 +1,11 @@
+{
+    "type": "function",
+    "function": {
+        "name": "stop_music",
+        "description": "Stops playing music.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    }
+}
