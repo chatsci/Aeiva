@@ -1,5 +1,3 @@
-# aeiva/cognition/brain/llm/llm_client.py
-
 import json
 import requests
 from typing import Dict, Any, AsyncGenerator, List
@@ -23,6 +21,8 @@ from aeiva.action.tool.tool import Tool
 # # Enable verbose logging in litellm for debug
 # import litellm
 # litellm.set_verbose = True
+
+MAX_TOOL_CALL_LOOP = 10 # NOTE: This is used in case LLM recursively call tools. 
 
 class LLMClient:
     """
@@ -49,54 +49,57 @@ class LLMClient:
         self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs
     ) -> str:
         try:
-            # Build parameters
-            params = self._build_params(messages=messages, tools=tools, **kwargs)
-            # print("params are ========", params)
-            response = llm_completion(**params)
-            self._update_metrics(response)
-            response_message = response.choices[0].message
-            # print("response_message are======", response_message)
+            max_iterations = MAX_TOOL_CALL_LOOP  # Prevent infinite loops
+            iteration = 0
 
-            # Append the assistant's reply to messages
-            #messages.append({"role": "assistant", "content": response_message.content})
+            while iteration < max_iterations:
+                iteration += 1
 
-            tool_calls = response_message.tool_calls
-
-            if tool_calls:
-                # Handle tool calls
-                # Handle tool calls
-                messages.append({"role": "assistant", "tool_calls": tool_calls})
-
-                for tool_call in tool_calls:
-                    function_name = tool_call.function.name
-                    function_args = json.loads(tool_call.function.arguments)
-                    tool_call_id = tool_call.id
-                    self.logger.info(f"Tool call id: {tool_call_id}")
-                    # Call the function via FastAPI
-                    function_response = self.call_tool_sync(  #!!! TODO: fix this. maybe we revise the name of functions using aexecute and execute.
-                        api_name=function_name, function_name=function_name, params=function_args
-                    )
-                    #print("the result of self.call_tool is: ", function_response)
-                    # Append the function response to messages
-                    messages.append(
-                        {
-                            "tool_call_id": tool_call_id,
-                            "role": "tool",
-                            "name": function_name,
-                            "content": str(function_response),  #!!! NOTE: currently it must be string for openai
-                        }
-                    )
-                # Now send the updated messages to the LLM to get the final response
+                # Build parameters
                 params = self._build_params(messages=messages, tools=tools, **kwargs)
-                final_response = llm_completion(**params)
-                self._update_metrics(final_response)
-                final_response_message = final_response.choices[0].message
-                messages.append(final_response_message)
-                return final_response_message.content
-            else:
-                # Append the assistant's reply to messages
-                messages.append({"role": "assistant", "content": response_message.content})  # Append the message object directly
-                return response_message.content
+                response = llm_completion(**params)
+                self._update_metrics(response)
+                response_message = response.choices[0].message
+
+                tool_calls = response_message.tool_calls
+
+                if tool_calls:
+                    # Append assistant's tool call message
+                    messages.append({"role": "assistant", "tool_calls": tool_calls})
+
+                    for tool_call in tool_calls:
+                        function_name = tool_call.function.name
+                        function_args = json.loads(tool_call.function.arguments)
+                        tool_call_id = tool_call.id
+                        self.logger.info(f"Tool call id: {tool_call_id}")
+
+                        try:
+                            function_response = self.call_tool_sync(
+                                api_name=function_name, function_name=function_name, params=function_args
+                            )
+                        except Exception as e:
+                            self.logger.error(f"Error executing tool '{function_name}': {e}")
+                            function_response = f"Error executing tool '{function_name}': {e}"
+
+                        # Append the function response to messages
+                        messages.append(
+                            {
+                                "tool_call_id": tool_call_id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": str(function_response),
+                            }
+                        )
+                    # Continue the loop to handle further function calls
+                    continue
+                else:
+                    # Assistant provided a final response
+                    messages.append({"role": "assistant", "content": response_message.content})
+                    return response_message.content
+
+            # If loop exceeds max iterations
+            raise Exception("Maximum iterations reached without a final response.")
+
         except Exception as e:
             self.logger.error(f"LLM Gateway Error: {e}")
             raise llm_gateway_exception(e)
@@ -110,46 +113,56 @@ class LLMClient:
         self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs
     ) -> str:
         try:
-            # Build parameters
-            params = self._build_params(messages=messages, tools=tools, **kwargs)
-            response = await llm_acompletion(**params)
-            self._update_metrics(response)
-            response_message = response.choices[0].message
+            max_iterations = MAX_TOOL_CALL_LOOP  # Prevent infinite loops
+            iteration = 0
 
-            tool_calls = response_message.tool_calls
+            while iteration < max_iterations:
+                iteration += 1
 
-            if tool_calls:
-                # Handle tool calls
-                messages.append({"role": "assistant", "tool_calls": tool_calls})
-
-                for tool_call in tool_calls:
-                    function_name = tool_call.function.name
-                    function_args = json.loads(tool_call.function.arguments)
-                    tool_call_id = tool_call.id
-                    # Call the function via FastAPI
-                    function_response = await self.call_tool(
-                        api_name=function_name, function_name=function_name, params=function_args
-                    )
-                    # Append the function response to messages
-                    messages.append(
-                        {
-                            "tool_call_id": tool_call_id,
-                            "role": "tool",
-                            "name": function_name,
-                            "content": str(function_response),  #!!! NOTE: currently it must be string for openai
-                        }
-                    )
-                # Now send the updated messages to the LLM to get the final response
+                # Build parameters
                 params = self._build_params(messages=messages, tools=tools, **kwargs)
-                final_response = await llm_acompletion(**params)
-                self._update_metrics(final_response)
-                final_response_message = final_response.choices[0].message
-                messages.append(final_response_message)
-                return final_response_message.content
-            else:
-                # Append the assistant's reply to messages
-                messages.append({"role": "assistant", "content": response_message.content})  # Append the message object directly
-                return response_message.content
+                response = await llm_acompletion(**params)
+                self._update_metrics(response)
+                response_message = response.choices[0].message
+
+                tool_calls = response_message.tool_calls
+
+                if tool_calls:
+                    # Append assistant's tool call message
+                    messages.append({"role": "assistant", "tool_calls": tool_calls})
+
+                    for tool_call in tool_calls:
+                        function_name = tool_call.function.name
+                        function_args = json.loads(tool_call.function.arguments)
+                        tool_call_id = tool_call.id
+
+                        try:
+                            function_response = await self.call_tool(
+                                api_name=function_name, function_name=function_name, params=function_args
+                            )
+                        except Exception as e:
+                            self.logger.error(f"Error executing tool '{function_name}': {e}")
+                            function_response = f"Error executing tool '{function_name}': {e}"
+
+                        # Append the function response to messages
+                        messages.append(
+                            {
+                                "tool_call_id": tool_call_id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": str(function_response),
+                            }
+                        )
+                    # Continue the loop to handle further function calls
+                    continue
+                else:
+                    # Assistant provided a final response
+                    messages.append({"role": "assistant", "content": response_message.content})
+                    return response_message.content
+
+            # If loop exceeds max iterations
+            raise Exception("Maximum iterations reached without a final response.")
+
         except Exception as e:
             self.logger.error(f"LLM Asynchronous Generation Error: {e}")
             raise llm_gateway_exception(e)
@@ -158,86 +171,93 @@ class LLMClient:
         self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs
     ) -> AsyncGenerator[str, None]:
         try:
-            # Build parameters
-            params = self._build_params(messages=messages, tools=tools, stream=True, **kwargs)
-            response_stream = await llm_acompletion(**params)
+            max_iterations = MAX_TOOL_CALL_LOOP  # Prevent infinite loops
+            iteration = 0
 
-            # Prepare to collect the assistant's reply
-            tool_calls = []  # Accumulator for tool calls
-            full_delta_content = ''  # Accumulator for assistant's content
+            while iteration < max_iterations:
+                iteration += 1
 
-            # Collect streamed responses
-            async for response in response_stream:
-                delta = response.choices[0].delta
-
-                # Collect assistant's content and yield it
-                if getattr(delta, 'content', None):
-                    full_delta_content += delta.content
-                    yield delta.content
-
-                # Check for tool calls in the delta
-                if getattr(delta, 'tool_calls', None):
-                    tc_chunk_list = delta.tool_calls
-                    for tc_chunk in tc_chunk_list:
-                        index = tc_chunk.index
-                        # Ensure tool_calls list is large enough
-                        while len(tool_calls) <= index:
-                            tool_calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-                        tc = tool_calls[index]
-
-                        if getattr(tc_chunk, 'id', None):
-                            tc["id"] += tc_chunk.id
-                        if getattr(tc_chunk.function, 'name', None):
-                            tc["function"]["name"] += tc_chunk.function.name
-                        if getattr(tc_chunk.function, 'arguments', None):
-                            tc["function"]["arguments"] += tc_chunk.function.arguments
-
-            # After initial streaming, check if there are tool calls
-            if tool_calls:
-                # Append the assistant's tool_call message to messages
-                messages.append({"role": "assistant", "tool_calls": tool_calls})
-
-                # Process each tool_call
-                #available_functions = self.get_available_functions()  # Implement this method
-                available_functions = [tool["function"]["name"] for tool in tools]
-                for tool_call in tool_calls:
-                    function_name = tool_call["function"]["name"]
-                    if function_name not in available_functions:
-                        # Handle error if function not found
-                        yield f"Function {function_name} does not exist."
-                        return
-                    # Call the function with arguments
-                    try:
-                        function_args = json.loads(tool_call["function"]["arguments"])
-                    except json.JSONDecodeError as e:
-                        self.logger.error(f"Error decoding function arguments: {e}")
-                        function_args = {}
-
-                    function_response = await self.call_tool(
-                        api_name=function_name, function_name=function_name, params=function_args
-                    )
-
-                    # Append the function's response to messages
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "name": function_name,
-                            "content": str(function_response),  #!!! NOTE: currently it must be string for openai
-                            "tool_call_id": tool_call['id']
-                        }
-                    )
-                # Now send the updated messages to the LLM to get the final response
+                # Build parameters
                 params = self._build_params(messages=messages, tools=tools, stream=True, **kwargs)
-                final_response_stream = await llm_acompletion(**params)
+                response_stream = await llm_acompletion(**params)
 
-                # Stream the final response
-                async for response in final_response_stream:
+                # Prepare to collect the assistant's reply
+                tool_calls = []  # Accumulator for tool calls
+                full_delta_content = ''  # Accumulator for assistant's content
+
+                # Collect streamed responses
+                async for response in response_stream:
                     delta = response.choices[0].delta
+
+                    # Collect assistant's content and yield it
                     if getattr(delta, 'content', None):
+                        full_delta_content += delta.content
                         yield delta.content
-            else:
-                # No tool calls, streaming is complete
-                messages.append({"role": "assistant", "content": full_delta_content})
+
+                    # Check for tool calls in the delta
+                    if getattr(delta, 'tool_calls', None):
+                        tc_chunk_list = delta.tool_calls
+                        for tc_chunk in tc_chunk_list:
+                            index = tc_chunk.index
+                            # Ensure tool_calls list is large enough
+                            while len(tool_calls) <= index:
+                                tool_calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                            tc = tool_calls[index]
+
+                            if getattr(tc_chunk, 'id', None):
+                                tc["id"] += tc_chunk.id
+                            if getattr(tc_chunk.function, 'name', None):
+                                tc["function"]["name"] += tc_chunk.function.name
+                            if getattr(tc_chunk.function, 'arguments', None):
+                                tc["function"]["arguments"] += tc_chunk.function.arguments
+
+                # After initial streaming, check if there are tool calls
+                if tool_calls:
+                    # Append the assistant's tool_call message to messages
+                    messages.append({"role": "assistant", "tool_calls": tool_calls})
+
+                    # Process each tool_call
+                    available_functions = [tool["function"]["name"] for tool in tools]
+                    for tool_call in tool_calls:
+                        function_name = tool_call["function"]["name"]
+                        if function_name not in available_functions:
+                            # Handle error if function not found
+                            yield f"Function {function_name} does not exist."
+                            return
+                        # Call the function with arguments
+                        try:
+                            function_args = json.loads(tool_call["function"]["arguments"])
+                        except json.JSONDecodeError as e:
+                            self.logger.error(f"Error decoding function arguments: {e}")
+                            function_args = {}
+
+                        try:
+                            function_response = await self.call_tool(
+                                api_name=function_name, function_name=function_name, params=function_args
+                            )
+                        except Exception as e:
+                            self.logger.error(f"Error executing tool '{function_name}': {e}")
+                            function_response = f"Error executing tool '{function_name}': {e}"
+
+                        # Append the function's response to messages
+                        messages.append(
+                            {
+                                "tool_call_id": tool_call['id'],
+                                "role": "tool",
+                                "name": function_name,
+                                "content": str(function_response),
+                            }
+                        )
+                    # Continue the loop to handle further function calls
+                    continue
+                else:
+                    # No tool calls, streaming is complete
+                    messages.append({"role": "assistant", "content": full_delta_content})
+                    return  # Exit the loop
+
+            # If loop exceeds max iterations
+            yield "Maximum iterations reached without a final response."
+
         except Exception as e:
             self.logger.error(f"Streaming LLM Gateway Error: {e}")
             yield "An error occurred during streaming."

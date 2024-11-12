@@ -1,0 +1,34 @@
+{
+    "type": "function",
+    "function": {
+        "name": "analyze_gui_by_ocr",
+        "description": "Analyzes the current GUI to find elements using OCR and template matching. 'target_text' and 'template_names' act as filters if provided.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target_text": {
+                    "type": "string",
+                    "description": "Optional text to filter OCR results.",
+                    "default": null
+                },
+                "template_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional list of template image names to filter template matching results (without extension).",
+                    "default": null
+                },
+                "template_path": {
+                    "type": "string",
+                    "description": "The path to the directory containing template images. If not provided, reads from GUI_TEMPLATES_IMG_PATH environment variable.",
+                    "default": null
+                },
+                "threshold": {
+                    "type": "number",
+                    "description": "The matching threshold between 0 and 1 for template matching.",
+                    "default": 0.8
+                }
+            },
+            "required": []
+        }
+    }
+}

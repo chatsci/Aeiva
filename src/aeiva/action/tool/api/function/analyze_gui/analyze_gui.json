@@ -2,30 +2,19 @@
     "type": "function",
     "function": {
         "name": "analyze_gui",
-        "description": "Analyzes the current GUI to find elements matching the target text and/or provided templates.",
+        "description": "Analyzes the current GUI to find elements matching the target text and/or role.",
         "parameters": {
             "type": "object",
             "properties": {
                 "target_text": {
                     "type": "string",
-                    "description": "The text to search for in the GUI elements using OCR.",
+                    "description": "The text/name of the UI element to search for.",
                     "default": null
                 },
-                "template_names": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "A list of template image names to search for (without extension).",
-                    "default": null
-                },
-                "template_path": {
+                "role": {
                     "type": "string",
-                    "description": "The path to the directory containing template images. If not provided, reads from GUI_TEMPLATES_IMG_PATH environment variable.",
+                    "description": "The role/type of the UI element to search for (e.g., 'button', 'textbox').",
                     "default": null
-                },
-                "threshold": {
-                    "type": "number",
-                    "description": "The matching threshold between 0 and 1 for template matching.",
-                    "default": 0.8
                 }
             },
             "required": []

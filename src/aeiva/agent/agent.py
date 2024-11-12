@@ -170,7 +170,7 @@ def main():
     action_config = {
         # Include any configurations needed for your ActionSystem
         "tools": [
-            "test_operation",
+            # "test_operation",
             "play_music",
             "stop_music",
             "analyze_gui",

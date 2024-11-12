@@ -95,6 +95,7 @@ class CognitionSystem:
         else:
             # Directly return the thought (e.g., as a response to the user)
             self.state["last_output"] = thought
+            #print("thought is===", thought)  # TODO: this is for debug
             return thought
 
     def handle_error(self, error: Exception) -> None:
