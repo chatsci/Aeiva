@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+        "name": "chwdir",
+        "description": "Changes the current working directory to the specified path.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path to change the current working directory to. Can be absolute, relative, or use '..' to navigate up the directory tree."
+                }
+            },
+            "required": ["path"]
+        }
+    }
+}

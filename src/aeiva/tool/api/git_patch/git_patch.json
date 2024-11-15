@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "git_patch",
+        "description": "Generates a Git patch including specified new files.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "new_file_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "description": "Paths of the files newly created to be included in the patch."
+                    },
+                    "description": "List of new file paths to include in the patch.",
+                    "default": []
+                }
+            },
+            "required": []
+        }
+    }
+}

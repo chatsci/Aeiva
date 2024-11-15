@@ -1,0 +1,30 @@
+{
+    "type": "function",
+    "function": {
+        "name": "execute_js_script_on_webpage",
+        "description": "Executes a custom JavaScript script within the context of the current webpage. Optionally, pass arguments to the script.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The URL of the webpage to interact with."
+                },
+                "script": {
+                    "type": "string",
+                    "description": "The JavaScript code to execute."
+                },
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "any",
+                        "description": "Arguments to pass to the JavaScript function."
+                    },
+                    "description": "Optional arguments to pass to the script.",
+                    "default": []
+                }
+            },
+            "required": ["url", "script"]
+        }
+    }
+}

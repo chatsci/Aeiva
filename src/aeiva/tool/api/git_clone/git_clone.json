@@ -1,0 +1,32 @@
+{
+    "type": "function",
+    "function": {
+        "name": "git_clone",
+        "description": "Clones a Git repository or resets an existing repository to a specific commit.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "repo_name": {
+                    "type": "string",
+                    "description": "The Git repository to clone in the format 'owner/repo'."
+                },
+                "destination": {
+                    "type": "string",
+                    "description": "The local directory to clone the repository into. Defaults to the current working directory.",
+                    "default": null
+                },
+                "just_reset": {
+                    "type": "boolean",
+                    "description": "If true, resets the existing repository to the specified commit.",
+                    "default": false
+                },
+                "commit_id": {
+                    "type": "string",
+                    "description": "The commit ID to reset to. Required if just_reset is true.",
+                    "default": ""
+                }
+            },
+            "required": ["repo_name"]
+        }
+    }
+}

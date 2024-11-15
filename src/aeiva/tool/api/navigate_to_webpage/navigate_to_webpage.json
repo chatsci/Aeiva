@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "navigate_to_webpage",
+        "description": "Navigates the browser to a specified webpage.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Full URL of the webpage to navigate to, including the protocol (e.g., 'https://www.example.com')"
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Maximum time to wait for navigation to complete (in milliseconds)",
+                    "default": 30000
+                }
+            },
+            "required": ["url"]
+        }
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "type": "function",
+    "function": {
+        "name": "click_webpage_element",
+        "description": "Simulates a click action on a specified element on the webpage. Ensures the element is visible and scrolls into view before clicking.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The URL of the webpage to interact with."
+                },
+                "selector_type": {
+                    "type": "string",
+                    "description": "Type of selector to use (e.g., 'css', 'xpath', 'id', 'name', 'tag', 'class')."
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "The selector value to locate the element on the webpage."
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Maximum time to wait for the element to be present (in seconds).",
+                    "default": 10
+                }
+            },
+            "required": ["url", "selector_type", "selector"]
+        }
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "type": "function",
+    "function": {
+        "name": "get_webpage_elements",
+        "description": "Retrieves details of all elements matching the given selector on the current webpage.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The URL of the webpage to interact with."
+                },
+                "selector_type": {
+                    "type": "string",
+                    "description": "Type of selector to use (e.g., 'css', 'xpath', 'id', 'name', 'tag', 'class')."
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "The selector value to locate elements on the webpage."
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Maximum time to wait for elements to be present (in seconds).",
+                    "default": 10
+                }
+            },
+            "required": ["url", "selector_type", "selector"]
+        }
+    }
+}

@@ -1,0 +1,38 @@
+{
+    "type": "function",
+    "function": {
+        "name": "scroll_webpage",
+        "description": "Scrolls the page in the browser either by a specified number of pixels or to a specific element. Supports scrolling in four directions: up, down, left, and right.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "Selector value of the element to interact with",
+                    "default": null
+                },
+                "selector_type": {
+                    "type": "string",
+                    "description": "Type of selector to use (e.g., 'css', 'xpath', 'id', 'name', 'tag', 'class')",
+                    "default": "css"
+                },
+                "scroll_type": {
+                    "type": "string",
+                    "description": "Type of scroll action: 'pixels' or 'element'",
+                    "default": "pixels"
+                },
+                "direction": {
+                    "type": "string",
+                    "description": "Direction to scroll: 'up', 'down', 'left', or 'right'",
+                    "default": "down"
+                },
+                "amount": {
+                    "type": "number",
+                    "description": "Number of pixels to scroll (required for 'pixels' scroll type)",
+                    "default": 200
+                }
+            },
+            "required": []
+        }
+    }
+}

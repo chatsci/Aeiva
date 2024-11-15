@@ -5,23 +5,11 @@ from aeiva.action.plan import Plan
 from aeiva.action.skill import Skill
 from aeiva.action.task import Task
 from aeiva.action.action import Action
+from aeiva.tool.tool import Tool
 import asyncio
 
 import os
 import json
-
-# Load tool schema from JSON files
-# TODO: move this function to elsewhere
-def load_tool_schema(api_name):
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    # Adjust the project root as necessary
-    project_root = os.path.abspath(os.path.join(current_path, "../../.."))
-    path = os.path.join(
-        project_root,
-        f"src/aeiva/action/tool/api/function/{api_name}/{api_name}.json",
-    )
-    with open(path, "r") as file:
-        return json.load(file)
 
 class ActionSystem:
     """
@@ -41,7 +29,7 @@ class ActionSystem:
     def setup(self) -> None:
         if "tools" in self.config.keys():
             for tool_name in self.config["tools"]:
-                self.tools.append(load_tool_schema(tool_name))
+                self.tools.append(Tool.load_tool_schema(tool_name))
         print("ActionSystem setup complete.")
 
     def plan_to_skill(self, plan: Plan) -> Skill:

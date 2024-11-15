@@ -1,0 +1,11 @@
+{
+    "type": "function",
+    "function": {
+        "name": "fun_facts",
+        "description": "Fetches fun facts from the RapidAPI Fun Facts API.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    }
+}

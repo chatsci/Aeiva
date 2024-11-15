@@ -1,0 +1,30 @@
+{
+    "type": "function",
+    "function": {
+      "name": "operate_computer",
+      "description": "Perform operations on the computer such as mouse movements, clicks, keyboard actions, and screenshots.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "The type of action to perform. Supported values include: 'key', 'type', 'mouse_move', 'left_click', 'right_click', 'double_click', 'screenshot', 'cursor_position'."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to type or key sequence to press. Required for 'key' and 'type' actions.",
+            "default": null
+          },
+          "coordinate": {
+            "type": "array",
+            "description": "X, Y coordinates for mouse actions. Required for 'mouse_move' and 'left_click_drag' actions.",
+            "items": {
+              "type": "integer"
+            },
+            "default": null
+          }
+        },
+        "required": ["action"]
+      }
+    }
+  }

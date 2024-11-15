@@ -1,0 +1,32 @@
+{
+    "type": "function",
+    "function": {
+        "name": "type_text_in_webpage_element",
+        "description": "Types text into a specified element on the webpage. Supports various selector types, timeout options, and the ability to clear existing text.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "Selector value of the element to interact with",
+                    "default": null
+                },
+                "selector_type": {
+                    "type": "string",
+                    "description": "Type of selector to use (e.g., 'css', 'xpath', 'id', 'name', 'tag', 'class')",
+                    "default": "css"
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Text to type into the element"
+                },
+                "clear_existing": {
+                    "type": "boolean",
+                    "description": "Whether to clear existing text before typing",
+                    "default": false
+                }
+            },
+            "required": ["text"]
+        }
+    }
+}

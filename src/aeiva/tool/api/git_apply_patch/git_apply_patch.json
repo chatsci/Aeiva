@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+        "name": "git_apply_patch",
+        "description": "Applies a Git patch to the current repository and performs lint checks.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "patch": {
+                    "type": "string",
+                    "description": "The patch to apply in the format of a proper diff."
+                }
+            },
+            "required": ["patch"]
+        }
+    }
+}

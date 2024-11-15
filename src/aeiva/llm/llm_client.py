@@ -16,7 +16,7 @@ from aeiva.llm.llm_gateway_exceptions import (
 from aeiva.llm.fault_tolerance import retry_async, retry_sync
 from aeiva.logger.logger import get_logger
 from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
-from aeiva.action.tool.tool import Tool
+from aeiva.tool.tool import Tool
 
 # # Enable verbose logging in litellm for debug
 # import litellm
@@ -262,7 +262,7 @@ class LLMClient:
             self.logger.error(f"Streaming LLM Gateway Error: {e}")
             yield "An error occurred during streaming."
 
-    def call_tool_via_server(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any:
+    def call_tool_via_server(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any: # TODO: may need revise
         """Calls the API via FastAPI server."""
         url = f"http://localhost:8000/api/{api_name}/{function_name}"
         self.logger.info(f"Calling {api_name} with params: {params}")
@@ -276,15 +276,15 @@ class LLMClient:
         else:
             return f"HTTP Error {response.status_code}: {response.text}"
 
-    async def call_tool(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any:
+    async def call_tool(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any: # TODO: may need revise
         """Calls the API via action module."""
         tool = Tool(api_name)
-        return await tool.execute(params)
+        return await tool.aexecute(params)
     
-    def call_tool_sync(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any:
+    def call_tool_sync(self, api_name: str, function_name: str, params: Dict[str, Any]) -> Any: # TODO: may need revise
         """Calls the API via action module."""
         tool = Tool(api_name)
-        return tool.execute_sync(params)
+        return tool.execute(params)
 
     def _build_params(
         self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs

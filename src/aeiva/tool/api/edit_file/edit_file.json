@@ -1,0 +1,30 @@
+{
+    "type": "function",
+    "function": {
+        "name": "edit_file",
+        "description": "Edits a file by replacing text in the specified line range.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "The path to the file to edit. If not provided, edits the currently open file."
+                },
+                "text": {
+                    "type": "string",
+                    "description": "The text that will replace the specified line range in the file."
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "The line number at which the file edit will start (inclusive)."
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "The line number at which the file edit will end (inclusive). If not provided, appends the text.",
+                    "default": null
+                }
+            },
+            "required": ["text", "start_line"]
+        }
+    }
+}

@@ -1,0 +1,74 @@
+toolkits:
+  file_toolkit:
+    tools:
+      - create_file_or_folder
+      - delete_file
+      - edit_file
+      - find_file
+      - list_files
+      - open_file_or_folder
+      - read_file
+      - rename_file
+      - search_file_or_folder
+      - write_file
+
+  arxiv_toolkit:
+    tools:
+      - download_arxiv_papers
+      - search_arxiv_papers
+
+  auto_ui_toolkit:
+    tools:
+      - analyze_gui
+      - analyze_gui_by_ocr
+      - click_mouse
+      - click_on_element
+      - move_mouse
+      - operate_computer
+      - scroll
+      - type_into_element
+      - type_keyboard
+
+  git_toolkit:
+    tools:
+      - git_apply_patch
+      - git_clone
+      - git_custom
+      - git_patch
+      - git_repo_tree
+
+  shell_toolkit:
+    tools:
+      - chwdir
+      - execute_bash_command
+      - execute_script
+      - grep
+
+  web_toolkit:
+    tools:
+      - click_webpage_element
+      - crawl
+      - execute_js_script_on_webpage
+      - get_webpage_details
+      - get_webpage_elements
+      - navigate_browser_history
+      - navigate_to_webpage
+      - refresh_webpage
+      - scrape
+      - scroll_webpage
+      - type_text_in_webpage_element
+      - web_search
+
+  math_toolkit:
+    tools:
+      - calculator
+
+  system_toolkit:
+    tools:
+      - get_system_info
+      - open_application
+      - close_application
+      - percept_terminal_input
+      - play_music
+      - stop_music
+      - take_screenshot

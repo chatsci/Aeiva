@@ -1,0 +1,21 @@
+{
+    "type": "function",
+    "function": {
+        "name": "rename_file",
+        "description": "Renames a file from old_file_path to new_file_path.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "old_file_path": {
+                    "type": "string",
+                    "description": "The current path of the file."
+                },
+                "new_file_path": {
+                    "type": "string",
+                    "description": "The new path for the file."
+                }
+            },
+            "required": ["old_file_path", "new_file_path"]
+        }
+    }
+}

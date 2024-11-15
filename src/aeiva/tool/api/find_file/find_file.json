@@ -1,0 +1,43 @@
+{
+    "type": "function",
+    "function": {
+        "name": "find_file",
+        "description": "Finds files matching a pattern within a directory structure.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "description": "Pattern to search for (supports wildcards, e.g., \"*.txt\")."
+                },
+                "depth": {
+                    "type": "integer",
+                    "description": "Maximum depth to search. None for unlimited.",
+                    "minimum": 0
+                },
+                "case_sensitive": {
+                    "type": "boolean",
+                    "description": "If true, the search is case-sensitive.",
+                    "default": false
+                },
+                "include": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of directories to include in the search.",
+                    "default": null
+                },
+                "exclude": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of directories to exclude from the search.",
+                    "default": null
+                }
+            },
+            "required": ["pattern"]
+        }
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "type": "function",
+    "function": {
+        "name": "navigate_browser_history",
+        "description": "Navigates the browser history either backward or forward by a specified number of steps.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string",
+                    "description": "Direction to navigate: 'back' or 'forward'"
+                },
+                "steps": {
+                    "type": "number",
+                    "description": "Number of steps to navigate in the specified direction",
+                    "default": 1,
+                    "minimum": 1
+                }
+            },
+            "required": ["direction"]
+        }
+    }
+}

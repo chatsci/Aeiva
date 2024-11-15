@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+      "name": "scrape",
+      "description": "Scrapes the contents of a website and returns its content in markdown format.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The website URL to scrape.",
+            "format": "uri"
+          }
+        },
+        "required": ["url"]
+      }
+    }
+  }

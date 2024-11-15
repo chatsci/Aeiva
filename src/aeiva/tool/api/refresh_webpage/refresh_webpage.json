@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+        "name": "refresh_webpage",
+        "description": "Refreshes the current page in the browser, optionally ignoring the browser cache.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ignore_cache": {
+                    "type": "boolean",
+                    "description": "If True, the browser cache will be ignored when refreshing the page.",
+                    "default": false
+                }
+            },
+            "required": []
+        }
+    }
+}

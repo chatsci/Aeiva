@@ -1,0 +1,24 @@
+{
+    "name": "execute_bash_command",
+    "description": "Execute a bash command in a persistent or new session.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Bash command to be executed."
+        },
+        "session_id": {
+          "type": "string",
+          "description": "ID of the bash session. If None, executes in a new shell.",
+          "default": null
+        },
+        "restart": {
+          "type": "boolean",
+          "description": "Whether to restart the session before executing the command.",
+          "default": false
+        }
+      },
+      "required": ["command"]
+    }
+  }

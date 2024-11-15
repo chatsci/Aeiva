@@ -1,0 +1,29 @@
+{
+    "type": "function",
+    "function": {
+      "name": "search_arxiv_papers",
+      "description": "Searches for academic papers on arXiv using a query string and optional paper IDs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query for arXiv."
+          },
+          "paper_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional list of arXiv paper IDs."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of search results to return.",
+            "default": 5
+          }
+        },
+        "required": ["query"]
+      }
+    }
+  }

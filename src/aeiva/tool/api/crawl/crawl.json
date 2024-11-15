@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+      "name": "crawl",
+      "description": "Crawls a website and returns its content in markdown format.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The website URL to crawl.",
+            "format": "uri"
+          }
+        },
+        "required": ["url"]
+      }
+    }
+  }

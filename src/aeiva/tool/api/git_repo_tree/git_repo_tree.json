@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+        "name": "git_repo_tree",
+        "description": "Creates a tree representation of the Git repository.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "git_repo_path": {
+                    "type": "string",
+                    "description": "Relative path to the Git repository. Defaults to the current directory.",
+                    "default": "."
+                }
+            },
+            "required": []
+        }
+    }
+}

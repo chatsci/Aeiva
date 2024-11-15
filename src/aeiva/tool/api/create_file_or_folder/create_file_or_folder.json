@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "create_file_or_folder",
+        "description": "Creates a new file or directory at the specified path.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path to create. If is_directory is false, creates a file. If is_directory is true, creates a directory."
+                },
+                "is_directory": {
+                    "type": "boolean",
+                    "description": "Whether to create a directory instead of a file.",
+                    "default": false
+                }
+            },
+            "required": ["path"]
+        }
+    }
+}

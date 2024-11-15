@@ -1,0 +1,31 @@
+{
+    "type": "function",
+    "function": {
+        "name": "grep",
+        "description": "Searches for a specific word or phrase across multiple files based on a pattern.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "word": {
+                    "type": "string",
+                    "description": "The term to search for."
+                },
+                "pattern": {
+                    "type": "string",
+                    "description": "The file, directory, or glob pattern to search in. If not provided, searches in the current working directory."
+                },
+                "recursive": {
+                    "type": "boolean",
+                    "description": "If true, search recursively in subdirectories.",
+                    "default": true
+                },
+                "case_insensitive": {
+                    "type": "boolean",
+                    "description": "If true, perform case-insensitive search.",
+                    "default": true
+                }
+            },
+            "required": ["word"]
+        }
+    }
+}

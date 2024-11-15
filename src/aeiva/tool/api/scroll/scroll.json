@@ -1,0 +1,31 @@
+{
+    "type": "function",
+    "function": {
+        "name": "scroll",
+        "description": "Scrolls the view up or down by a specified number of lines.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string",
+                    "description": "The direction to scroll: 'up' or 'down'.",
+                    "enum": ["up", "down"],
+                    "default": "down"
+                },
+                "lines": {
+                    "type": "integer",
+                    "description": "Number of lines to scroll by. Must be between 1 and 1000.",
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "default": 100
+                },
+                "scroll_id": {
+                    "type": "integer",
+                    "description": "Unique ID for each scroll request. Increment this ID for consecutive scrolls.",
+                    "default": 0
+                }
+            },
+            "required": []
+        }
+    }
+}

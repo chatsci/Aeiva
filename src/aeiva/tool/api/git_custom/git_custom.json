@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "git_custom",
+        "description": "Runs a custom Git command in the specified directory.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cmd": {
+                    "type": "string",
+                    "description": "The custom Git command to run. Do not include the 'git' prefix. Example: 'add -u', 'commit -m \"test-commit\"'."
+                },
+                "cwd": {
+                    "type": "string",
+                    "description": "The directory to run the Git command in. Defaults to the current working directory.",
+                    "default": null
+                }
+            },
+            "required": ["cmd"]
+        }
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "calculator",
+  "description": "Perform mathematical calculations, like addition, subtraction, multiplication, and division.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "operation": {
+        "type": "string",
+        "description": "A mathematical expression, e.g., '200*7' or '5000/2*10'."
+      }
+    },
+    "required": ["operation"]
+  }
+}
