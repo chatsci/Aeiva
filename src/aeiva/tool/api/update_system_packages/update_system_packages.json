@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+      "name": "update_system_packages",
+      "description": "Initiates system package updates.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "required": []
+    }
+  }

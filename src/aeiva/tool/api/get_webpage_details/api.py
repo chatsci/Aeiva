@@ -6,21 +6,18 @@ from selenium.common.exceptions import WebDriverException
 from pydantic import ValidationError
 import json
 
-def get_webpage_details(request: Dict[str, Any]) -> Dict[str, Any]:
+def get_webpage_details(url: str, include_accessibility: Optional[bool]=True) -> Dict[str, Any]:
     """
     Retrieves comprehensive details about the current webpage, including title, URL, meta tags, and optionally, an accessibility snapshot.
 
     Args:
-        request (Dict[str, Any]): A dictionary containing the request parameters.
+        url (str): The URL of the webpage to interact with.
+        include_accessibility (Optional[bool]): Whether to include an accessibility snapshot of the page
 
     Returns:
         Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
     """
     try:
-        # Extract parameters from the request
-        url = request.get("url")
-        include_accessibility = request.get("include_accessibility", True)
-
         # Validate required parameters
         if not url:
             raise ValidationError("Missing required parameter: url.")

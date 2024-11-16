@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+      "name": "get_disk_usage",
+      "description": "Provides information on disk space usage for a specified path.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The path to check disk usage for.",
+            "default": "/"
+          }
+        },
+        "required": []
+      }
+    }
+  }

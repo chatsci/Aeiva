@@ -7,23 +7,25 @@ from selenium.common.exceptions import NoSuchElementException, WebDriverExceptio
 from pydantic import ValidationError
 import json
 
-def get_webpage_elements(request: Dict[str, Any]) -> Dict[str, Any]:
+def get_webpage_elements(
+    url: str,
+    selector_type: str,
+    selector: str,
+    timeout: Optional[float] = 10.0
+) -> Dict[str, Any]:
     """
     Retrieves details of all elements matching the given selector on the current webpage.
 
     Args:
-        request (Dict[str, Any]): A dictionary containing the request parameters.
+        url (str): The URL of the webpage to interact with.
+        selector_type (str): Type of selector to use (e.g., 'css', 'xpath', 'id', 'name', 'tag', 'class').
+        selector (str): The selector value to locate the element on the webpage.
+        timeout (float, optional): Maximum time to wait for the element to be present (in seconds). Defaults to 10.0.
 
     Returns:
         Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
     """
     try:
-        # Extract parameters from the request
-        url = request.get("url")
-        selector_type = request.get("selector_type", "").lower()
-        selector = request.get("selector")
-        timeout = request.get("timeout", 10)
-
         # Validate required parameters
         if not url or not selector_type or not selector:
             raise ValidationError("Missing required parameters.")

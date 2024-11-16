@@ -1,0 +1,21 @@
+{
+    "type": "function",
+    "function": {
+      "name": "create_new_shell_session",
+      "description": "Initialize a new shell session for executing commands in an isolated environment.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "session_name": {
+            "type": "string",
+            "description": "A custom name for the shell session. If not provided, a unique ID will be used."
+          },
+          "shell_type": {
+            "type": "string",
+            "description": "The type of shell to use (e.g., 'bash', 'zsh', 'powershell', 'cmd'). Defaults to the system's default shell."
+          }
+        },
+        "required": []
+      }
+    }
+  }

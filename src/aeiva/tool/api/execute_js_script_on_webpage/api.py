@@ -6,22 +6,19 @@ from selenium.common.exceptions import WebDriverException
 from pydantic import ValidationError
 import json
 
-def execute_js_script_on_webpage(request: Dict[str, Any]) -> Dict[str, Any]:
+def execute_js_script_on_webpage(url: str, script: str, args: Optional[List[Any]]=[]) -> Dict[str, Any]:
     """
     Executes a custom JavaScript script within the context of the current webpage. Optionally, pass arguments to the script.
 
     Args:
-        request (Dict[str, Any]): A dictionary containing the request parameters.
+        url (str): The URL of the webpage to interact with.
+        script (str): The JavaScript code to execute.
+        args (List[Any], optional): Arguments to pass to the script. Defaults to an empty list.
 
     Returns:
         Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
     """
     try:
-        # Extract parameters from the request
-        url = request.get("url")
-        script = request.get("script")
-        args = request.get("args", [])
-
         # Validate required parameters
         if not url or not script:
             raise ValidationError("Missing required parameters.")

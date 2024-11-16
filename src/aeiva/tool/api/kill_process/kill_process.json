@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "kill_process",
+      "description": "Terminate a specified process by PID or name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "process_identifier": {
+            "type": "string",
+            "description": "The PID (as string) or name of the process to terminate."
+          }
+        },
+        "required": ["process_identifier"]
+      }
+    }
+  }

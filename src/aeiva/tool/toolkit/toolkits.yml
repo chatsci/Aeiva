@@ -1,4 +1,32 @@
 toolkits:
+
+  system_toolkit:
+    tools:
+      - get_system_info
+      - open_application
+      - close_application
+      - percept_terminal_input
+      - play_music
+      - stop_music
+      - take_screenshot
+      - list_processes
+      - kill_process
+      - monitor_process
+      - get_network_info
+      - check_internet_connection
+      - get_disk_usage
+      - clean_temp_files
+      - list_drives
+      - get_env_var
+      - set_env_var
+      - update_system_packages
+      - install_package
+      - create_user
+      - delete_user
+      - change_user_password
+      - view_system_logs
+      - monitor_system_resources
+      
   file_toolkit:
     tools:
       - create_file_or_folder
@@ -11,6 +39,10 @@ toolkits:
       - rename_file
       - search_file_or_folder
       - write_file
+      - copy_file_or_folder
+      - move_file_or_folder
+      - change_permissions
+      - get_file_metadata
 
   arxiv_toolkit:
     tools:
@@ -43,6 +75,7 @@ toolkits:
       - execute_bash_command
       - execute_script
       - grep
+      - create_new_shell_session
 
   web_toolkit:
     tools:
@@ -62,13 +95,3 @@ toolkits:
   math_toolkit:
     tools:
       - calculator
-
-  system_toolkit:
-    tools:
-      - get_system_info
-      - open_application
-      - close_application
-      - percept_terminal_input
-      - play_music
-      - stop_music
-      - take_screenshot

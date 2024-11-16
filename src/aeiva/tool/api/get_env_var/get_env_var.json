@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "get_env_var",
+      "description": "Retrieve the value of a specified environment variable.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "var_name": {
+            "type": "string",
+            "description": "The name of the environment variable to retrieve."
+          }
+        },
+        "required": ["var_name"]
+      }
+    }
+  }

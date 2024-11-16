@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+      "name": "get_network_info",
+      "description": "Retrieve network information of the system, including interfaces, addresses, and statistics.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "required": []
+    }
+  }

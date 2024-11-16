@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "get_package_root",
+      "description": "Obtain the root directory of a given Python package.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "package_name": {
+            "type": "string",
+            "description": "The name of the package to find the root directory for."
+          }
+        },
+        "required": ["package_name"]
+      }
+    }
+  }

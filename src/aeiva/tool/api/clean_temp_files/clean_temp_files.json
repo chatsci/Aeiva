@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+      "name": "clean_temp_files",
+      "description": "Removes temporary files to free up space.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Directory path to clean."
+            },
+            "description": "List of directories to clean. Defaults to system temp directories.",
+            "default": null
+          }
+        },
+        "required": []
+      }
+    }
+  }

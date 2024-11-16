@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "monitor_process",
+      "description": "Monitor the status or resource usage of a specific process by PID or name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "process_identifier": {
+            "type": "string",
+            "description": "The PID (as string) or name of the process to monitor."
+          }
+        },
+        "required": ["process_identifier"]
+      }
+    }
+  }

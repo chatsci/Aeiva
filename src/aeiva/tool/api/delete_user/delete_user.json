@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "delete_user",
+      "description": "Remove an existing user from the system.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The username of the user to remove."
+          }
+        },
+        "required": ["username"]
+      }
+    }
+  }

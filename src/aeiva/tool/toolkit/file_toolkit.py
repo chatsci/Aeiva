@@ -12,14 +12,18 @@ class FileToolkit(Toolkit):
             name="FileToolkit",
             tool_names=[
                 "create_file_or_folder",
+                "open_file_or_folder",
+                "search_file_or_folder",
+                "copy_file_or_folder",
+                "move_file_or_folder",
+                "change_permissions",
+                "get_file_metadata",
                 "delete_file",
                 "edit_file",
                 "find_file",
                 "list_files",
-                "open_file_or_folder",
                 "read_file",
                 "rename_file",
-                "search_file_or_folder",
                 "write_file"
             ],
             config=config

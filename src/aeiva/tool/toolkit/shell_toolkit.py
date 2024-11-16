@@ -14,7 +14,8 @@ class ShellToolkit(Toolkit):
                 "chwdir",
                 "execute_bash_command",
                 "execute_script",
-                "grep"
+                "grep",
+                "create_new_shell_session"
             ],
             config=config
         )

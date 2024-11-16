@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+      "name": "get_user_home_path",
+      "description": "Retrieve the home directory of the current user across different platforms.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "required": []
+    }
+  }

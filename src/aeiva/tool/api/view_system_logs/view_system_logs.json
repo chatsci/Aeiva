@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+      "name": "view_system_logs",
+      "description": "Access and retrieve system logs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "log_type": {
+            "type": "string",
+            "description": "Type of logs to retrieve ('system' or 'application'). Defaults to 'system'.",
+            "default": "system"
+          }
+        },
+        "required": []
+      }
+    }
+  }

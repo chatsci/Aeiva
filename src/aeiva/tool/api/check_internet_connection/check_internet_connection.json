@@ -1,0 +1,28 @@
+{
+    "type": "function",
+    "function": {
+      "name": "check_internet_connection",
+      "description": "Verify if the system has an active internet connection.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "description": "Host to connect to for checking internet connectivity.",
+            "default": "8.8.8.8"
+          },
+          "port": {
+            "type": "integer",
+            "description": "Port to connect to for checking internet connectivity.",
+            "default": 53
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Connection timeout in seconds.",
+            "default": 3.0
+          }
+        },
+        "required": []
+      }
+    }
+  }

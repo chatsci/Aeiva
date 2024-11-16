@@ -1,0 +1,18 @@
+{
+    "type": "function",
+    "function": {
+      "name": "monitor_system_resources",
+      "description": "Track CPU, memory, and other resource usage in real-time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "interval": {
+            "type": "number",
+            "description": "Time in seconds between each resource check.",
+            "default": 1.0
+          }
+        },
+        "required": []
+      }
+    }
+  }

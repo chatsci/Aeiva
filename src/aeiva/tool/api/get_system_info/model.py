@@ -1,16 +1,26 @@
-# tools/get_system_info/model.py
+# toolkit/system_toolkit/get_system_info/model.py
 
+from enum import Enum
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
-
-class GetSystemInfoErrorCode:
-    GET_SYSTEM_INFO_FAILED = "GET_SYSTEM_INFO_FAILED"
-    SUCCESS = "SUCCESS"
 
 class GetSystemInfoParams(BaseModel):
-    pass  # No parameters
+    # No parameters needed for this API
+    pass
 
 class GetSystemInfoResult(BaseModel):
-    output: Optional[Dict[str, Any]] = Field(None, description="System information data.")
-    error: Optional[str] = Field(None, description="Error message if any.")
-    error_code: Optional[str] = Field(None, description="Error code indicating the result status.")
+    output: dict = Field(
+        ..., 
+        description="Comprehensive system information."
+    )
+    error: str = Field(
+        None, 
+        description="Error message, if any."
+    )
+    error_code: str = Field(
+        ..., 
+        description="Error code representing the result state."
+    )
+
+class GetSystemInfoErrorCode(str, Enum):
+    SUCCESS = "SUCCESS"
+    UNEXPECTED_ERROR = "UNEXPECTED_ERROR"

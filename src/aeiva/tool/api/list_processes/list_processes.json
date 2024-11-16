@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+      "name": "list_processes",
+      "description": "List all currently running processes on the system.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "required": []
+    }
+  }

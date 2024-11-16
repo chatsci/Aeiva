@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+      "name": "list_drives",
+      "description": "List all mounted drives or partitions on the system.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "required": []
+    }
+  }
