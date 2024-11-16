@@ -2,7 +2,7 @@
 
 from aeiva.lmp.lmp import simple, complex, llm_client
 import json
-from aeiva.action.tool.tool import Tool
+from aeiva.tool.tool import Tool
 
 def main():
     # test @simple decorator
