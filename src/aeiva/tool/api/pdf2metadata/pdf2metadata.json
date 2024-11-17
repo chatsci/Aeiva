@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "pdf2metadata",
+      "description": "Extracts metadata from a PDF file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input PDF file."
+          }
+        },
+        "required": ["input_file_path"]
+      }
+    }
+  }

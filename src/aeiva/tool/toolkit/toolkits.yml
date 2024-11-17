@@ -26,7 +26,7 @@ toolkits:
       - change_user_password
       - view_system_logs
       - monitor_system_resources
-      
+
   file_toolkit:
     tools:
       - create_file_or_folder
@@ -48,6 +48,26 @@ toolkits:
     tools:
       - download_arxiv_papers
       - search_arxiv_papers
+  
+  pdf_toolkit:
+    tools:
+      - pdf2markdown
+      - pdf2text
+      - pdf2tables
+      - pdf2images
+      - pdf2metadata
+      - pdf2ocr
+  
+  docx_toolkit:
+    tools:
+      - create_docx
+      - docx2html
+      - docx2images
+      - docx2markdown
+      - docx2metadata
+      - docx2pdf
+      - docx2text
+      - modify_docx
 
   auto_ui_toolkit:
     tools:

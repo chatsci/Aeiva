@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+      "name": "docx2images",
+      "description": "Extracts images from a DOCX file and saves them to a specified directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input DOCX file."
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "Optional directory to save extracted images.",
+            "default": null
+          }
+        },
+        "required": ["input_file_path"]
+      }
+    }
+  }

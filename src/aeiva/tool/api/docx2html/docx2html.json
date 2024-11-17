@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+      "name": "docx2html",
+      "description": "Converts a DOCX file to HTML format and saves it to a file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input DOCX file."
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "The path to save the HTML content."
+          }
+        },
+        "required": ["input_file_path", "output_file_path"]
+      }
+    }
+  }
+  }

@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "docx2metadata",
+      "description": "Extracts metadata from a DOCX file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input DOCX file."
+          }
+        },
+        "required": ["input_file_path"]
+      }
+    }
+  }

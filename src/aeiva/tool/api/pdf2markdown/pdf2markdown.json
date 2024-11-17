@@ -1,0 +1,31 @@
+{
+    "type": "function",
+    "function": {
+      "name": "pdf2markdown",
+      "description": "Extracts content from a PDF file and converts it to Markdown format. Optionally, specify pages to extract and save the output to a file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input PDF file."
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "description": "0-based page numbers to extract."
+            },
+            "description": "Optional list of 0-based page numbers to extract. If not provided, all pages are extracted.",
+            "default": null
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "Optional path to save the output Markdown file. If not provided, the Markdown text is returned.",
+            "default": null
+          }
+        },
+        "required": ["input_file_path"]
+      }
+    }
+  }

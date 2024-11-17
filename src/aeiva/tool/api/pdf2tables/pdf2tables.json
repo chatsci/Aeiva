@@ -1,0 +1,36 @@
+{
+    "type": "function",
+    "function": {
+      "name": "pdf2tables",
+      "description": "Extracts tables from a PDF file. Optionally, specify pages to extract tables from and save the output in a specified format.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input PDF file."
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "description": "0-based page numbers to extract tables from."
+            },
+            "description": "Optional list of 0-based page numbers to extract tables from. If not provided, tables from all pages are extracted.",
+            "default": null
+          },
+          "output_format": {
+            "type": "string",
+            "description": "The format to save the extracted tables. Supported formats: 'json', 'csv'. Defaults to 'json'.",
+            "default": "json"
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "Optional path to save the extracted tables. If not provided, the tables are returned in the response.",
+            "default": null
+          }
+        },
+        "required": ["input_file_path"]
+      }
+    }
+  }

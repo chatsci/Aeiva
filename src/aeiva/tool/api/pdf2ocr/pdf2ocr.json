@@ -1,0 +1,27 @@
+{
+    "type": "function",
+    "function": {
+      "name": "pdf2ocr",
+      "description": "Performs OCR on a PDF file to make it searchable. Optionally, save the OCR-processed PDF to a specified path.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input PDF file."
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "Optional path to save the OCR-processed PDF file. If not provided, the OCR text is returned.",
+            "default": null
+          },
+          "language": {
+            "type": "string",
+            "description": "The language to use for OCR. Defaults to 'eng' (English).",
+            "default": "eng"
+          }
+        },
+        "required": ["input_file_path"]
+      }
+    }
+  }

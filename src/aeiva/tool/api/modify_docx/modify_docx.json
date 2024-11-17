@@ -1,0 +1,41 @@
+{
+    "type": "function",
+    "function": {
+      "name": "modify_docx",
+      "description": "Modifies a DOCX document with specified changes. Supported modifications include replacing text and adding paragraphs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input DOCX file."
+          },
+          "modifications": {
+            "type": "object",
+            "description": "The modifications to apply. Supported modifications include 'replace_text' and 'add_paragraph'.",
+            "properties": {
+              "replace_text": {
+                "type": "object",
+                "description": "Replaces occurrences of text. Requires 'old' and 'new' keys.",
+                "properties": {
+                  "old": {"type": "string", "description": "The text to be replaced."},
+                  "new": {"type": "string", "description": "The text to replace with."}
+                },
+                "required": ["old", "new"]
+              },
+              "add_paragraph": {
+                "type": "string",
+                "description": "Adds a new paragraph with the given text."
+              }
+            }
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "Optional path to save the modified DOCX file.",
+            "default": null
+          }
+        },
+        "required": ["input_file_path", "modifications"]
+      }
+    }
+  }

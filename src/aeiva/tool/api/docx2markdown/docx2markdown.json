@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+      "name": "docx2markdown",
+      "description": "Converts a DOCX file to Markdown format.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input DOCX file."
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "Optional path to save the converted Markdown file.",
+            "default": null
+          }
+        },
+        "required": ["input_file_path"]
+      }
+    }
+  }

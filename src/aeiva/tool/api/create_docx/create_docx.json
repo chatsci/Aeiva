@@ -1,0 +1,17 @@
+{
+    "type": "function",
+    "function": {
+      "name": "create_docx",
+      "description": "Creates a new DOCX file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "output_file_path": {
+            "type": "string",
+            "description": "The path to save the new DOCX file."
+          }
+        },
+        "required": ["output_file_path"]
+      }
+    }
+  }

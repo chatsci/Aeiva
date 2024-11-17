@@ -1,0 +1,21 @@
+{
+    "type": "function",
+    "function": {
+      "name": "docx2pdf",
+      "description": "Converts a DOCX file to PDF format.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_file_path": {
+            "type": "string",
+            "description": "The path to the input DOCX file."
+          },
+          "output_file_path": {
+            "type": "string",
+            "description": "The path to save the output PDF file."
+          }
+        },
+        "required": ["input_file_path", "output_file_path"]
+      }
+    }
+  }
