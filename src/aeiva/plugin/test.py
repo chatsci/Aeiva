@@ -29,7 +29,7 @@ def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Compute the absolute paths to the plugins directory and zip file
-    plugins_dir = os.path.join(current_dir, 'plugins')
+    plugins_dir = os.path.join(current_dir, 'ability')
     zip_file = os.path.join(plugins_dir, 'more_plugins.zip')  # Corrected path
 
     # Add the project root to sys.path to ensure proper package imports
