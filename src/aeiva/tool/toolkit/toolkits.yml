@@ -43,11 +43,41 @@ toolkits:
       - move_file_or_folder
       - change_permissions
       - get_file_metadata
-
-  arxiv_toolkit:
+    
+  shell_toolkit:
     tools:
-      - download_arxiv_papers
-      - search_arxiv_papers
+      - chwdir
+      - execute_bash_command
+      - execute_script
+      - grep
+      - create_new_shell_session
+  
+  auto_ui_toolkit:
+    tools:
+      - analyze_gui
+      - analyze_gui_by_ocr
+      - click_mouse
+      - click_on_element
+      - move_mouse
+      - operate_computer
+      - scroll
+      - type_into_element
+      - type_keyboard
+
+  web_toolkit:
+    tools:
+      - click_webpage_element
+      - crawl
+      - execute_js_script_on_webpage
+      - get_webpage_details
+      - get_webpage_elements
+      - navigate_browser_history
+      - navigate_to_webpage
+      - refresh_webpage
+      - scrape
+      - scroll_webpage
+      - type_text_in_webpage_element
+      - web_search
   
   pdf_toolkit:
     tools:
@@ -69,17 +99,10 @@ toolkits:
       - docx2text
       - modify_docx
 
-  auto_ui_toolkit:
+  arxiv_toolkit:
     tools:
-      - analyze_gui
-      - analyze_gui_by_ocr
-      - click_mouse
-      - click_on_element
-      - move_mouse
-      - operate_computer
-      - scroll
-      - type_into_element
-      - type_keyboard
+      - download_arxiv_papers
+      - search_arxiv_papers
 
   git_toolkit:
     tools:
@@ -88,29 +111,6 @@ toolkits:
       - git_custom
       - git_patch
       - git_repo_tree
-
-  shell_toolkit:
-    tools:
-      - chwdir
-      - execute_bash_command
-      - execute_script
-      - grep
-      - create_new_shell_session
-
-  web_toolkit:
-    tools:
-      - click_webpage_element
-      - crawl
-      - execute_js_script_on_webpage
-      - get_webpage_details
-      - get_webpage_elements
-      - navigate_browser_history
-      - navigate_to_webpage
-      - refresh_webpage
-      - scrape
-      - scroll_webpage
-      - type_text_in_webpage_element
-      - web_search
 
   math_toolkit:
     tools:
