@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
 """
-Multimodal Chatbot using LLM with function call capabilities and tool integration via APIs.
-Updated to include image, audio, and video inputs based on the old UI design and compatible with Gradio 5.1.
+Enhanced Multimodal Chatbot with VS Code-like UI using Gradio 5.1.
+Includes file browser, file viewer/editor, terminal log, and chatbot interface.
 """
 
 import os
@@ -13,10 +13,14 @@ import numpy as np
 from datetime import datetime
 import soundfile as sf
 import PIL
+import logging
 
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.logger.logger import get_logger
+
+# Import the custom Log component
+from aeiva.demo.gradio_log_component import Log  # Ensure log.py is in the same directory
 
 # Setup logger
 logger = get_logger(__name__, level="INFO")
@@ -60,13 +64,17 @@ context = {
 }
 
 # Gradio chatbot handler
-async def bot(user_input, history):
+async def bot(user_input, history, top_p, temperature, max_length_tokens, max_context_length_tokens):
     """
     Handles chatbot logic and dynamically invokes functions via LLM function calls.
 
     Args:
         user_input (str): The user's input.
         history (list): Conversation history as list of dicts.
+        top_p (float): Top-p sampling parameter.
+        temperature (float): Temperature parameter.
+        max_length_tokens (int): Maximum generation tokens.
+        max_context_length_tokens (int): Maximum history tokens.
 
     Yields:
         tuple: Updated history and an empty string to clear the input box.
@@ -89,7 +97,8 @@ async def bot(user_input, history):
         ]
 
         # Get the response stream from LLM
-        stream = llm(messages, tools=tools)
+        stream = llm(messages, tools=tools, top_p=top_p, temperature=temperature,
+                    max_length_tokens=max_length_tokens, max_context_length_tokens=max_context_length_tokens)
         assistant_message = ''
         async for chunk in stream:
             assistant_message += chunk
@@ -107,6 +116,7 @@ def handle_image_upload(image: PIL.Image):
         image_path = f"uploads/uploaded_image_{timestamp}.jpg"
         image.save(image_path)
         context["image_path"] = image_path
+        logger.info(f"Image uploaded: {image_path}")
         return "User uploaded an image."
     return ""
 
@@ -117,6 +127,7 @@ def handle_video_upload(video):
         with open(video_path, "wb") as f:
             f.write(video.read())
         context["video_path"] = video_path
+        logger.info(f"Video uploaded: {video_path}")
         return "User uploaded a video."
     return ""
 
@@ -129,6 +140,7 @@ def handle_audio_upload(audio):
         audio_path = f"uploads/uploaded_audio_{timestamp}.wav"
         sf.write(audio_path, audio_data_normalized, sample_rate, subtype='PCM_16')
         context["audio_path"] = audio_path
+        logger.info(f"Audio uploaded: {audio_path}")
         return "User uploaded an audio file."
     return ""
 
@@ -151,41 +163,104 @@ def handle_upload(file):
     elif file.type.startswith("audio"):
         return handle_audio_upload(file)
     else:
+        logger.warning(f"Unsupported file type uploaded: {file.type}")
         return "Unsupported file type uploaded."
 
 def clear_media():
     context["image_path"] = ""
     context["audio_path"] = ""
     context["video_path"] = ""
+    logger.info("Media cleared.")
     return ""
 
-# Define custom CSS
-# custom_css = """
-# <style>
-# /* Style for the UploadButton */
-# .upload-button {
-#     width: 40px !important; /* Further reduced width */
-#     height: 40px !important; /* Match the Textbox height */
-#     padding: 5px;
-#     font-size: 16px;
-#     border-radius: 5px;
-# }
+# File browser handler (simple implementation)
+def list_files(folder_path="uploads"):
+    """
+    Lists files in the specified folder.
 
-# /* Optional: Adjust the Textbox height to match the button */
-# .input-textbox textarea {
-#     height: 40px !important; /* Ensure the Textbox height matches the button */
-#     resize: none; /* Prevent resizing */
-#     font-size: 16px;
-# }
-# </style>
-# """
+    Args:
+        folder_path (str): Path to the folder.
+
+    Returns:
+        list: List of file names.
+    """
+    try:
+        files = os.listdir(folder_path)
+        # Optionally filter files based on extensions or other criteria
+        logger.info(f"Listing files in {folder_path}: {files}")
+        return files
+    except Exception as e:
+        logger.error(f"Error listing files: {e}")
+        return []
+
+# File viewer/editor handler
+def view_file(file_name, file_type):
+    """
+    Returns the content of the file based on its type.
+
+    Args:
+        file_name (str): Name of the file.
+        file_type (str): Type of the file (markdown, code, etc.).
+
+    Returns:
+        str: Content of the file or appropriate message.
+    """
+    file_path = os.path.join("uploads", file_name)
+    if not os.path.exists(file_path):
+        logger.warning(f"File not found: {file_path}")
+        return "File not found."
+
+    try:
+        if file_type in ["Markdown", "Code", "Text"]:
+            with open(file_path, "r") as f:
+                content = f.read()
+            logger.info(f"File {file_type} viewed: {file_path}")
+            return content
+        elif file_type == "3D":
+            # Placeholder for 3D viewer, can be integrated with a custom component
+            logger.info(f"3D Viewer requested for: {file_path}")
+            return f"3D Viewer for {file_name} is not implemented yet."
+        else:
+            logger.warning(f"Unsupported file type requested: {file_type}")
+            return "Unsupported file type."
+    except Exception as e:
+        logger.error(f"Error reading file {file_path}: {e}")
+        return "Error reading file."
+
+# Define custom CSS (optional)
+custom_css = """
+<style>
+/* Add your custom CSS here */
+.app {
+    max-width: 100% !important;
+}
+
+#chatbot {
+    height: 400px;
+    overflow-y: auto;
+}
+
+.input-textbox textarea {
+    height: 40px !important; /* Ensure the Textbox height matches the button */
+    resize: none; /* Prevent resizing */
+    font-size: 16px;
+}
+.upload-button {
+    width: 40px !important; /* Further reduced width */
+    height: 40px !important; /* Match the Textbox height */
+    padding: 5px;
+    font-size: 16px;
+    border-radius: 5px;
+}
+</style>
+"""
 
 # Gradio interface
 if __name__ == "__main__":
-    with gr.Blocks(title="Multimodal LLM Chatbot with Tools", theme='shivi/calm_seafoam') as demo:
+    with gr.Blocks(title="Enhanced Multimodal LLM Chatbot", theme='shivi/calm_seafoam') as demo:
         # Inject custom CSS
-        # gr.HTML(custom_css)
-        
+        gr.HTML(custom_css)
+
         # Header Section
         gr.Markdown("""
         <h1 align="center">
@@ -212,10 +287,50 @@ if __name__ == "__main__":
         </div>
         """)
 
-        # Main Layout: Two Columns
+        # Main Layout: Three Columns (Left, Middle, Right)
         with gr.Row():
-            # Left Column: Parameter Settings and Multimodal Inputs
-            with gr.Column(scale=1):
+            # Left Column: File Browser (1/5 width)
+            with gr.Column(scale=1, min_width=200):
+                gr.Markdown("## File Browser")
+                
+                with gr.Group():
+                    with gr.Row():
+                        file_3 = gr.FileExplorer(
+                            scale=1,
+                            glob="**/components/**/*.py",
+                            value=["themes/utils"],
+                            file_count="single",
+                            root_dir="/Users/bangliu/Documents/",
+                            ignore_glob="**/__init__.py",
+                            elem_id="file",
+                        )
+
+                        code = gr.Code(lines=30, scale=2, language="python")
+
+            # Middle Column: File Viewer/Editor and Terminal (3/5 width)
+            with gr.Column(scale=3, min_width=600):
+                gr.Markdown("## File Viewer/Editor")
+                file_tabs = gr.Tabs()
+
+                with file_tabs:
+                    with gr.TabItem("Markdown"):
+                        markdown_view = gr.Markdown(value="Select a file to view.")
+                    
+                    with gr.TabItem("Code"):
+                        code_view = gr.Code(language="python", value="Select a file to view.")
+                    
+                    with gr.TabItem("Text"):
+                        text_view = gr.Textbox(value="Select a file to view.", lines=20)
+                    
+                    with gr.TabItem("3D"):
+                        gr.HTML("<p>3D Viewer is not implemented yet.</p>")
+                
+                # Terminal Window (Bottom 1/4 height)
+                gr.Markdown("## Terminal Output")
+                terminal_log = Log(log_file="/tmp/gradio_log.txt", dark=True, height=240)
+
+            # Right Column: Chatbot UI (1/5 width)
+            with gr.Column(scale=1, min_width=300):
                 # Parameter Settings Tab
                 with gr.Tab(label="Parameter Setting"):
                     gr.Markdown("# Parameters")
@@ -266,14 +381,12 @@ if __name__ == "__main__":
                 with gr.Row():
                     clear_media_btn = gr.Button("🧹 Clear Media", variant="secondary")
 
-            # Right Column: Chat Interface and Action Buttons
-            with gr.Column(scale=1):
                 # Chatbot Component
                 chatbot = gr.Chatbot(
                     [],
                     type="messages",  # Specify type as 'messages'
                     elem_id="chatbot",
-                    height=730
+                    height=400
                 )
 
                 # Input Textbox and Upload Button
@@ -299,100 +412,111 @@ if __name__ == "__main__":
                     new_conv_btn = gr.Button("🧹 New Conversation", interactive=True)
                     del_last_turn_btn = gr.Button("🗑️ Remove Last Turn", interactive=True)
 
-        # Define interactions
+                # Define interactions
 
-        # Text input submission
-        txt.submit(
-            bot,
-            inputs=[txt, chatbot],
-            outputs=[chatbot, txt]
-        ).then(
-            lambda: gr.update(value=""),  # Clear textbox after submission
-            None,
-            [txt],
-            queue=False
-        )
+                # Text input submission
+                txt.submit(
+                    bot,
+                    inputs=[txt, chatbot, top_p, temperature, max_length_tokens, max_context_length_tokens],
+                    outputs=[chatbot, txt]
+                ).then(
+                    lambda: gr.update(value=""),  # Clear textbox after submission
+                    None,
+                    [txt],
+                    queue=False
+                )
 
-        # File upload (image/video/audio)
-        btn.upload(
-            lambda file: handle_upload(file),
-            inputs=btn,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                # File upload (image/video/audio)
+                btn.upload(
+                    lambda file: handle_upload(file),
+                    inputs=btn,
+                    outputs=txt,  # Set message in textbox to trigger bot
+                    queue=True
+                )
 
-        # Image upload
-        imagebox.upload(
-            lambda img: handle_image_upload(img),
-            inputs=imagebox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                # Image upload
+                imagebox.upload(
+                    lambda img: handle_image_upload(img),
+                    inputs=imagebox,
+                    outputs=txt,  # Set message in textbox to trigger bot
+                    queue=True
+                )
 
-        # Video upload
-        videobox.upload(
-            lambda vid: handle_video_upload(vid),
-            inputs=videobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                # Video upload
+                videobox.upload(
+                    lambda vid: handle_video_upload(vid),
+                    inputs=videobox,
+                    outputs=txt,  # Set message in textbox to trigger bot
+                    queue=True
+                )
 
-        # Audio upload
-        audiobox.upload(
-            lambda aud: handle_audio_upload(aud),
-            inputs=audiobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                # Audio upload
+                audiobox.upload(
+                    lambda aud: handle_audio_upload(aud),
+                    inputs=audiobox,
+                    outputs=txt,  # Set message in textbox to trigger bot
+                    queue=True
+                )
 
-        # Record Video
-        record_videobox.change(
-            lambda vid: handle_video_upload(vid),
-            inputs=record_videobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                # Record Video
+                record_videobox.change(
+                    lambda vid: handle_video_upload(vid),
+                    inputs=record_videobox,
+                    outputs=txt,  # Set message in textbox to trigger bot
+                    queue=True
+                )
 
-        # Record Audio
-        record_audiobox.change(
-            lambda aud: handle_audio_upload(aud),
-            inputs=record_audiobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                # Record Audio
+                record_audiobox.change(
+                    lambda aud: handle_audio_upload(aud),
+                    inputs=record_audiobox,
+                    outputs=txt,  # Set message in textbox to trigger bot
+                    queue=True
+                )
 
-        # Clear Media Button
-        clear_media_btn.click(
-            clear_media,
-            inputs=None,
-            outputs=None,
-            queue=False
-        )
+                # Clear Media Button
+                clear_media_btn.click(
+                    clear_media,
+                    inputs=None,
+                    outputs=None,
+                    queue=False
+                )
 
-        # Action Buttons Functionality (To Be Implemented)
-        # Clear History
-        clear_history_btn.click(
-            lambda: ([], ""),
-            inputs=None,
-            outputs=[chatbot, txt],
-            queue=False
-        )
+                # Action Buttons Functionality
 
-        # New Conversation
-        new_conv_btn.click(
-            lambda: ([], ""),
-            inputs=None,
-            outputs=[chatbot, txt],
-            queue=False
-        )
+                # Clear History
+                clear_history_btn.click(
+                    lambda: ([], ""),
+                    inputs=None,
+                    outputs=[chatbot, txt],
+                    queue=False
+                )
 
-        # Remove Last Turn (Removes the last user and assistant messages)
-        del_last_turn_btn.click(
-            lambda history: history[:-2] if len(history) >= 2 else history,
-            inputs=chatbot,
-            outputs=chatbot,
-            queue=False
-        )
+                # New Conversation
+                new_conv_btn.click(
+                    lambda: ([], ""),
+                    inputs=None,
+                    outputs=[chatbot, txt],
+                    queue=False
+                )
 
-        # Launch the app
-        demo.launch(share=False)
+                # Remove Last Turn (Removes the last user and assistant messages)
+                del_last_turn_btn.click(
+                    lambda history: history[:-2] if len(history) >= 2 else history,
+                    inputs=chatbot,
+                    outputs=chatbot,
+                    queue=False
+                )
+
+                # Placeholder for Upvote, Downvote, Flag, Regenerate buttons
+                # Implement these functionalities as needed
+
+        # Reintroduce the Log component
+        with gr.Row():
+            gr.Markdown("## Terminal Output")
+            terminal_log = Log(log_file="/tmp/gradio_log.txt", dark=True, height=240)
+
+        # Optionally, define callbacks or interactions for the Log component if needed
+
+    # Launch the app
+    demo.launch(share=False)

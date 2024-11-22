@@ -1,5 +1,9 @@
 # agent.py
 
+# You can run this script like below:
+# uvicorn unity_agent_server:app --host 0.0.0.0 --port 8000 --reload
+
+
 import os
 import asyncio
 import sys
@@ -68,6 +72,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
+from contextlib import asynccontextmanager
+
 #from agent import Agent  # Import your Agent class
 from aeiva.cognition.brain.llm_brain import LLMBrain
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
@@ -77,16 +83,10 @@ from aeiva.cognition.memory.simple_memory import SimpleMemory
 from aeiva.cognition.emotion.simple_emotion import SimpleEmotion
 from aeiva.cognition.world_model.simple_world_model import SimpleWorldModel
 
-app = FastAPI()
-
-# Enable CORS for all origins (for development purposes)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins; adjust in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+import logging
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Define the request model
 class MessageRequest(BaseModel):
@@ -97,48 +97,74 @@ class MessageResponse(BaseModel):
     response: str
 
 # Instantiate the agent when the application starts
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global agent
-    # Define configurations
-    perception_config = {
-        "sensors": [
-            # No need for terminal input sensor in FastAPI context
-        ]
-    }
+    try:
+        # Define configurations
+        perception_config = {
+            "sensors": [
+                # No need for terminal input sensor in FastAPI context
+            ]
+        }
 
-    # Load environment variables and set up LLMBrain
-    API_KEY = os.getenv('OPENAI_API_KEY')
-    config = LLMGatewayConfig(
-        llm_api_key=API_KEY,
-        llm_model_name="gpt-4-turbo",
-        llm_temperature=0.7,
-        llm_max_output_tokens=1000,
-        llm_stream=False
-    )
-    llm_brain = LLMBrain(config)
-    cognition_components = {
-        "input_interpreter": SimpleInputInterpreter(),
-        "brain": llm_brain,
-        "output_orchestrator": SimpleOutputOrchestrator(),
-        "memory": SimpleMemory(),
-        "emotion": SimpleEmotion(),
-        "world_model": SimpleWorldModel(),
-        "config": None
-    }
+        # Load environment variables and set up LLMBrain
+        API_KEY = os.getenv('OPENAI_API_KEY')
+        config = LLMGatewayConfig(
+            llm_api_key=API_KEY,
+            llm_model_name="gpt-4-turbo",
+            llm_temperature=0.7,
+            llm_max_output_tokens=1000,
+            llm_stream=False
+        )
+        llm_brain = LLMBrain(config)
+        cognition_components = {
+            "input_interpreter": SimpleInputInterpreter(),
+            "brain": llm_brain,
+            "output_orchestrator": SimpleOutputOrchestrator(),
+            "memory": SimpleMemory(),
+            "emotion": SimpleEmotion(),
+            "world_model": SimpleWorldModel(),
+            "config": None
+        }
 
-    action_config = {
-        "tools": [
-            "play_music",
-            "stop_music",
-            "list_files",
-            # Add other tools as needed
-        ]
-    }
+        action_config = {
+            "tools": [
+                "play_music",
+                "stop_music",
+                "list_files",
+                # Add other tools as needed
+            ]
+        }
 
-    # Create agent instance
-    agent = Agent(perception_config, cognition_components, action_config)
-    agent.setup()
+        # Create agent instance
+        agent = Agent(perception_config, cognition_components, action_config)
+        agent.setup()
+        # Attach the agent to the app state for access in routes
+        app.state.agent = agent
+        logger.info("Agent has been initialized and is ready to receive messages.")
+
+        yield  # Control is transferred to the application
+
+    finally:
+        # Shutdown: Perform any necessary cleanup here
+        logger.info("Shutting down the agent server.")
+        # If the Agent class has a shutdown method, call it here
+        if hasattr(app.state, 'agent'):
+            # Example: await app.state.agent.shutdown()
+            pass
+
+
+app = FastAPI(lifespan=lifespan)
+
+# Enable CORS for all origins (for development purposes)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins; adjust in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Define the endpoint
 @app.post("/process_text", response_model=MessageResponse)

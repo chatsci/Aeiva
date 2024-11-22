@@ -22,7 +22,7 @@ from aeiva.tool.tool import Tool
 # import litellm
 # litellm.set_verbose = True
 
-MAX_TOOL_CALL_LOOP = 10 # NOTE: This is used in case LLM recursively call tools. 
+MAX_TOOL_CALL_LOOP = 10 # TODO: This is used in case LLM recursively call tools. Make it a config param. 
 
 class LLMClient:
     """
