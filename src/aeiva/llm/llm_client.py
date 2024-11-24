@@ -178,7 +178,7 @@ class LLMClient:
                 iteration += 1
 
                 # Build parameters
-                params = self._build_params(messages=messages, tools=tools, stream=True, **kwargs)
+                params = self._build_params(messages=messages, tools=tools, **kwargs)
                 response_stream = await llm_acompletion(**params)
 
                 # Prepare to collect the assistant's reply

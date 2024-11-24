@@ -127,13 +127,13 @@ class Memory(ABC):
         pass
 
     @abstractmethod
-    def group(self, unit_ids: List[str], group_type: str, metadata: Optional[Dict[str, Any]] = None) -> str:
+    def organize(self, unit_ids: List[str], organize_type: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
         Groups memory units into a meaningful group.
 
         Args:
             unit_ids (List[str]): A list of memory unit IDs to group.
-            group_type (str): The type of group (e.g., 'dialogue_session', 'procedure').
+            organize_type (str): The type of group (e.g., 'dialogue_session', 'procedure').
             metadata (Optional[Dict[str, Any]]): Additional metadata for the group.
 
         Returns:
@@ -141,20 +141,20 @@ class Memory(ABC):
         """
         pass
 
-    @abstractmethod
-    def derive(self, unit_ids: List[str], derivation_type: str, **kwargs) -> MemoryUnit:
-        """
-        Derives a new memory unit from existing ones.
+    # @abstractmethod
+    # def derive(self, unit_ids: List[str], derivation_type: str, **kwargs) -> MemoryUnit:
+    #     """
+    #     Derives a new memory unit from existing ones.
 
-        Args:
-            unit_ids (List[str]): A list of memory unit IDs to derive from.
-            derivation_type (str): The type of derivation (e.g., 'summary', 'transformation').
-            **kwargs: Additional parameters for the derivation process.
+    #     Args:
+    #         unit_ids (List[str]): A list of memory unit IDs to derive from.
+    #         derivation_type (str): The type of derivation (e.g., 'summary', 'transformation').
+    #         **kwargs: Additional parameters for the derivation process.
 
-        Returns:
-            MemoryUnit: The derived memory unit.
-        """
-        pass
+    #     Returns:
+    #         MemoryUnit: The derived memory unit.
+    #     """
+    #     pass
 
     @abstractmethod
     def structurize(self, unit_ids: List[str], structure_type: str, **kwargs) -> None:
@@ -218,34 +218,6 @@ class Memory(ABC):
 
         Raises:
             RetrievalError: If the retrieval process fails.
-        """
-        pass
-
-    @abstractmethod
-    def retrieve_similar(self, query: Any, top_k: int = 5) -> List[MemoryUnit]:
-        """
-        Retrieves memory units similar to the given input based on embeddings.
-
-        Args:
-            query (Any): The query for retrieve.
-            top_k (int): The number of similar units to retrieve.
-
-        Returns:
-            List[MemoryUnit]: A list of similar memory units.
-        """
-        pass
-
-    @abstractmethod
-    def retrieve_related(self, query: Any, relationship: Optional[str] = None) -> List[MemoryUnit]:
-        """
-        Retrieves memory units related to the given one based on relationships.
-
-        Args:
-            query (Any): The query for retrieve.
-            relationship (Optional[str]): Filter by relationship type.
-
-        Returns:
-            List[MemoryUnit]: A list of related memory units.
         """
         pass
 

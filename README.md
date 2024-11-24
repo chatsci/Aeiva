@@ -1,5 +1,5 @@
 <p align="center" width="100%">
-<img src="assets/aeiva-2048.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
+<img src="https://i.ibb.co/LYh4n9Z/aeiva-1024.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
 # AEIVA: An Evolving Intelligent Virtual Assistant
@@ -16,8 +16,29 @@
 </p>
 
 
-In this project, our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. A key focus will be on enhancing model interpretability, safety, and conducting thorough analysis to advance research in these areas. Our big goal? To understand the essence of intelligence and use this knowledge to make life better for people.
+In this project, our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. 
 
+Our ultimate goal is to develop a General AI Agent System capable of forming a “genius society” of AI agents. These agents will:
+
+- Collaboratively address and solve societal challenges across domains.
+- Function in diverse environments, from virtual simulations to real-world applications.
+- Continuously evolve and improve through self-assessment and adaptation.
+- Serve as versatile assistants in various roles, such as AI researchers, software engineers, game players, or digital society members.
+
+Currently, Aeiva supports the following interaction modes:
+
+- Chat in terminal: chat with an agent in the terminal interface
+- Chat with Gradio Webui: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.
+- Chat with desktop Waifu mode: by combining with our another project `Maid`, we can use our agent as the backend and call it through Maid desktop assistant. 
+
+
+Currently, we features with the following functionalities:
+
+- Tool/Function Calling: I have implemented a series of different API tools and we are keep improving the API library.
+- Open Operator: by implementing computer-use related tools, we enable the agent to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!
+- Memory Palace: I have designed and implemented a layered memory palace for storaging agent memories. It is flexible and can be customized to represent and query different types of memories.
+
+More functionalities and modules will be implemented gradually. Keep tuned! If you find any errors or bugs, feel free to report by opening an issue, thanks a lot!
 
 ## Installation
 To install AEIVA, follow these steps:
@@ -25,7 +46,14 @@ To install AEIVA, follow these steps:
 * Python 3.9 or newer
 * pip (Python package manager)
 
-### Steps
+### Option 1 [recommended]: Install via `pip`
+You can easily install vai pip by:
+
+```shell
+pip install aeiva
+```
+
+### Option 2: Install from Repository
 1. **Clone the AEIVA Repository**
 
 	First, clone the AEIVA repository to your local machine using Git:

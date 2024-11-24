@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, List
+from typing import Any, List, Dict
 from aeiva.perception.sensor import Sensor
 from aeiva.perception.stimuli import Stimuli
 from aeiva.perception.sensation import Signal
@@ -12,7 +12,7 @@ class PerceptionSystem:
     """
     Manages multiple sensors and emits stimuli via the EventBus.
     """
-    def __init__(self, config: Any, event_bus):
+    def __init__(self, config: Dict, event_bus):
         """
         Initializes the PerceptionSystem with a list of sensors.
 

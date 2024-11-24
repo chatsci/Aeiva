@@ -1,7 +1,7 @@
 # memory_cleaner.py
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Dict, Any, Optional
 
 from aeiva.cognition.memory.memory_unit import MemoryUnit
@@ -105,7 +105,7 @@ class MemoryCleaner:
         """
         self.logger.debug(f"Applying time-based filtering with threshold_days={threshold_days}")
         try:
-            current_time = datetime.utcnow()
+            current_time = datetime.now(UTC)
             threshold = timedelta(days=threshold_days)
             filtered_memory = [
                 mu for mu in memory_units

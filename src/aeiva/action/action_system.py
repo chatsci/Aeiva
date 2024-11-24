@@ -1,6 +1,6 @@
 # File: cognition/action_system.py
 
-from typing import Any, Union, List, Optional
+from typing import Any, Dict, Union, List, Optional
 from aeiva.action.plan import Plan
 from aeiva.action.skill import Skill
 from aeiva.action.task import Task
@@ -17,7 +17,7 @@ class ActionSystem:
     and managing the execution of Skills.
     """
 
-    def __init__(self, config: Any):
+    def __init__(self, config: Dict):
         self.config = config
         self.state = {
             "current_skill": None,

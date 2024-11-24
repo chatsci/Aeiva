@@ -1,6 +1,6 @@
 # embedder.py
 
-from typing import Any, List, Union, Optional
+from typing import Any, List, Union, Optional, Dict
 from aeiva.embedding.embedder_config import EmbedderConfig
 import litellm
 import asyncio
@@ -12,14 +12,19 @@ class Embedder:
     Supports both synchronous and asynchronous methods.
     """
 
-    def __init__(self, config: EmbedderConfig):
+    def __init__(self, config: Dict):
         """
         Initialize the Embedder with the provided configuration.
 
         Args:
             config (EmbedderConfig): Configuration for the Embedder.
         """
-        self.config = config
+        self.config_dict = config
+        self.config = EmbedderConfig(
+                provider_name=self.config_dict.get('provider_name', 'openai'),
+                model_name=self.config_dict.get('model_name', 'text-embedding-ada-002'),
+                api_key=self.config_dict.get('api_key')
+            )
         self._setup_environment()
 
     def _setup_environment(self):

@@ -9,6 +9,9 @@ from uuid import uuid4
 from aeiva.cognition.memory.memory_unit import MemoryUnit
 from aeiva.cognition.memory.memory_link import MemoryLink
 from aeiva.storage.database_factory import DatabaseFactory
+from aeiva.storage.database_factory import DatabaseConfigFactory
+
+from aeiva.cognition.memory.storage_config import StorageConfig
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +237,7 @@ class MemoryEventRepository:
             event.get('id', uuid4().hex),
             event['memory_id'],
             event['event_type'],
-            datetime.utcnow().isoformat(),
+            datetime.utcnow().isoformat(),  # TODO: revise utcnow.
             event.get('memory_data'),
             event.get('previous_data')
         )
@@ -301,14 +304,15 @@ class MemoryStorage:
     graph, and relational databases.
     """
 
-    def __init__(self, config: Any):
+    def __init__(self, config: Dict):
         """
         Initialize the MemoryStorage with the provided configuration.
 
         Args:
             config (Any): Configuration settings for MemoryStorage.
         """
-        self.config = config
+        self.config_dict = config
+        self.config = None
         self.setup()
 
     def setup(self) -> None:
@@ -316,25 +320,66 @@ class MemoryStorage:
         Set up the MemoryStorage's components based on the provided configuration.
         """
         try:
+            # Initialize Vector Database Configuration
+            vector_db_conf_dict = self.config_dict.get('vector_db_config', {})
+            vector_db_provider_name = vector_db_conf_dict.get('provider_name', 'milvus')
+            vector_db_config = DatabaseConfigFactory.create(
+                provider_name=vector_db_conf_dict.get('provider_name', 'milvus'),
+                uri=vector_db_conf_dict.get('uri', 'storage/milvus_demo.db'),
+                collection_name=vector_db_conf_dict.get('collection_name', 'test_collection'),
+                embedding_model_dims=vector_db_conf_dict.get('embedding_model_dims', 1536),  # 'text-embedding-ada-002': 1536,
+                metric_type=vector_db_conf_dict.get('metric_type', 'COSINE')
+            )
+
+            # Initialize Graph Database Configuration
+            graph_db_conf_dict = self.config_dict.get('graph_db_config', {})
+            graph_db_provider_name = graph_db_conf_dict.get('provider_name', 'neo4j')
+            graph_db_password = graph_db_conf_dict.get('password')
+            graph_db_config = DatabaseConfigFactory.create(
+                provider_name=graph_db_conf_dict.get('provider_name', 'neo4j'),
+                uri=graph_db_conf_dict.get('uri', 'bolt://localhost:7687'),
+                user=graph_db_conf_dict.get('user', 'neo4j'),
+                password=graph_db_password,
+                database=graph_db_conf_dict.get('database', 'neo4j'),
+                encrypted=graph_db_conf_dict.get('encrypted', False)
+            )
+
+            # Initialize Relational Database Configuration
+            relational_db_conf_dict = self.config_dict.get('relational_db_config', {})
+            relational_db_provider_name = relational_db_conf_dict.get('provider_name', 'sqlite')
+            relational_db_config = DatabaseConfigFactory.create(
+                provider_name=relational_db_conf_dict.get('provider_name', 'sqlite'),
+                database=relational_db_conf_dict.get('database', 'storage/test_database.db')
+            )
+
+            self.config = StorageConfig(
+                vector_db_provider=self.config_dict.get('vector_db_provider', 'milvus'),
+                vector_db_config=vector_db_config,
+                graph_db_provider=self.config_dict.get('graph_db_provider', 'neo4j'),
+                graph_db_config=graph_db_config,
+                relational_db_provider=self.config_dict.get('relational_db_provider', 'sqlite'),
+                relational_db_config=relational_db_config,
+            )
+
             # Initialize the vector database
             self.vector_db = DatabaseFactory.create(
-                provider_name=self.config.vector_db_provider,
+                provider_name=vector_db_provider_name,
                 config=self.config.vector_db_config
             )
 
             # Initialize the graph database if provided
-            if self.config.graph_db_provider and self.config.graph_db_config:
+            if graph_db_provider_name and self.config.graph_db_config:
                 self.graph_db = DatabaseFactory.create(
-                    provider_name=self.config.graph_db_provider,
+                    provider_name=graph_db_provider_name,
                     config=self.config.graph_db_config
                 )
             else:
                 self.graph_db = None
 
             # Initialize the relational database if provided
-            if self.config.relational_db_provider and self.config.relational_db_config:
+            if relational_db_provider_name and self.config.relational_db_config:
                 self.relational_db = DatabaseFactory.create(
-                    provider_name=self.config.relational_db_provider,
+                    provider_name=relational_db_provider_name,
                     config=self.config.relational_db_config
                 )
                 self.memory_unit_repo = MemoryUnitRepository(self.relational_db)

@@ -21,6 +21,7 @@ virtual_worlds/*
 outputs/
 storage/
 resource/
+configs/
 
 configs/llm_api_keys.yaml
 

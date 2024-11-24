@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 from typing import Any, Optional, List, Dict, Union
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from aeiva.cognition.memory.memory_link import MemoryLink
 
@@ -44,7 +44,7 @@ class MemoryUnit(BaseModel):
     content: Any = Field("", description="Core content of the memory unit, convertible to a string.")
 
     # Metadata Fields
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp of the memory.")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp of the memory.")
     modality: Optional[str] = Field(None, description="Modality type, e.g., 'text', 'image', 'audio'.")
     type: Optional[str] = Field(None, description="Semantic type, e.g., 'dialogue', 'summary'.")
     status: Optional[str] = Field(None, description="Processing status, e.g., 'raw', 'cleaned', 'derived', 'grouped', 'structured', 'indexed'.")
@@ -104,7 +104,7 @@ class MemoryUnit(BaseModel):
             return cls(
                 id=data.get('id', uuid4().hex),
                 content=data.get('content', ""),
-                timestamp=datetime.fromisoformat(data['timestamp']) if 'timestamp' in data else datetime.utcnow(),
+                timestamp=datetime.fromisoformat(data['timestamp']) if 'timestamp' in data else datetime.now(UTC),
                 modality=data.get('modality'),
                 type=data.get('type'),
                 status=data.get('status'),
@@ -118,5 +118,5 @@ class MemoryUnit(BaseModel):
                 metadata=data.get('metadata', {})
             )
         except Exception as e:
-            logger.error(f"Error deserializing MemoryUnit from dict: {e}")
+            # logger.error(f"Error deserializing MemoryUnit from dict: {e}")
             raise e

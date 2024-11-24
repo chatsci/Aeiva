@@ -6,7 +6,6 @@ from aeiva.cognition.memory.memory_palace import MemoryPalace
 from aeiva.cognition.memory.memory_config import MemoryConfig
 from aeiva.embedding.embedder_config import EmbedderConfig
 from aeiva.storage.database_factory import DatabaseConfigFactory
-import os
 from dotenv import load_dotenv
 
 
@@ -43,7 +42,7 @@ def main():
         provider_name='milvus',
         uri='storage/milvus_demo.db',
         collection_name='test_collection',
-        embedding_model_dims= MODEL_EMBEDDING_DIMENSIONS.get(embedder_config.model_name), #1536, TODO: this is depending on the embedder_config, the model_name.
+        embedding_model_dims=MODEL_EMBEDDING_DIMENSIONS.get(embedder_config.model_name),  # 1536
         metric_type='COSINE',
     )
 
@@ -102,14 +101,61 @@ def main():
 
         # Retrieve the updated memory unit
         updated_unit = memory_palace.get(memory_unit.id)
-        print(f"Updated MemoryUnit with id and content: {memory_unit.id} {memory_unit.content}")
+        print(f"Updated MemoryUnit with id and content: {updated_unit.id} {updated_unit.content}")
 
-        # Retrieve similar memory units
-        similar_units = memory_palace.retrieve_similar(
+        # Retrieve similar memory units using the generalized 'retrieve' method
+        similar_units = memory_palace.retrieve(
             query="Explain the concept of MemoryPalace in programming.",
+            retrieve_type="similar",
             top_k=5
         )
         print(f"Retrieved {len(similar_units)} similar MemoryUnits.")
+        for mu in similar_units:
+            print(mu)
+
+        # Organize (group) MemoryUnits into a dialogue session
+        organize_id = memory_palace.organize(
+            unit_ids=[memory_unit.id],
+            organize_type="dialogue_session",
+            metadata={"session_topic": "Graph Databases"}
+        )
+        print(f"Created Dialogue Group with ID: {organize_id}")
+
+        # Structurize MemoryUnits into a knowledge graph
+        try:
+            memory_palace.structurize(
+                unit_ids=[memory_unit.id],
+                structure_type="knowledge_graph"
+            )
+            print(f"Structurized MemoryUnit with ID: {memory_unit.id} into knowledge graph.")
+        except NotImplementedError as nie:
+            logger.warning(f"Structurize feature not implemented: {nie}")
+
+        # Skillize MemoryUnits into a reusable skill
+        try:
+            skill_id = memory_palace.skillize(
+                unit_ids=[memory_unit.id],
+                skill_name="GraphDatabaseTutorial"
+            )
+            print(f"Created Skill with ID: {skill_id}")
+        except NotImplementedError as nie:
+            logger.warning(f"Skillize feature not implemented: {nie}")
+
+        # Parameterize Memories (e.g., train a model)
+        try:
+            memory_palace.parameterize(
+                training_epochs=10  # Example parameter, adjust as needed
+            )
+            print("Parameterized memories successfully.")
+        except NotImplementedError as nie:
+            logger.warning(f"Parameterize feature not implemented: {nie}")
+
+        # Embed a memory unit (optional, since embedding is done during creation)
+        try:
+            memory_palace.embed(memory_unit.id)
+            print(f"Generated embedding for MemoryUnit ID: {memory_unit.id}")
+        except NotImplementedError as nie:
+            logger.warning(f"Embed feature not implemented: {nie}")
 
         # Delete the memory unit
         memory_palace.delete(memory_unit.id)
@@ -130,7 +176,7 @@ def main():
             memory_palace.delete_all()
             print("All memory units deleted.")
         except NotImplementedError as nie:
-            logger.warning(f"Feature not implemented: {nie}")
+            logger.warning(f"Delete All feature not implemented: {nie}")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
             print("Failed to delete all memory units.")

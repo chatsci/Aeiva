@@ -1,6 +1,11 @@
 import os
 import shutil
+import json
+import yaml
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 def ensure_dir(file_path):
     dir_path = os.path.dirname(file_path)
@@ -46,3 +51,42 @@ def is_image_file(filepath: str) -> bool:
     _, extension = os.path.splitext(filepath)
     is_image = extension.lower() in image_file_extensions
     return is_image
+
+
+def from_json_or_yaml(filepath: str) -> dict:
+    """
+    Load configuration from a JSON or YAML file based on the file extension.
+
+    Args:
+        filepath (str): The path to the configuration file.
+
+    Returns:
+        dict: The configuration dictionary.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file extension is unsupported or if parsing fails.
+    """
+    if not os.path.exists(filepath):
+        logger.error(f"Configuration file not found at path: {filepath}")
+        raise FileNotFoundError(f"Configuration file not found at path: {filepath}")
+
+    _, ext = os.path.splitext(filepath)
+    ext = ext.lower()
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            if ext == '.json':
+                config = json.load(f)
+                logger.info(f"Loaded JSON configuration from {filepath}.")
+                return config
+            elif ext in ['.yaml', '.yml']:
+                config = yaml.safe_load(f)
+                logger.info(f"Loaded YAML configuration from {filepath}.")
+                return config
+            else:
+                logger.error(f"Unsupported configuration file format: {ext}")
+                raise ValueError(f"Unsupported configuration file format: {ext}")
+    except (json.JSONDecodeError, yaml.YAMLError) as e:
+        logger.error(f"Error parsing configuration file '{filepath}': {e}")
+        raise ValueError(f"Error parsing configuration file '{filepath}': {e}")
