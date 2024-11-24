@@ -59,72 +59,17 @@ class CognitionSystem:
         self.emotion.setup()
         self.input_interpreter.setup()
         self.output_orchestrator.setup()
-        
-        
-        
-
-    # async def think(self, stimuli: Stimuli, stream: bool=False, tools: List[Dict[str, Any]] = None) -> Union[Thought, Plan]:
-    #     """
-    #     Processes stimuli and produces a thought or plan.
-    #     """
-    #     self.state["last_input"] = stimuli
-
-    #     # Step 1: Use InputInterpreter to process stimuli into observation
-    #     if self.input_interpreter.gate(stimuli):
-    #         observation = await self.input_interpreter.interpret(stimuli)
-    #     else:
-    #         # Directly pass stimuli as observation (assuming it's acceptable)
-    #         observation = Observation(data=stimuli.to_dict())
-
-    #     # Step 2: Brain processes the observation into a thought
-        
-    #     brain_input = [{"role": "user", "content": observation.data}]
-    #     # print("############# observation is: ", brain_input)
-
-
-    #     # thought_content = await self.brain.think(brain_input, stream, tools=tools)
-    #     # thought = Thought(content=thought_content)
-
-    #     # self.state["cognitive_state"] = thought
-
-    #     # # # Step 3: Update Memory, Emotion, and WorldModel
-    #     # # TODO
-
-    #     # # Step 4: Use OutputOrchestrator to produce a plan or direct response
-    #     # if self.output_orchestrator.gate(thought):
-    #     #     plan = await self.output_orchestrator.orchestrate(thought)
-    #     #     self.state["last_output"] = plan
-    #     #     return plan
-    #     # else:
-    #     #     # Directly return the thought (e.g., as a response to the user)
-    #     #     self.state["last_output"] = thought
-    #     #     #print("thought is===", thought)  # TODO: this is for debug
-    #     #     return thought
-
-
-        
-    #     # Step 2: Pass observation to Brain
-    #     if stream:
-    #         async for chunk in self.brain.think(brain_input, stream=True, tools=tools):
-    #             yield chunk  # Streaming chunks
-    #     else:
-    #         thought_content = await self.brain.think(brain_input, stream=False, tools=tools)
-    #         thought = Thought(content=thought_content)
-    #         self.state["cognitive_state"] = thought
-
-    #         # Step 3: Use OutputOrchestrator if applicable
-    #         if self.output_orchestrator.gate(thought):
-    #             plan = await self.output_orchestrator.orchestrate(thought)
-    #             self.state["last_output"] = plan
-    #             yield plan  # Yield Plan for consistency in both modes
-    #         else:
-    #             self.state["last_output"] = thought
-    #             yield thought  # Yield Thought for consistency in both modes
 
     def handle_error(self, error: Exception) -> None:
         print(f"CognitionSystem encountered an error: {error}")
     
-    async def think(self, stimuli: Stimuli, tools: List[Dict[str, Any]] = None, stream: bool=False, use_async: bool=False) -> AsyncGenerator[str, None]:
+    async def think(
+            self,
+            stimuli: Stimuli,
+            tools: List[Dict[str, Any]] = None,
+            stream: bool=False,
+            use_async: bool=False
+            ) -> AsyncGenerator[str, None]:
         """
         Processes stimuli and produces a thought or plan.
 

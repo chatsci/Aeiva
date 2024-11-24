@@ -1,5 +1,5 @@
 <p align="center" width="100%">
-<img src="https://i.ibb.co/LYh4n9Z/aeiva-1024.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
+<img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
 # AEIVA: An Evolving Intelligent Virtual Assistant

@@ -232,7 +232,7 @@ if __name__ == "__main__":
         gr.Markdown("""
         <h1 align="center">
             <a href="https://github.com/chatsci/Aeiva">
-                <img src="https://i.ibb.co/LYh4n9Z/aeiva-1024.png",
+                <img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png",
                 alt="Aeiva" border="0" style="margin: 0 auto; height: 200px;" />
             </a>
         </h1>
