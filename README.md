@@ -16,6 +16,8 @@
 </p>
 
 
+## Introduction
+
 In this project, our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. 
 
 Our ultimate goal is to develop a General AI Agent System capable of forming a “genius society” of AI agents. These agents will:
@@ -31,22 +33,23 @@ Currently, Aeiva supports the following interaction modes:
 - Chat with Gradio Webui: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.
 - Chat with desktop Waifu mode: by combining with our another project `Maid`, we can use our agent as the backend and call it through Maid desktop assistant. 
 
+## Key Features
 
 Currently, we features with the following functionalities:
 
-- Tool/Function Calling: I have implemented a series of different API tools and we are keep improving the API library.
-- Open Operator: by implementing computer-use related tools, we enable the agent to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!
-- Memory Palace: I have designed and implemented a layered memory palace for storaging agent memories. It is flexible and can be customized to represent and query different types of memories.
+- **Rich Toolkits**: I have implemented a series of different API tools and I'm keep improving the API library.
+- **Open Operator**: By implementing computer-use related tools, aeiva is able to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!
+- **Memory Palace**: I have designed and implemented a layered memory palace for storaging agent memories. It is flexible and can be customized to represent and query different types of memories.
 
 More functionalities and modules will be implemented gradually. Keep tuned! If you find any errors or bugs, feel free to report by opening an issue, thanks a lot!
 
 ## Installation
 To install AEIVA, follow these steps:
 ### Prerequisites
-* Python 3.9 or newer
-* pip (Python package manager)
+* `Python 3.9` or newer
+* `pip` (Python package manager)
 
-### Option 1 [recommended]: Install via `pip`
+### Option 1: Install via `pip` [recommended]
 You can easily install vai pip by:
 
 ```shell
@@ -101,23 +104,78 @@ It's a good practice to create a virtual environment for Python projects. This k
 	python -c "import aeiva; print(aeiva.__version__)"
 	```
 
-## Demo
 
-* **Multimodal chatbot**
-	To run a multimodal chatbot, run the following command (assume you are in the project folder `Aeiva/`):
-	
-	```bash
-	python src/aeiva/demo/mm_chatbot.py
+## Dependencies
+
+Our memory module utilizes different types of databases.
+
+1. **Vector Database**: Our memory module also utilizes vector database. Please install vector database such as `milvus` (recommended), `chroma`, `qdrant`, or `weaviate`.
+
+2. **Graph Database**: Ensure Neo4j is installed and the `NEO4J_HOME` environment variable is set.
+
+3. **Relational Database**: We use `sqlite` (recommended) or `postgre sql`.
+
+## Commands
+
+After installing Neo4j and setting the environment variable, follow these steps to run different aeiva chat commands.
+
+
+### Aeiva Chat in Terminal Mode
+Run the following command in terminal:
+
+   ```bash
+   aeiva-chat-terminal --config configs/agent_config.yaml --verbose
+   ```
+   
+   	* Options:
+		- `--config` or `-c`: Path to the configuration file (default: `configs/agent_config.yaml`).
+		- `--verbose` or `-v`: Enable verbose logging for detailed output.
+
+	* Using the Interface:
+		-	Interact with the chatbot directly in your terminal after running the command.	*	View Logs:
+		-	Logs are stored at `~/.aeiva/logs/aeiva-chat-terminal.log`.
+		-	To monitor logs in real-time, use:
+		```shell
+		tail -f ~/.aeiva/logs/aeiva-chat-terminal.log
 	```
-	Once the demo is running, go to the local URL address indicated in the terminal. You will see a Gradio interface like below:
-	![mm_chatbot](assets/mm_chat_demo.png)	
-	You may change your path if you are in a different folder.
 
-**Note:** We will add more demos or examples.
+You will see your terminal is like below:
+
+![mm_chatbot](assets/aeiva-chat-terminal-demo.png)
+
+
+### Aeiva Chat in Gradio Mode
+Run the following command in terminal:
+
+   ```bash
+   aeiva-chat-gradio --config configs/agent_config.yaml --verbose
+   ```
+   
+   	* Options:
+		- `--config` or `-c`: Path to the configuration file (default: `configs/agent_config.yaml`).
+		- `--verbose` or `-v`: Enable verbose logging for detailed output.
+
+	* Access the Gradio Interface:
+		-	Open your web browser and navigate to http://localhost:7860.
+		-	Alternatively, use the public URL provided in the terminal output (e.g., https://1b1f89328e57b2f2e1.gradio.live) to access the interface remotely.
+	*	View Logs:
+		-	Logs are stored at `~/.aeiva/logs/aeiva-chat-gradio.log`.
+		-	To monitor logs in real-time, use:
+		```shell
+		tail -f ~/.aeiva/logs/aeiva-chat-gradio.log
+		```
+
+By visiting the gradio interface, you will see a gradio web-ui like below:
+
+---
+![mm_chatbot](assets/aeiva-chat-gradio-demo.png)
+
+---
+
 
 ## Contact
+
 ![contact](assets/contact.png)
-## Acknowledge
 
 
 

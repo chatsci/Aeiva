@@ -199,7 +199,7 @@ class MemoryPalace(Memory):
         Deletes all memory units.
         """
         try:
-            self.storage.delete_all_memory_units()
+            self.storage.delete_all_memory_units()  # TODO: seems no work correctly, need to check
             logger.info("Deleted all MemoryUnits.")
         except Exception as e:
             logger.error(f"Error deleting all MemoryUnits: {e}")

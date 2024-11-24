@@ -1,0 +1,5 @@
+2024-11-25 00:42:22,132 - aeiva.command.aeiva_chat_gradio - INFO - Loading configuration from configs/agent_config.yaml
+2024-11-25 00:42:23,655 - aeiva.command.aeiva_chat_gradio - INFO - Agent initialized successfully.
+2024-11-25 00:42:23,656 - aeiva.command.aeiva_chat_gradio - INFO - Agent run thread started.
+2024-11-25 00:42:23,657 - aeiva.command.aeiva_chat_gradio - INFO - Registered handler for 'response.gradio' events.
+2024-11-25 00:42:23,693 - aeiva.command.aeiva_chat_gradio - INFO - Neo4j database started successfully.

@@ -12,6 +12,12 @@ setup(
     url="https://github.com/chatsci/Aeiva",  # Replace with your actual repository URL
     packages=find_packages(where="src"),
     package_dir={"": "src"},
+    entry_points={
+        'console_scripts': [
+            'aeiva-chat-terminal=aeiva.command.aeiva_chat_terminal:run',
+            'aeiva-chat-gradio=aeiva.command.aeiva_chat_gradio:run',
+        ],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
