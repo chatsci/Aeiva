@@ -1,6 +1,6 @@
 # File: cognition/brain/llm_brain.py
 
-from typing import Any, List, Dict, AsyncGenerator
+from typing import Any, List, Dict, AsyncGenerator, Optional
 from aeiva.cognition.brain.brain import Brain
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
@@ -55,10 +55,20 @@ class LLMBrain(Brain):
             llm_stream=llm_conf_dict.get('llm_stream', False)
         )
         self.llm_client = LLMClient(self.config)
-        # No heavy setup required in this case
+
+        system_prompt = llm_conf_dict.get('llm_system_prompt', None)
+        if system_prompt is not None:  # TODO: only add system prompt for llms that support it.
+                self.state["conversation"] += [{ "role": "system", "content": system_prompt }]
+        
         print("LLMBrain setup complete.")
 
-    async def think(self, stimuli: Any, tools: List[Dict[str, Any]] = None, stream: bool = False, use_async: bool = False) -> AsyncGenerator[str, None]:
+    async def think(
+            self,
+            stimuli: Any,
+            tools: List[Dict[str, Any]] = None,
+            stream: bool = False,
+            use_async: bool = False
+            ) -> AsyncGenerator[str, None]:
         """
         Asynchronously process input stimuli to update the cognitive state.
 
@@ -87,7 +97,6 @@ class LLMBrain(Brain):
                 # messages = self.state["conversation"].copy()
                 async for delta in self.llm_client(self.state["conversation"], tools=tools, stream=stream):  #!! NOTE: llm client will update conversation
                     response += delta  # Collect the streamed content
-                    #print(delta, end='', flush=True)  #!!! NOTE: this is what we made the stream print. But we shall remove it later. it is ugly.
                     yield delta
                 # self.state["conversation"] += [{"role": "assistant", "content": response}]
                 self.state["cognitive_state"] = response

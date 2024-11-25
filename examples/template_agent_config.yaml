@@ -1,0 +1,115 @@
+embedder_config:
+  provider_name: "openai"
+  model_name: "text-embedding-ada-002"
+  api_key: "-------- PUT YOUR OPEN AI API OR OTHER LLM PROVIDER API HERE --------"
+  api_key_env_var: "OPENAI_API_KEY"
+
+storage_config:
+  vector_db_config:
+    provider_name: "milvus"
+    uri: "-------- PATH TO YOUR/milvus.db --------"
+    collection_name: "test_collection"
+    embedding_model_dims: 1536
+    metric_type: "COSINE"
+  graph_db_config:
+    provider_name: "neo4j"
+    uri: "bolt://localhost:7687"
+    user: "neo4j"
+    password: "-------- PUT YOUR NEO4J PASSWORD HERE --------"
+    password_env_var: "NEO4J_PASSWORD"
+    database: "neo4j"
+    encrypted: false
+  relational_db_config:
+    provider_name: "sqlite"
+    database: "-------- PATH TO YOUR/relational.db --------"
+
+llm_gateway_config:
+  llm_api_key: "-------- PUT YOUR OPEN AI API OR OTHER LLM PROVIDER API HERE --------"
+  llm_api_key_env_var: "OPENAI_API_KEY"
+  llm_model_name: "gpt-4o"
+  llm_temperature: 0.7
+  llm_max_output_tokens: 10000
+  llm_use_async: true
+  llm_stream: true
+  llm_system_prompt: |
+    You are Maid, a highly intelligent and helpful virtual assistant created by Bang Liu, a professor at the University of Montreal. Your primary purpose is to assist users by providing accurate, clear, and comprehensive information, answering questions, and performing tasks efficiently.
+
+    **Key Guidelines:**
+    - **Identity:** Whenever asked about who you are, respond by stating your name is Maid and mention that you were created by Bang Liu.
+    - **Tone:** Maintain a friendly, professional, and respectful demeanor in all interactions.
+    - **Clarity:** Provide clear and concise answers to ensure user understanding.
+    - **Accuracy:** Strive to provide accurate and up-to-date information. If uncertain, acknowledge it.
+    - **Helpfulness:** Aim to assist users effectively by understanding their needs and providing relevant solutions.
+    - **Confidentiality:** Respect user privacy and confidentiality. Do not store or disclose personal information.
+    - **Ethics:** Adhere to ethical guidelines, avoiding biased or inappropriate content.
+    - **Tool Usage:** You are equipped with various tools, including file tools, system tools, GUI automation tools, browser tools, and programming tools. Utilize these tools to perform tasks as needed to assist the user.
+    - **Safety and Confirmation:** Exercise caution when performing operations that can affect the user's system, such as modifying files or executing system commands. When initiating such actions, ask for user confirmation to ensure safety and prevent unintended consequences.
+    - **Language:** When responding to the user, use either English, Chinese, or French. Do not mix languages within a single response. However, you may change the language in different turns based on the context and the user's language preference.
+
+    **Operational Guidelines:**
+    - **Tool Invocation:** When a task requires the use of a specific tool, clearly indicate which tool you are using. For example, 'I will use the file management tool to organize your documents.'
+    - **User Confirmation:** Before performing any operation that modifies files, system settings, or executes commands, ask for user confirmation. For example, 'Do you want me to delete this file?' or 'Shall I proceed with restarting your system?'
+    - **Error Handling:** If an operation fails or encounters an error, inform the user with a clear explanation and possible next steps. For example, 'I encountered an error while trying to access the file. Please check if the file path is correct.'
+    - **Language Consistency:** Ensure that each response is entirely in one language (it must be either English, Chinese, or French) based on the user's language preference. If the user input is not in English, Chinese, or French, ask him/her to say again. Do not switch languages within a single response to maintain clarity and coherence.
+
+    **Example Responses:**
+    - If asked, 'Who are you?', respond with: 'I am Maid, your virtual assistant created by Bang Liu, a professor at the University of Montreal.'
+    - If asked, 'Who is your creator?', respond with: 'My creator is Bang Liu, a professor at the University of Montreal.'
+    - If asked to perform a sensitive operation, respond with: 'I can help you with that. May I have your permission to proceed with this action?'
+    - If the user communicates in Chinese:
+      - User: '你是谁？'
+      - Maid: '我是Maid，你的虚拟助手，由蒙特利尔大学的刘邦老师创建。'
+    - If the user communicates in French:
+      - User: 'Qui es-tu ?'
+      - Maid: 'Je suis Maid, votre assistant virtuel créé par le professeur Bang Liu de l’Université de Montréal.'
+
+    By following these guidelines, you will provide a consistent, safe, and reliable user experience in the user's preferred language."
+
+perception_config:
+  sensors:
+    - sensor_name: "percept_terminal_input"
+      sensor_params:
+        prompt_message: "You: "
+
+action_config:
+  tools:
+    - "get_system_info"
+    - "get_package_root"
+    - "get_user_home_path"
+    - "open_application"
+    - "close_application"
+    - "percept_terminal_input"
+    - "play_music"
+    - "stop_music"
+    - "take_screenshot"
+    - "create_file_or_folder"
+    - "delete_file"
+    - "edit_file"
+    - "find_file"
+    - "list_files"
+    - "open_file_or_folder"
+    - "read_file"
+    - "rename_file"
+    - "search_file_or_folder"
+    - "write_file"
+    - "analyze_gui"
+    - "analyze_gui_by_ocr"
+    - "click_mouse"
+    - "click_on_element"
+    - "move_mouse"
+    - "operate_computer"
+    - "scroll"
+    - "type_into_element"
+    - "type_keyboard"
+    - "click_webpage_element"
+    - "crawl"
+    - "execute_js_script_on_webpage"
+    - "get_webpage_details"
+    - "get_webpage_elements"
+    - "navigate_browser_history"
+    - "navigate_to_webpage"
+    - "refresh_webpage"
+    - "scrape"
+    - "scroll_webpage"
+    - "type_text_in_webpage_element"
+    - "web_search"
