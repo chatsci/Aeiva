@@ -4,6 +4,7 @@ __pycache__/
 **/__pycache__/
 *.pyc
 .ipynb_checkpoints/
+.gradio/
 
 lightning_logs/
 site/
