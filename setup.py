@@ -16,6 +16,8 @@ setup(
         'console_scripts': [
             'aeiva-chat-terminal=aeiva.command.aeiva_chat_terminal:run',
             'aeiva-chat-gradio=aeiva.command.aeiva_chat_gradio:run',
+            'aeiva-server=aeiva.command.aeiva_server:run',
+            'maid-chat=aeiva.command.maid_chat:run',
         ],
     },
     classifiers=[

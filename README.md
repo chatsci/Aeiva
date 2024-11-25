@@ -120,47 +120,47 @@ Our memory module utilizes different types of databases.
 After installing Neo4j and setting the environment variable, follow these steps to run different aeiva chat commands.
 
 
-### Aeiva Chat in Terminal Mode
+### 🪄⭐Aeiva Chat in Terminal Mode
 Run the following command in terminal:
 
-   ```bash
-   aeiva-chat-terminal --config configs/agent_config.yaml --verbose
-   ```
+```bash
+aeiva-chat-terminal --config configs/agent_config.yaml --verbose
+```
    
-   	* Options:
-		- `--config` or `-c`: Path to the configuration file (default: `configs/agent_config.yaml`).
-		- `--verbose` or `-v`: Enable verbose logging for detailed output.
+* **Options**:
+	- `--config` or `-c`: Path to the configuration file (default: `configs/agent_config.yaml`).
+	- `--verbose` or `-v`: Enable verbose logging for detailed output.
 
-	* Using the Interface:
-		-	Interact with the chatbot directly in your terminal after running the command.	*	View Logs:
-		-	Logs are stored at `~/.aeiva/logs/aeiva-chat-terminal.log`.
-		-	To monitor logs in real-time, use:
+* **Using the Interface**:
+	-	Interact with the chatbot directly in your terminal after running the command.	*	View Logs:
+	-	Logs are stored at `~/.aeiva/logs/aeiva-chat-terminal.log`.
+	-	To monitor logs in real-time, use:
 		```shell
 		tail -f ~/.aeiva/logs/aeiva-chat-terminal.log
-	```
+		```
 
 You will see your terminal is like below:
 
-![mm_chatbot](assets/aeiva-chat-terminal-demo.png)
+![terminal_chatbot](assets/aeiva-chat-terminal-demo.png)
 
 
-### Aeiva Chat in Gradio Mode
+### 🪄⭐Aeiva Chat in Gradio Mode
 Run the following command in terminal:
 
-   ```bash
-   aeiva-chat-gradio --config configs/agent_config.yaml --verbose
-   ```
+```shell
+aeiva-chat-gradio --config configs/agent_config.yaml --verbose
+```
    
-   	* Options:
-		- `--config` or `-c`: Path to the configuration file (default: `configs/agent_config.yaml`).
-		- `--verbose` or `-v`: Enable verbose logging for detailed output.
+* **Options**:
+	- `--config` or `-c`: Path to the configuration file (default: `configs/agent_config.yaml`).
+	- `--verbose` or `-v`: Enable verbose logging for detailed output.
 
-	* Access the Gradio Interface:
-		-	Open your web browser and navigate to http://localhost:7860.
-		-	Alternatively, use the public URL provided in the terminal output (e.g., https://1b1f89328e57b2f2e1.gradio.live) to access the interface remotely.
-	*	View Logs:
-		-	Logs are stored at `~/.aeiva/logs/aeiva-chat-gradio.log`.
-		-	To monitor logs in real-time, use:
+* **Access the Gradio Interface**:
+	-	Open your web browser and navigate to http://localhost:7860.
+	-	Alternatively, use the public URL provided in the terminal output (e.g., https://1b1f89328e57b2f2e1.gradio.live) to access the interface remotely.
+*	**View Logs**:
+	-	Logs are stored at `~/.aeiva/logs/aeiva-chat-gradio.log`.
+	-	To monitor logs in real-time, use:
 		```shell
 		tail -f ~/.aeiva/logs/aeiva-chat-gradio.log
 		```
@@ -168,9 +168,99 @@ Run the following command in terminal:
 By visiting the gradio interface, you will see a gradio web-ui like below:
 
 ---
-![mm_chatbot](assets/aeiva-chat-gradio-demo.png)
+![gradio_chatbot](assets/aeiva-chat-gradio-demo.png)
 
 ---
+
+
+### 🪄⭐Aeiva Server
+
+Run the following command in terminal:
+
+```bash
+aeiva-server --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbose
+```
+
+*	**Options**:
+	-	`--config` or `-c`: Path to the configuration file (default: configs/agent_config.yaml).
+	-	`--host` or `-H`: Host address to run the server on (default: 0.0.0.0).
+	-	`--port` or `-p`: Port number to run the server on (default: 8000).
+	-	`--verbose` or `-v`: Enable verbose logging for detailed output.
+*	**Access the Server**:
+	-	Open your web browser and navigate to `http://localhost:8000/docs` to access the interactive API documentation.
+*	**View Logs**:
+	-	Logs are stored at `~/.aeiva/logs/aeiva-server.log`.
+	-	To monitor logs in real-time, use:
+		```shell
+		 tail -f ~/.aeiva/logs/aeiva-server.log
+		```
+
+### 🪄⭐Maid Chat (Your Intelligent Assistant on Desktop!)
+
+Run the following command in terminal to get an animated virtual assisatnt on your deskto that you can talk in voice mode or by typing:
+
+```bash
+maid-chat --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbose
+```
+
+*	**Options**:
+	-	`--config` or `-c`: Path to the configuration file (default: `configs/agent_config.yaml`).
+	-	`--host` or `-H`: Host address to run the server on (default: `0.0.0.0`).
+	-	`--port` or `-p`: Port number to run the server on (default: `8000`).
+	-	`--verbose` or `-v`: Enable verbose logging for detailed output.
+*	**Download `Maid.app`**:
+	-	Download `Maid.app` from [provide download link or instructions].
+*	**Set `MAID_HOME` Environment Variable**:
+	-	Unix/Linux/macOS:
+		```shell
+		export MAID_HOME='/path/to/my/unity.app/Contents/MacOS/Maid - Your Intelligent Waifu !'
+		source ~/.bashrc  # or source ~/.zshrc
+		```
+	-	Windows (Command Prompt):
+		```shell
+		set MAID_HOME=C:\path\to\my\unity\app
+		```
+	-	Windows (PowerShell):
+		```shell
+		$env:MAID_HOME = "C:\path\to\my\unity\app"
+		```
+		Replace `/path/to/my/unity/app` or `C:\path\to\my\unity\app` with the actual path to your Unity application.
+
+*	**Using the Interface**:
+	-	Interact with the server through the Maid.app Unity application after running the command.
+*	**View Logs**:
+	-	Logs are stored at `~/.aeiva/logs/maid-chat.log`.
+	-	To monitor logs in real-time, use:
+	 ```shell
+	 tail -f ~/.aeiva/logs/maid-chat.log
+	 ```
+* **Troubleshooting:**
+    - **Permission Denied Error When Starting Unity Application:**
+        If you encounter an error like:
+        ```
+        Error: Failed to start Unity application: [Errno 13] Permission denied: '/path/to/my/unity/app'
+        ```
+        **Solution:**
+        - **macOS Users:**
+            1. Open **System Preferences**.
+            2. Navigate to **Security & Privacy**.
+            3. Click on the **Privacy** tab.
+            4. Select **Accessibility** from the sidebar.
+            5. Click the **lock icon** to make changes and enter your password.
+            6. Click the **"+"** button and add your terminal application (e.g., Terminal, iTerm).
+            7. Ensure that your terminal application is checked, granting it the necessary permissions to run the Unity application.
+        
+        - **Windows Users:**
+            1. Right-click on the Unity application executable.
+            2. Select **Properties**.
+            3. Go to the **Compatibility** tab.
+            4. Check **Run this program as an administrator**.
+            5. Click **Apply**, then **OK**.
+            6. Try running the command again.
+        
+        *Ensure that the `MAID_HOME` environment variable points to the correct path of your Unity application.*
+
+
 
 
 ## Contact

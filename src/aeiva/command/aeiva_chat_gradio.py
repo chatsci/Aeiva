@@ -7,163 +7,38 @@ import os
 import sys
 import threading
 import asyncio
-import logging
-import subprocess
 import signal
-from pathlib import Path
 import queue
 from datetime import datetime
-
 import click
-import importlib.resources as importlib_resources
 import gradio as gr
 from dotenv import load_dotenv
 import numpy as np
 import soundfile as sf
 from PIL import Image
 
-from aeiva.logger.logger import get_logger
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.agent.agent import Agent
 from aeiva.event.event import Event
+from aeiva.command.command_utils import (
+    get_package_root,
+    get_log_dir,
+    setup_logging,
+    validate_neo4j_home,
+    start_neo4j,
+    stop_neo4j,
+    handle_exit,
+)
 
-# Define default paths
-PACKAGE_NAME = 'aeiva'
-
-def get_package_root():
-    """
-    Determines the root path of the 'aeiva' package.
-    """
-    package_root = Path(importlib_resources.files(PACKAGE_NAME))
-    return package_root.resolve()
-
+# Get default agent config file path
 PACKAGE_ROOT = get_package_root()
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
 
 # Get default log file path
-LOGS_SUBDIR = 'logs'
-DEFAULT_LOG_FILE = 'aeiva-chat-gradio.log'
+LOGS_DIR = get_log_dir()
+LOGS_DIR.mkdir(parents=True, exist_ok=True)  # Ensure the log directory exists
+DEFAULT_LOG_PATH = LOGS_DIR / 'aeiva-chat-gradio.log'
 
-def get_log_path():
-    """
-    Determines a suitable path for the log file.
-    Logs are stored in the user's home directory under '.aeiva/logs/'.
-    """
-    home_dir = Path.home()
-    log_dir = home_dir / '.aeiva' / LOGS_SUBDIR  # Log saved to `~/.aeiva/logs/`
-    log_dir.mkdir(parents=True, exist_ok=True)  # Ensure the log directory exists
-    return log_dir / DEFAULT_LOG_FILE
-
-DEFAULT_LOG_PATH = get_log_path()
-
-def setup_logging(log_file, verbose=False):
-    """
-    Sets up logging to both file and console.
-    """
-    logger = get_logger(__name__, level="DEBUG" if verbose else "INFO")
-
-    # Create a file handler
-    file_handler = logging.FileHandler(log_file, mode='a')
-    file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-
-    # Create a console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-
-    # Create a logging format
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    # Add handlers to the logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-
-    return logger
-
-def validate_neo4j_home(logger, neo4j_home):
-    """
-    Validates that the NEO4J_HOME path exists and contains the Neo4j executable.
-    """
-    if not os.path.isdir(neo4j_home):
-        logger.error(f"NEO4J_HOME path does not exist or is not a directory: {neo4j_home}")
-        click.echo(f"Error: NEO4J_HOME path does not exist or is not a directory: {neo4j_home}")
-        sys.exit(1)
-    
-    neo4j_executable = os.path.join(neo4j_home, 'bin', 'neo4j')
-    if not os.path.isfile(neo4j_executable) or not os.access(neo4j_executable, os.X_OK):
-        logger.error(f"Neo4j executable not found or not executable at: {neo4j_executable}")
-        click.echo(f"Error: Neo4j executable not found or not executable at: {neo4j_executable}")
-        sys.exit(1)
-
-def start_neo4j(logger, neo4j_home):
-    """
-    Starts the Neo4j database as a subprocess.
-    """
-    neo4j_command = [os.path.join(neo4j_home, 'bin', 'neo4j'), 'console']
-    try:
-        neo4j_process = subprocess.Popen(
-            neo4j_command,
-            stdout=subprocess.DEVNULL,  # Suppress stdout
-            stderr=subprocess.DEVNULL,  # Suppress stderr
-            stdin=subprocess.DEVNULL,   # Prevent Neo4j from waiting for input
-            preexec_fn=os.setsid       # Start the process in a new session
-        )
-        logger.info("Neo4j database started successfully.")
-        click.echo("Neo4j database started successfully.")
-        return neo4j_process
-    except FileNotFoundError:
-        logger.error(f"Neo4j executable not found in {neo4j_command}.")
-        click.echo(f"Error: Neo4j executable not found in {neo4j_command}.")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Failed to start Neo4j: {e}")
-        click.echo(f"Error: Failed to start Neo4j: {e}")
-        sys.exit(1)
-
-def stop_neo4j(logger, neo4j_process):
-    """
-    Stops the Neo4j database subprocess gracefully.
-    """
-    try:
-        # Check if the process is still running
-        if neo4j_process.poll() is None:
-            os.killpg(os.getpgid(neo4j_process.pid), signal.SIGINT)  # Send SIGINT for graceful shutdown
-            logger.info("Sent SIGINT to Neo4j subprocess.")
-            click.echo("Shutting down Neo4j...")
-            neo4j_process.wait(timeout=15)  # Increased timeout to 15 seconds
-            logger.info("Neo4j database stopped successfully.")
-            click.echo("Neo4j database stopped successfully.")
-        else:
-            logger.warning("Neo4j subprocess is already terminated.")
-            click.echo("Warning: Neo4j subprocess is already terminated.")
-    except subprocess.TimeoutExpired:
-        logger.error("Neo4j did not terminate within the timeout period.")
-        click.echo("Error: Neo4j did not terminate within the timeout period.")
-        # Optionally, force kill
-        try:
-            os.killpg(os.getpgid(neo4j_process.pid), signal.SIGKILL)
-            neo4j_process.wait(timeout=5)
-            logger.info("Neo4j database forcefully terminated.")
-            click.echo("Neo4j database forcefully terminated.")
-        except Exception as e:
-            logger.error(f"Failed to forcefully terminate Neo4j: {e}")
-            click.echo(f"Error: Failed to forcefully terminate Neo4j: {e}")
-    except ProcessLookupError:
-        logger.warning("Neo4j subprocess does not exist.")
-        click.echo("Warning: Neo4j subprocess does not exist. It may have already terminated.")
-    except Exception as e:
-        logger.error(f"Error stopping Neo4j: {e}")
-        click.echo(f"Error: Failed to stop Neo4j: {e}")
-
-def handle_exit(signum, frame, logger, neo4j_process):
-    """
-    Handles termination signals to ensure Neo4j is stopped gracefully.
-    """
-    logger.info(f"Received signal {signum}. Shutting down Neo4j.")
-    click.echo(f"\nReceived signal {signum}. Shutting down Neo4j.")
-    stop_neo4j(logger, neo4j_process)
-    sys.exit(0)
 
 @click.command(name="aeiva-chat-gradio")
 @click.option('--config', '-c', default=str(DEFAULT_CONFIG_PATH),
@@ -390,219 +265,220 @@ def run(config, verbose):
             new_history[-1]["content"] = "An unexpected error occurred."
             yield new_history, ''
 
-    # def launch_gradio_interface(bot_func, handle_upload_func,
-    #                             handle_image_upload_func, handle_video_upload_func,
-    #                             handle_audio_upload_func, clear_media_func):
-    #     """
-    #     Launches the Gradio interface.
-    #     """
-    with gr.Blocks(title="Multimodal LLM Chatbot with Tools") as demo:
-        # Header Section
-        gr.Markdown("""
-        <h1 align="center">
-            <a href="https://github.com/chatsci/Aeiva">
-                <img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png",
-                alt="Aeiva" border="0" style="margin: 0 auto; height: 200px;" />
-            </a>
-        </h1>
+    def launch_gradio_interface():
+        """
+        Main gradio interface.
+        """
+        with gr.Blocks(title="Multimodal LLM Chatbot with Tools") as demo:
+            # Header Section
+            gr.Markdown("""
+            <h1 align="center">
+                <a href="https://github.com/chatsci/Aeiva">
+                    <img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png",
+                    alt="Aeiva" border="0" style="margin: 0 auto; height: 200px;" />
+                </a>
+            </h1>
 
-        <h2 align="center">
-            AEIVA: An Evolving Intelligent Virtual Assistant
-        </h2>
+            <h2 align="center">
+                AEIVA: An Evolving Intelligent Virtual Assistant
+            </h2>
 
-        <h5 align="center">
-            If you like our project, please give us a star ✨ on Github for the latest update.
-        </h5>
+            <h5 align="center">
+                If you like our project, please give us a star ✨ on Github for the latest update.
+            </h5>
 
-        <div align="center">
-            <div style="display:flex; gap: 0.25rem;" align="center">
-                <a href='https://github.com/chatsci/Aeiva'><img src='https://img.shields.io/badge/Github-Code-blue'></a>
-                <a href="https://arxiv.org/abs/2304.14178"><img src="https://img.shields.io/badge/Arxiv-2304.14178-red"></a>
-                <a href='https://github.com/chatsci/Aeiva/stargazers'><img src='https://img.shields.io/github/stars/chatsci/Aeiva.svg?style=social'></a>
+            <div align="center">
+                <div style="display:flex; gap: 0.25rem;" align="center">
+                    <a href='https://github.com/chatsci/Aeiva'><img src='https://img.shields.io/badge/Github-Code-blue'></a>
+                    <a href="https://arxiv.org/abs/2304.14178"><img src="https://img.shields.io/badge/Arxiv-2304.14178-red"></a>
+                    <a href='https://github.com/chatsci/Aeiva/stargazers'><img src='https://img.shields.io/github/stars/chatsci/Aeiva.svg?style=social'></a>
+                </div>
             </div>
-        </div>
-        """)
+            """)
 
-        # Main Layout: Two Columns
-        with gr.Row():
-            # Left Column: Parameter Settings and Multimodal Inputs
-            with gr.Column(scale=1, min_width=700):
-                # Parameter Settings Tab
-                with gr.Tab(label="Parameter Setting"):
-                    gr.Markdown("# Parameters")
-                    top_p = gr.Slider(
-                        minimum=0,
-                        maximum=1.0,
-                        value=0.95,
-                        step=0.05,
-                        interactive=True,
-                        label="Top-p"
-                    )
-                    temperature = gr.Slider(
-                        minimum=0.1,
-                        maximum=2.0,
-                        value=1.0,
-                        step=0.1,
-                        interactive=True,
-                        label="Temperature"
-                    )
-                    max_length_tokens = gr.Slider(
-                        minimum=0,
-                        maximum=512,
-                        value=512,
-                        step=8,
-                        interactive=True,
-                        label="Max Generation Tokens"
-                    )
-                    max_context_length_tokens = gr.Slider(
-                        minimum=0,
-                        maximum=4096,
-                        value=2048,
-                        step=128,
-                        interactive=True,
-                        label="Max History Tokens"
-                    )
-
-                # Multimodal Inputs Section
-                with gr.Row():
-                    imagebox = gr.Image(type="pil", label="Upload Image")
-                    videobox = gr.File(label="Upload Video", file_types=["video"])
-                    audiobox = gr.Audio(label="Upload Audio", type="numpy")
-
-                with gr.Row():
-                    record_videobox = gr.Video(label="Record Video")
-                    record_audiobox = gr.Audio(label="Record Audio")
-
-                # Clear Media Button
-                with gr.Row():
-                    clear_media_btn = gr.Button("🧹 Clear Media", variant="secondary")
-
-            # Right Column: Chat Interface and Action Buttons
-            with gr.Column(scale=1, min_width=700):
-                # Chatbot Component
-                chatbot = gr.Chatbot(
-                    [],
-                    type="messages",  # Specify type as 'messages'
-                    elem_id="chatbot",
-                    height=730
-                )
-
-                # Input Textbox and Upload Button
-                with gr.Row():
-                    with gr.Column(scale=4, min_width=300):
-                        txt = gr.Textbox(
-                            show_label=False,
-                            placeholder="Enter text and press enter, or upload an image/video/audio",
-                            lines=1,
-                            elem_classes=["input-textbox"]  # Assign a CSS class for styling
+            # Main Layout: Two Columns
+            with gr.Row():
+                # Left Column: Parameter Settings and Multimodal Inputs
+                with gr.Column(scale=1, min_width=700):
+                    # Parameter Settings Tab
+                    with gr.Tab(label="Parameter Setting"):
+                        gr.Markdown("# Parameters")
+                        top_p = gr.Slider(
+                            minimum=0,
+                            maximum=1.0,
+                            value=0.95,
+                            step=0.05,
+                            interactive=True,
+                            label="Top-p"
                         )
-                    with gr.Column(scale=1, min_width=100):
-                        btn = gr.UploadButton("📁", file_types=["image", "video", "audio"], elem_classes=["upload-button"])
-                        # Changed the button label to an icon for a more compact look
+                        temperature = gr.Slider(
+                            minimum=0.1,
+                            maximum=2.0,
+                            value=1.0,
+                            step=0.1,
+                            interactive=True,
+                            label="Temperature"
+                        )
+                        max_length_tokens = gr.Slider(
+                            minimum=0,
+                            maximum=512,
+                            value=512,
+                            step=8,
+                            interactive=True,
+                            label="Max Generation Tokens"
+                        )
+                        max_context_length_tokens = gr.Slider(
+                            minimum=0,
+                            maximum=4096,
+                            value=2048,
+                            step=128,
+                            interactive=True,
+                            label="Max History Tokens"
+                        )
 
-                # Action Buttons Placed Below the Input Box
-                with gr.Row():
-                    upvote_btn = gr.Button("👍 Upvote", interactive=True)
-                    downvote_btn = gr.Button("👎 Downvote", interactive=True)
-                    flag_btn = gr.Button("⚠️ Flag", interactive=True)
-                    regenerate_btn = gr.Button("🔄 Regenerate", interactive=True)
-                    clear_history_btn = gr.Button("🗑️ Clear History", interactive=True)
-                    new_conv_btn = gr.Button("🧹 New Conversation", interactive=True)
-                    del_last_turn_btn = gr.Button("🗑️ Remove Last Turn", interactive=True)
+                    # Multimodal Inputs Section
+                    with gr.Row():
+                        imagebox = gr.Image(type="pil", label="Upload Image")
+                        videobox = gr.File(label="Upload Video", file_types=["video"])
+                        audiobox = gr.Audio(label="Upload Audio", type="numpy")
 
-        # Define interactions
+                    with gr.Row():
+                        record_videobox = gr.Video(label="Record Video")
+                        record_audiobox = gr.Audio(label="Record Audio")
 
-        # Text input submission with streaming
-        txt.submit(
-            bot,
-            inputs=[txt, chatbot],
-            outputs=[chatbot, txt],
-            queue=True,    # Enable queue for better performance
-            # stream=True    # Enable streaming (already handled in the bot function)
-        )
-        # Removed the .then callback to prevent layout shifts
+                    # Clear Media Button
+                    with gr.Row():
+                        clear_media_btn = gr.Button("🧹 Clear Media", variant="secondary")
 
-        # File upload (image/video/audio)
-        btn.upload(
-            handle_upload,
-            inputs=btn,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                # Right Column: Chat Interface and Action Buttons
+                with gr.Column(scale=1, min_width=700):
+                    # Chatbot Component
+                    chatbot = gr.Chatbot(
+                        [],
+                        type="messages",  # Specify type as 'messages'
+                        elem_id="chatbot",
+                        height=730
+                    )
 
-        # Image upload
-        imagebox.upload(
-            handle_image_upload,
-            inputs=imagebox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                    # Input Textbox and Upload Button
+                    with gr.Row():
+                        with gr.Column(scale=4, min_width=300):
+                            txt = gr.Textbox(
+                                show_label=False,
+                                placeholder="Enter text and press enter, or upload an image/video/audio",
+                                lines=1,
+                                elem_classes=["input-textbox"]  # Assign a CSS class for styling
+                            )
+                        with gr.Column(scale=1, min_width=100):
+                            btn = gr.UploadButton("📁", file_types=["image", "video", "audio"], elem_classes=["upload-button"])
+                            # Changed the button label to an icon for a more compact look
 
-        # Video upload
-        videobox.upload(
-            handle_video_upload,
-            inputs=videobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+                    # Action Buttons Placed Below the Input Box
+                    with gr.Row():
+                        upvote_btn = gr.Button("👍 Upvote", interactive=True)
+                        downvote_btn = gr.Button("👎 Downvote", interactive=True)
+                        flag_btn = gr.Button("⚠️ Flag", interactive=True)
+                        regenerate_btn = gr.Button("🔄 Regenerate", interactive=True)
+                        clear_history_btn = gr.Button("🗑️ Clear History", interactive=True)
+                        new_conv_btn = gr.Button("🧹 New Conversation", interactive=True)
+                        del_last_turn_btn = gr.Button("🗑️ Remove Last Turn", interactive=True)
 
-        # Audio upload
-        audiobox.upload(
-            handle_audio_upload,
-            inputs=audiobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+            # Define interactions
 
-        # Record Video
-        record_videobox.change(
-            handle_video_upload,
-            inputs=record_videobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+            # Text input submission with streaming
+            txt.submit(
+                bot,
+                inputs=[txt, chatbot],
+                outputs=[chatbot, txt],
+                queue=True,    # Enable queue for better performance
+                # stream=True    # Enable streaming (already handled in the bot function)
+            )
+            # Removed the .then callback to prevent layout shifts
 
-        # Record Audio
-        record_audiobox.change(
-            handle_audio_upload,
-            inputs=record_audiobox,
-            outputs=txt,  # Set message in textbox to trigger bot
-            queue=True
-        )
+            # File upload (image/video/audio)
+            btn.upload(
+                handle_upload,
+                inputs=btn,
+                outputs=txt,  # Set message in textbox to trigger bot
+                queue=True
+            )
 
-        # Clear Media Button
-        clear_media_btn.click(
-            clear_media,
-            inputs=None,
-            outputs=None,
-            queue=False
-        )
+            # Image upload
+            imagebox.upload(
+                handle_image_upload,
+                inputs=imagebox,
+                outputs=txt,  # Set message in textbox to trigger bot
+                queue=True
+            )
 
-        # Action Buttons Functionality
+            # Video upload
+            videobox.upload(
+                handle_video_upload,
+                inputs=videobox,
+                outputs=txt,  # Set message in textbox to trigger bot
+                queue=True
+            )
 
-        # Clear History
-        clear_history_btn.click(
-            lambda: ([], ""),
-            inputs=None,
-            outputs=[chatbot, txt],
-            queue=False
-        )
+            # Audio upload
+            audiobox.upload(
+                handle_audio_upload,
+                inputs=audiobox,
+                outputs=txt,  # Set message in textbox to trigger bot
+                queue=True
+            )
 
-        # New Conversation
-        new_conv_btn.click(
-            lambda: ([], ""),
-            inputs=None,
-            outputs=[chatbot, txt],
-            queue=False
-        )
+            # Record Video
+            record_videobox.change(
+                handle_video_upload,
+                inputs=record_videobox,
+                outputs=txt,  # Set message in textbox to trigger bot
+                queue=True
+            )
 
-        # Remove Last Turn (Removes the last user and assistant messages)
-        del_last_turn_btn.click(
-            lambda history: history[:-2] if len(history) >= 2 else history,
-            inputs=chatbot,
-            outputs=chatbot,
-            queue=False
-        )
+            # Record Audio
+            record_audiobox.change(
+                handle_audio_upload,
+                inputs=record_audiobox,
+                outputs=txt,  # Set message in textbox to trigger bot
+                queue=True
+            )
 
-    # Launch the Gradio interface
-    demo.launch(share=True)
+            # Clear Media Button
+            clear_media_btn.click(
+                clear_media,
+                inputs=None,
+                outputs=None,
+                queue=False
+            )
+
+            # Action Buttons Functionality
+
+            # Clear History
+            clear_history_btn.click(
+                lambda: ([], ""),
+                inputs=None,
+                outputs=[chatbot, txt],
+                queue=False
+            )
+
+            # New Conversation
+            new_conv_btn.click(
+                lambda: ([], ""),
+                inputs=None,
+                outputs=[chatbot, txt],
+                queue=False
+            )
+
+            # Remove Last Turn (Removes the last user and assistant messages)
+            del_last_turn_btn.click(
+                lambda history: history[:-2] if len(history) >= 2 else history,
+                inputs=chatbot,
+                outputs=chatbot,
+                queue=False
+            )
+
+        # Launch the Gradio interface
+        demo.launch(share=True)
+    
+    # Launch aeiva chat gradio
+    launch_gradio_interface()
