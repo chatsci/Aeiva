@@ -18,15 +18,17 @@ nav:
   - Home: index.md
   - Get Started:
     - Introduction: intro.md
-    - Roadmap: roadmp.md
-    - Coding guidelines: coding_guidelines.md
-  - Tutorials: tutorials.md
-  - How-To Guides: how-to-guides.md
+    # - Roadmap: ROADMAP.md
+    # - Coding guidelines: coding_guidelines.md
+  - Tutorials: 
+    - How to automatically generate documentation from docstrings: tutorials/generate_docs.md
+    # - Install MineDojo on Mac with M1 chip: tutorials/install_minedojo.md
+  # - How-To Guides: how-to-guides.md
   - API References: reference.md
-  - Explanations: explanation.md
+  # - Explanations: explanation.md
   - Blogs:
-    - How to automatically generate documentation from docstrings: generate_docs.md
-    - Install MineDojo on Mac with M1 chip: install_minedojo.md
+    - Thoughts on key concepts for agentic intelligence: blogs/Thoughts_on_key_concepts_for_agentic_intelligence.md
+
 
 theme:
   name: "material"

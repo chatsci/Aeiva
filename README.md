@@ -260,7 +260,8 @@ maid-chat --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbos
         
         *Ensure that the `MAID_HOME` environment variable points to the correct path of your Unity application.*
 
-
+**Demo of Maid-chat**:
+![gradio_chatbot](assets/Maid-chat-demo.mp4)
 
 
 ## Contact
