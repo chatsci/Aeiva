@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='aeiva',
-    version='0.8.0',
+    version='0.8.1',
     license="Apache 2.0",
     author="Bang Liu",
     author_email="chatsci.ai@gmail.com",
