@@ -22,7 +22,6 @@ virtual_worlds/*
 outputs/
 storage/
 resource/
-configs/
 
 configs/llm_api_keys.yaml
 
@@ -35,6 +34,10 @@ directory_tree.txt
 uploads/*
 uploads/*/*
 !uploads/README.md
+
+configs/*
+configs/*/*
+!configs/README.md
 
 *.egg-info/
 **/*.egg-info/
