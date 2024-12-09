@@ -1,4 +1,4 @@
 # assets
-This folder contains the figures relavant to this project.
+This folder contains the figures or videos relavant to this project.
 
 

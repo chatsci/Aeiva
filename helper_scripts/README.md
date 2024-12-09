@@ -1,6 +1,6 @@
 # Scripts
 
-In this folder, we put various util scripts that can be run directly as tools.
+In this folder, we put various helper scripts that can be run directly as tools.
 
 ## Exporting the virtual environment
 
