@@ -7,6 +7,7 @@ This roadmap outlines the development path for our General AI Agent System, deta
 
 ## 1. Long-Term Objective
 Our ultimate goal is to develop a General AI Agent System capable of forming a “genius society” of AI agents. These agents will:
+
 - Collaboratively address and solve societal challenges across domains.
 - Function in diverse environments, from virtual simulations to real-world applications.
 - Continuously evolve and improve through self-assessment and adaptation.

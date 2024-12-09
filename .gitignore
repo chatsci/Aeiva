@@ -29,6 +29,7 @@ configs/llm_api_keys.yaml
 TODO.txt
 CODING_GUIDELINES.md
 TODO.md
+ROADMAP.md
 
 *.egg-info/
 **/*.egg-info/
