@@ -5,7 +5,7 @@
 # AEIVA: An Evolving Intelligent Virtual Assistant
 
 <p align="center">
-<a href="docs/README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
+<a href="README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
 <a href="README.md"><img src="https://img.shields.io/badge/document-English-blue.svg" alt="EN doc"></a>
 <!-- <a href="docs/README_JA.md"><img src="https://img.shields.io/badge/ドキュメント-日本語-blue.svg" alt="JA doc"></a> -->
 <!-- <a href="https://discord.gg/wCp6Q3fsAk"><img src="https://dcbadge.vercel.app/api/server/wCp6Q3fsAk?compact=true&style=flat" alt="Discord Follow"></a> -->
@@ -46,7 +46,7 @@ More functionalities and modules will be implemented gradually. Keep tuned! If y
 ## Installation
 To install AEIVA, follow these steps:
 ### Prerequisites
-* `Python 3.9` or newer
+* `Python 3.10` or newer
 * `pip` (Python package manager)
 
 ### Option 1: Install via `pip` [recommended]
