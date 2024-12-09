@@ -141,7 +141,11 @@ aeiva-chat-terminal --config configs/agent_config.yaml --verbose
 
 You will see your terminal is like below:
 
-![terminal_chatbot](assets/aeiva-chat-terminal-demo.png)
+<!--![terminal_chatbot](assets/aeiva-chat-terminal-demo.png)-->
+
+<p align="center" width="100%">
+    <img src="assets/aeiva-chat-terminal-demo.png" alt="Terminal Chatbot" style="width: 80%; display: block; margin: auto;">
+</p>
 
 
 ### 🪄⭐Aeiva Chat in Gradio Mode
@@ -168,7 +172,11 @@ aeiva-chat-gradio --config configs/agent_config.yaml --verbose
 By visiting the gradio interface, you will see a gradio web-ui like below:
 
 ---
-![gradio_chatbot](assets/aeiva-chat-gradio-demo.png)
+<!--![gradio_chatbot](assets/aeiva-chat-gradio-demo.png)-->
+
+<p align="center" width="100%">
+    <img src="assets/aeiva-chat-gradio-demo.png" alt="Gradio Chatbot" style="width: 80%; display: block; margin: auto;">
+</p>
 
 ---
 
@@ -261,7 +269,27 @@ maid-chat --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbos
         *Ensure that the `MAID_HOME` environment variable points to the correct path of your Unity application.*
 
 **Demo of Maid-chat**:
-[![Maid Chat](assets/Maid-screenshot.png)](https://www.youtube.com/watch?v=ITk1aXSfWAg)
+<!--[![Maid Chat](assets/Maid-screenshot.png)](https://www.youtube.com/watch?v=ITk1aXSfWAg)-->
+
+<p align="center" width="100%">
+    <a href="https://www.youtube.com/watch?v=ITk1aXSfWAg">
+        <img src="assets/Maid-screenshot.png" alt="Maid Chat" style="width: 80%; display: block; margin: auto;">
+    </a>
+</p>
+
+
+## Citation
+
+To cite [Aeiva](https://github.com/chatsci/Aeiva) in publications, please use the following BibTeX entries.
+
+```bibtex
+@misc{bang2024aeiva,
+      title={Aeiva: An Evolving Intelligent Virtual Assistant}, 
+      author={Bang Liu},
+      year={2024},
+      url={https://github.com/chatsci/Aeiva}
+}
+```
 
 
 ## Contact

@@ -28,4 +28,6 @@ class EnvironmentType:
 
     # Meta/Complex Environments
     HYBRID_ENVIRONMENT = "Hybrid Environment"  # Combination of multiple types.
-    CUSTOM = "Custom"  # Custom environment type for unique or unspecified cases.
+    
+    # Custom environment type for unique or unspecified cases.
+    CUSTOM = "Custom"
