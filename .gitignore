@@ -30,6 +30,7 @@ TODO.txt
 CODING_GUIDELINES.md
 TODO.md
 ROADMAP.md
+directory_tree.txt
 
 *.egg-info/
 **/*.egg-info/
