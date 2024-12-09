@@ -32,6 +32,9 @@ TODO.md
 ROADMAP.md
 directory_tree.txt
 
+uploads/*/*
+!uploads/README.md
+
 *.egg-info/
 **/*.egg-info/
 
