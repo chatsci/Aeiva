@@ -17,7 +17,8 @@ def get_package_root():
     """
     Determines the root path of the 'aeiva' package.
     """
-    package_root = Path(importlib_resources.files("aeiva"))
+    aeiva_path = Path(importlib_resources.files("aeiva"))
+    package_root = aeiva_path.parents[1]
     return package_root.resolve()
 
 def get_log_dir():
