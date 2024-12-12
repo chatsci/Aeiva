@@ -1,11 +1,11 @@
 <p align="center" width="100%">
-<img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
+<img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png" alt="AEIVA" style="width: 50%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
 # AEIVA: An Evolving Intelligent Virtual Assistant
 
 <p align="center">
-<a href="docs/README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
+<a href="README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
 <a href="README.md"><img src="https://img.shields.io/badge/document-English-blue.svg" alt="EN doc"></a>
 <!-- <a href="docs/README_JA.md"><img src="https://img.shields.io/badge/ドキュメント-日本語-blue.svg" alt="JA doc"></a> -->
 <!-- <a href="https://discord.gg/wCp6Q3fsAk"><img src="https://dcbadge.vercel.app/api/server/wCp6Q3fsAk?compact=true&style=flat" alt="Discord Follow"></a> -->
@@ -20,7 +20,7 @@
 
 In this project, our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. 
 
-Our ultimate goal is to develop a General AI Agent System capable of forming a “genius society” of AI agents. These agents will:
+Our ultimate goal is to develop a General AI Agent System capable of forming a “**genius society**” of AI agents. These agents will:
 
 - Collaboratively address and solve societal challenges across domains.
 - Function in diverse environments, from virtual simulations to real-world applications.
@@ -29,16 +29,18 @@ Our ultimate goal is to develop a General AI Agent System capable of forming a �
 
 Currently, Aeiva supports the following interaction modes:
 
-- Chat in terminal: chat with an agent in the terminal interface
-- Chat with Gradio Webui: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.
-- Chat with desktop Waifu mode: by combining with our another project `Maid`, we can use our agent as the backend and call it through Maid desktop assistant. 
+- **Chat in terminal**: chat with an agent in the terminal interface
+- **Chat with Gradio Webui**: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.
+- **Chat with desktop Waifu mode**: by combining with our another project `Maid`, we can use our agent as the backend and call it through Maid desktop assistant. 
+
+⭐️ **Documentation** 👉 [aeiva documentation](https://chatsci.github.io/Aeiva/)
 
 ## Key Features
 
 Currently, we features with the following functionalities:
 
 - **Rich Toolkits**: I have implemented a series of different API tools and I'm keep improving the API library.
-- **Open Operator**: By implementing computer-use related tools, aeiva is able to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!
+- **Open Operator**: By implementing **computer-use** related tools, aeiva is able to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!
 - **Memory Palace**: I have designed and implemented a layered memory palace for storaging agent memories. It is flexible and can be customized to represent and query different types of memories.
 
 More functionalities and modules will be implemented gradually. Keep tuned! If you find any errors or bugs, feel free to report by opening an issue, thanks a lot!
@@ -46,7 +48,7 @@ More functionalities and modules will be implemented gradually. Keep tuned! If y
 ## Installation
 To install AEIVA, follow these steps:
 ### Prerequisites
-* `Python 3.9` or newer
+* `Python 3.10` or newer
 * `pip` (Python package manager)
 
 ### Option 1: Install via `pip` [recommended]
@@ -141,7 +143,11 @@ aeiva-chat-terminal --config configs/agent_config.yaml --verbose
 
 You will see your terminal is like below:
 
-![terminal_chatbot](./Material for MkDocs_files/aeiva-chat-terminal-demo.png)
+<!--![terminal_chatbot](assets/aeiva-chat-terminal-demo.png)-->
+
+<p align="center" width="100%">
+    <img src="assets/aeiva-chat-terminal-demo.png" alt="Terminal Chatbot" style="width: 80%; display: block; margin: auto;">
+</p>
 
 
 ### 🪄⭐Aeiva Chat in Gradio Mode
@@ -168,7 +174,11 @@ aeiva-chat-gradio --config configs/agent_config.yaml --verbose
 By visiting the gradio interface, you will see a gradio web-ui like below:
 
 ---
-![gradio_chatbot](./Material for MkDocs_files/aeiva-chat-gradio-demo.png)
+<!--![gradio_chatbot](assets/aeiva-chat-gradio-demo.png)-->
+
+<p align="center" width="100%">
+    <img src="assets/aeiva-chat-gradio-demo.png" alt="Gradio Chatbot" style="width: 80%; display: block; margin: auto;">
+</p>
 
 ---
 
@@ -209,7 +219,7 @@ maid-chat --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbos
 	-	`--port` or `-p`: Port number to run the server on (default: `8000`).
 	-	`--verbose` or `-v`: Enable verbose logging for detailed output.
 *	**Download `Maid.app`**:
-	-	Download `Maid.app` from [provide download link or instructions].
+	-	Download `Maid.app` from [here](https://drive.google.com/file/d/1c7PXoMk7-QgWJ37XM_JqrLn3HQCg3HDL/view?usp=sharing).
 *	**Set `MAID_HOME` Environment Variable**:
 	-	Unix/Linux/macOS:
 		```shell
@@ -260,13 +270,33 @@ maid-chat --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbos
         
         *Ensure that the `MAID_HOME` environment variable points to the correct path of your Unity application.*
 
+**Demo of Maid-chat**:
+<!--[![Maid Chat](assets/Maid-screenshot.png)](https://www.youtube.com/watch?v=ITk1aXSfWAg)-->
 
-**Screenshot of Maid-chat**:
-![gradio_chatbot](./Material for MkDocs_files/Maid-screenshot.png)
+<p align="center" width="100%">
+    <a href="https://www.youtube.com/watch?v=ITk1aXSfWAg">
+        <img src="assets/Maid-screenshot.png" alt="Maid Chat" style="width: 80%; display: block; margin: auto;">
+    </a>
+</p>
+
+
+## Citation
+
+To cite [Aeiva](https://github.com/chatsci/Aeiva) in publications, please use the following BibTeX entries.
+
+```bibtex
+@misc{bang2024aeiva,
+      title={Aeiva: An Evolving Intelligent Virtual Assistant}, 
+      author={Bang Liu},
+      year={2024},
+      url={https://github.com/chatsci/Aeiva}
+}
+```
+
 
 ## Contact
 
-![contact](./Material for MkDocs_files/contact.png)
+![contact](assets/contact.png)
 
 
 
