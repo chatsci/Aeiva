@@ -544,6 +544,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#citation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Citation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#contact" class="md-nav__link">
     <span class="md-ellipsis">
       Contact
@@ -821,6 +830,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#citation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Citation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#contact" class="md-nav__link">
     <span class="md-ellipsis">
       Contact
@@ -848,12 +866,12 @@
 
 
 <p align="center" width="100%">
-<img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png" alt="AEIVA" style="width: 70%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
+<img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png" alt="AEIVA" style="width: 50%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
 <h1 id="aeiva-an-evolving-intelligent-virtual-assistant">AEIVA: An Evolving Intelligent Virtual Assistant</h1>
 <p align="center">
-<a href="docs/README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
+<a href="README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
 <a href="README.md"><img src="https://img.shields.io/badge/document-English-blue.svg" alt="EN doc"></a>
 <!-- <a href="docs/README_JA.md"><img src="https://img.shields.io/badge/ドキュメント-日本語-blue.svg" alt="JA doc"></a> -->
 <!-- <a href="https://discord.gg/wCp6Q3fsAk"><img src="https://dcbadge.vercel.app/api/server/wCp6Q3fsAk?compact=true&style=flat" alt="Discord Follow"></a> -->
@@ -865,7 +883,7 @@
 
 <h2 id="introduction">Introduction</h2>
 <p>In this project, our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. </p>
-<p>Our ultimate goal is to develop a General AI Agent System capable of forming a “genius society” of AI agents. These agents will:</p>
+<p>Our ultimate goal is to develop a General AI Agent System capable of forming a “<strong>genius society</strong>” of AI agents. These agents will:</p>
 <ul>
 <li>Collaboratively address and solve societal challenges across domains.</li>
 <li>Function in diverse environments, from virtual simulations to real-world applications.</li>
@@ -874,15 +892,16 @@
 </ul>
 <p>Currently, Aeiva supports the following interaction modes:</p>
 <ul>
-<li>Chat in terminal: chat with an agent in the terminal interface</li>
-<li>Chat with Gradio Webui: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.</li>
-<li>Chat with desktop Waifu mode: by combining with our another project <code>Maid</code>, we can use our agent as the backend and call it through Maid desktop assistant. </li>
+<li><strong>Chat in terminal</strong>: chat with an agent in the terminal interface</li>
+<li><strong>Chat with Gradio Webui</strong>: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.</li>
+<li><strong>Chat with desktop Waifu mode</strong>: by combining with our another project <code>Maid</code>, we can use our agent as the backend and call it through Maid desktop assistant. </li>
 </ul>
+<p>⭐️ <strong>Documentation</strong> 👉 <a href="https://chatsci.github.io/Aeiva/">aeiva documentation</a></p>
 <h2 id="key-features">Key Features</h2>
 <p>Currently, we features with the following functionalities:</p>
 <ul>
 <li><strong>Rich Toolkits</strong>: I have implemented a series of different API tools and I'm keep improving the API library.</li>
-<li><strong>Open Operator</strong>: By implementing computer-use related tools, aeiva is able to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!</li>
+<li><strong>Open Operator</strong>: By implementing <strong>computer-use</strong> related tools, aeiva is able to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!</li>
 <li><strong>Memory Palace</strong>: I have designed and implemented a layered memory palace for storaging agent memories. It is flexible and can be customized to represent and query different types of memories.</li>
 </ul>
 <p>More functionalities and modules will be implemented gradually. Keep tuned! If you find any errors or bugs, feel free to report by opening an issue, thanks a lot!</p>
@@ -890,7 +909,7 @@
 <p>To install AEIVA, follow these steps:</p>
 <h3 id="prerequisites">Prerequisites</h3>
 <ul>
-<li><code>Python 3.9</code> or newer</li>
+<li><code>Python 3.10</code> or newer</li>
 <li><code>pip</code> (Python package manager)</li>
 </ul>
 <h3 id="option-1-install-via-pip-recommended">Option 1: Install via <code>pip</code> [recommended]</h3>
@@ -975,7 +994,12 @@ python -c "import aeiva; print(aeiva.__version__)"</code></p>
 </li>
 </ul>
 <p>You will see your terminal is like below:</p>
-<p><img alt="terminal_chatbot" src="../Material%20for%20MkDocs_files/aeiva-chat-terminal-demo.png" /></p>
+<!--![terminal_chatbot](assets/aeiva-chat-terminal-demo.png)-->
+
+<p align="center" width="100%">
+    <img src="assets/aeiva-chat-terminal-demo.png" alt="Terminal Chatbot" style="width: 80%; display: block; margin: auto;">
+</p>
+
 <h3 id="aeiva-chat-in-gradio-mode">🪄⭐Aeiva Chat in Gradio Mode</h3>
 <p>Run the following command in terminal:</p>
 <pre><code class="language-shell">aeiva-chat-gradio --config configs/agent_config.yaml --verbose
@@ -1005,7 +1029,12 @@ python -c "import aeiva; print(aeiva.__version__)"</code></p>
 </ul>
 <p>By visiting the gradio interface, you will see a gradio web-ui like below:</p>
 <hr />
-<p><img alt="gradio_chatbot" src="../Material%20for%20MkDocs_files/aeiva-chat-gradio-demo.png" /></p>
+<!--![gradio_chatbot](assets/aeiva-chat-gradio-demo.png)-->
+
+<p align="center" width="100%">
+    <img src="assets/aeiva-chat-gradio-demo.png" alt="Gradio Chatbot" style="width: 80%; display: block; margin: auto;">
+</p>
+
 <hr />
 <h3 id="aeiva-server">🪄⭐Aeiva Server</h3>
 <p>Run the following command in terminal:</p>
@@ -1044,7 +1073,7 @@ python -c "import aeiva; print(aeiva.__version__)"</code></p>
 </ul>
 </li>
 <li><strong>Download <code>Maid.app</code></strong>:<ul>
-<li>Download <code>Maid.app</code> from [provide download link or instructions].</li>
+<li>Download <code>Maid.app</code> from <a href="https://drive.google.com/file/d/1c7PXoMk7-QgWJ37XM_JqrLn3HQCg3HDL/view?usp=sharing">here</a>.</li>
 </ul>
 </li>
 <li>
@@ -1112,10 +1141,26 @@ python -c "import aeiva; print(aeiva.__version__)"</code></p>
 </ul>
 </li>
 </ul>
-<p><strong>Screenshot of Maid-chat</strong>:
-<img alt="gradio_chatbot" src="../Material%20for%20MkDocs_files/Maid-screenshot.png" /></p>
+<p><strong>Demo of Maid-chat</strong>:</p>
+<!--[![Maid Chat](assets/Maid-screenshot.png)](https://www.youtube.com/watch?v=ITk1aXSfWAg)-->
+
+<p align="center" width="100%">
+    <a href="https://www.youtube.com/watch?v=ITk1aXSfWAg">
+        <img src="assets/Maid-screenshot.png" alt="Maid Chat" style="width: 80%; display: block; margin: auto;">
+    </a>
+</p>
+
+<h2 id="citation">Citation</h2>
+<p>To cite <a href="https://github.com/chatsci/Aeiva">Aeiva</a> in publications, please use the following BibTeX entries.</p>
+<pre><code class="language-bibtex">@misc{bang2024aeiva,
+      title={Aeiva: An Evolving Intelligent Virtual Assistant}, 
+      author={Bang Liu},
+      year={2024},
+      url={https://github.com/chatsci/Aeiva}
+}
+</code></pre>
 <h2 id="contact">Contact</h2>
-<p><img alt="contact" src="../Material%20for%20MkDocs_files/contact.png" /></p>
+<p><img alt="contact" src="assets/contact.png" /></p>
 
 
 
