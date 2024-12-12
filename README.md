@@ -20,7 +20,7 @@
 
 In this project, our objective is to develop a modular and flexible intelligent agent and society system, designed as a virtual assistant capable of performing diverse tasks, learning from data, environment, and interactions, and self-evolving over time. The system will leverage deep learning models, primarily transformers, while also exploring innovative models and learning methods. 
 
-Our ultimate goal is to develop a General AI Agent System capable of forming a “genius society” of AI agents. These agents will:
+Our ultimate goal is to develop a General AI Agent System capable of forming a “**genius society**” of AI agents. These agents will:
 
 - Collaboratively address and solve societal challenges across domains.
 - Function in diverse environments, from virtual simulations to real-world applications.
@@ -29,16 +29,16 @@ Our ultimate goal is to develop a General AI Agent System capable of forming a �
 
 Currently, Aeiva supports the following interaction modes:
 
-- Chat in terminal: chat with an agent in the terminal interface
-- Chat with Gradio Webui: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.
-- Chat with desktop Waifu mode: by combining with our another project `Maid`, we can use our agent as the backend and call it through Maid desktop assistant. 
+- **Chat in terminal**: chat with an agent in the terminal interface
+- **Chat with Gradio Webui**: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.
+- **Chat with desktop Waifu mode**: by combining with our another project `Maid`, we can use our agent as the backend and call it through Maid desktop assistant. 
 
 ## Key Features
 
 Currently, we features with the following functionalities:
 
 - **Rich Toolkits**: I have implemented a series of different API tools and I'm keep improving the API library.
-- **Open Operator**: By implementing computer-use related tools, aeiva is able to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!
+- **Open Operator**: By implementing **computer-use** related tools, aeiva is able to understand and operate user's computer and complete daily tasks. We are keep enhancing the functionality in this part. Note: use this feature with caution!
 - **Memory Palace**: I have designed and implemented a layered memory palace for storaging agent memories. It is flexible and can be customized to represent and query different types of memories.
 
 More functionalities and modules will be implemented gradually. Keep tuned! If you find any errors or bugs, feel free to report by opening an issue, thanks a lot!
