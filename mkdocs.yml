@@ -21,11 +21,11 @@ nav:
     # - Roadmap: ROADMAP.md
     # - Coding guidelines: coding_guidelines.md
   # - How-To Guides: how-to-guides.md
-  - API References: reference.md
-  # - Explanations: explanation.md
   - Tutorials: # tutorials.md
     - How to automatically generate documentation from docstrings: tutorials/generate_docs.md
     # - Install MineDojo on Mac with M1 chip: tutorials/install_minedojo.md
+  - API References: reference.md
+  # - Explanations: explanation.md
   - Blogs: blogs.md
 
 
