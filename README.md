@@ -33,6 +33,8 @@ Currently, Aeiva supports the following interaction modes:
 - **Chat with Gradio Webui**: we developed a gradio web UI interface that allows user to chat with the agent. We plan to support multimodality in the near future.
 - **Chat with desktop Waifu mode**: by combining with our another project `Maid`, we can use our agent as the backend and call it through Maid desktop assistant. 
 
+⭐️ **Documentation** 👉 [aeiva documentation](https://chatsci.github.io/Aeiva/)
+
 ## Key Features
 
 Currently, we features with the following functionalities:

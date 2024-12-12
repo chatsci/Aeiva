@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aeiva"
-version = "0.8.1"
+version = "0.8.2"
 description = "aeiva is a general AI agent framework"
 authors = ["Bang Liu <chatsci.ai@gmail.com>"]
 license = "Apache License Version 2.0"
