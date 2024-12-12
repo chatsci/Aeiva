@@ -217,7 +217,7 @@ maid-chat --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbos
 	-	`--port` or `-p`: Port number to run the server on (default: `8000`).
 	-	`--verbose` or `-v`: Enable verbose logging for detailed output.
 *	**Download `Maid.app`**:
-	-	Download `Maid.app` from [provide download link or instructions].
+	-	Download `Maid.app` from [here](https://drive.google.com/file/d/1c7PXoMk7-QgWJ37XM_JqrLn3HQCg3HDL/view?usp=sharing).
 *	**Set `MAID_HOME` Environment Variable**:
 	-	Unix/Linux/macOS:
 		```shell
