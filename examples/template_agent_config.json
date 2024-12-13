@@ -2,7 +2,7 @@
     "embedder_config": {
         "provider_name": "openai",
         "model_name": "text-embedding-ada-002",
-        "api_key": "-------- PUT YOUR OPEN AI API OR OTHER LLM PROVIDER API HERE --------"
+        "api_key": "-------- PUT YOUR OPEN AI API OR OTHER LLM PROVIDER API HERE --------",
         "api_key_env_var": "OPENAI_API_KEY"
     },
     "storage_config": {
