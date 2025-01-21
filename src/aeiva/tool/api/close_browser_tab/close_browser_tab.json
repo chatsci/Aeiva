@@ -1,0 +1,17 @@
+{
+  "type": "function",
+  "function": {
+    "name": "close_browser_tab",
+    "description": "Close a specific browser tab by page_id.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": {
+          "type": "integer",
+          "description": "Index of the page in BrowserContext.pages."
+        }
+      },
+      "required": ["page_id"]
+    }
+  }
+}

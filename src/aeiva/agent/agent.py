@@ -201,39 +201,3 @@ class Agent:
                 await self.event_bus.emit('response.gradio', payload="An error occurred during response generation.")
                 if stream:
                     await self.event_bus.emit('response.gradio', payload="<END_OF_RESPONSE>")
-
-    # @staticmethod
-    # def get_api_key(config_section: Dict[str, Any], key_field: str, env_var_field: str) -> Optional[str]:
-    #     """
-    #     Retrieve an API key from the configuration section.
-
-    #     Args:
-    #         config_section (Dict[str, Any]): The configuration section (e.g., embedder_config).
-    #         key_field (str): The key in the config_section that may contain the API key directly.
-    #         env_var_field (str): The key in the config_section that specifies the environment variable name.
-
-    #     Returns:
-    #         Optional[str]: The API key if found, else None.
-
-    #     Raises:
-    #         EnvironmentError: If the environment variable is specified but not set.
-    #     """
-    #     # Check if API key is provided directly
-    #     api_key = config_section.get(key_field)
-    #     if api_key:
-    #         logger.info(f"Using provided API key for '{key_field}'.")
-    #         return api_key
-
-    #     # Else, check if an environment variable is specified
-    #     env_var = config_section.get(env_var_field)
-    #     if env_var:
-    #         api_key = os.getenv(env_var)
-    #         if api_key:
-    #             logger.info(f"Retrieved API key for '{key_field}' from environment variable '{env_var}'.")
-    #             return api_key
-    #         else:
-    #             logger.error(f"Environment variable '{env_var}' for '{key_field}' is not set.")
-    #             raise EnvironmentError(f"Environment variable '{env_var}' for '{key_field}' is not set.")
-        
-    #     logger.warning(f"No API key provided for '{key_field}'.")
-    #     return None

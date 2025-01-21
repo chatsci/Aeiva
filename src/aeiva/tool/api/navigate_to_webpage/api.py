@@ -1,56 +1,36 @@
-# navigate_to_webpage/api.py
+import logging
+from typing import Dict, Any
+from playwright.async_api import BrowserContext, Page
 
-from typing import Any, Dict
-from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
+logger = logging.getLogger(__name__)
 
-def navigate_to_webpage(url: str, timeout: int = 30000) -> Dict[str, Any]:
+async def navigate_to_webpage(
+    context: BrowserContext,
+    page_id: int,
+    url: str
+) -> Dict[str, Any]:
     """
-    Navigates the browser to a specified webpage.
-
-    Args:
-        url (str): Full URL of the webpage to navigate to.
-        timeout (int): Maximum time to wait for navigation to complete (in milliseconds).
-
-    Returns:
-        Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
+    Navigate an existing page to the given URL.
     """
-    try:
-        # Validate required parameters
-        if not url:
-            return {
-                "output": None,
-                "error": "Missing required parameter: url",
-                "error_code": "VALIDATION_ERROR"
-            }
-
-        # Initialize WebDriver (Chrome)
-        driver = webdriver.Chrome()
-
-        # Set page load timeout (in seconds)
-        driver.set_page_load_timeout(timeout / 1000)
-
-        try:
-            driver.get(url)
-        except WebDriverException as e:
-            driver.quit()
-            return {
-                "output": None,
-                "error": f"WebDriver Error: {e}",
-                "error_code": "WEBDRIVER_ERROR"
-            }
-
-        driver.quit()
-
+    if not url:
         return {
-            "output": {"message": "Navigated to the specified webpage."},
+            "result": None,
+            "error": "URL must not be empty.",
+            "error_code": "VALIDATION_ERROR"
+        }
+    try:
+        page: Page = context.pages[page_id]
+        await page.goto(url)
+        await page.wait_for_load_state("domcontentloaded")
+        return {
+            "result": {"page_id": page_id, "url": url},
             "error": None,
             "error_code": "SUCCESS"
         }
-
     except Exception as e:
+        logger.exception("Failed to navigate to webpage.")
         return {
-            "output": None,
-            "error": f"Unexpected Error: {e}",
-            "error_code": "UNEXPECTED_ERROR"
+            "result": None,
+            "error": str(e),
+            "error_code": "NAVIGATE_FAILED"
         }

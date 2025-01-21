@@ -1,0 +1,17 @@
+{
+  "type": "function",
+  "function": {
+    "name": "open_url",
+    "description": "Open a new page in the BrowserContext and navigate to a given URL.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to open in a new page."
+        }
+      },
+      "required": ["url"]
+    }
+  }
+}

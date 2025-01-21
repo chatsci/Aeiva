@@ -107,4 +107,4 @@ class Environment(ABC):
                 f"state={self.state}, "
                 f"entities={self.entities}, "
                 f"time={self.time}, "
-                f"constraints={self.constraints})")
+                f"constraints={self.constraints})") 

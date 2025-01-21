@@ -1,0 +1,19 @@
+{
+  "type": "function",
+  "function": {
+    "name": "search_google",
+    "description": "Perform a search on Google.com with the specified query.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": ["page_id", "query"]
+    }
+  }
+}

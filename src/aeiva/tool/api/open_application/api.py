@@ -35,7 +35,7 @@ def open_application(application_path: str) -> Dict[str, Any]:
         if sys.platform.startswith('win'):
             os.startfile(application_path)
         elif sys.platform.startswith('darwin') or sys.platform.startswith('linux'):
-            subprocess.Popen([application_path])
+            subprocess.Popen(["open", application_path])
         else:
             return {
                 "output": None,

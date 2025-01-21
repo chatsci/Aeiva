@@ -146,7 +146,7 @@ You will see your terminal is like below:
 <!--![terminal_chatbot](assets/aeiva-chat-terminal-demo.png)-->
 
 <p align="center" width="100%">
-    <img src="assets/aeiva-chat-terminal-demo.png" alt="Terminal Chatbot" style="width: 80%; display: block; margin: auto;">
+    <img src="https://i.ibb.co/Y0mtmn6/aeiva-chat-terminal-demo.png" alt="Terminal Chatbot" style="width: 80%; display: block; margin: auto;">
 </p>
 
 
@@ -177,7 +177,7 @@ By visiting the gradio interface, you will see a gradio web-ui like below:
 <!--![gradio_chatbot](assets/aeiva-chat-gradio-demo.png)-->
 
 <p align="center" width="100%">
-    <img src="assets/aeiva-chat-gradio-demo.png" alt="Gradio Chatbot" style="width: 80%; display: block; margin: auto;">
+    <img src="https://i.ibb.co/8x82p3K/aeiva-chat-gradio-demo.png" alt="Gradio Chatbot" style="width: 80%; display: block; margin: auto;">
 </p>
 
 ---
@@ -275,7 +275,7 @@ maid-chat --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --verbos
 
 <p align="center" width="100%">
     <a href="https://www.youtube.com/watch?v=ITk1aXSfWAg">
-        <img src="assets/Maid-screenshot.png" alt="Maid Chat" style="width: 80%; display: block; margin: auto;">
+        <img src="https://i.ibb.co/q97nLD3/Maid-screenshot.png" alt="Maid Chat" style="width: 80%; display: block; margin: auto;">
     </a>
 </p>
 
@@ -296,7 +296,7 @@ To cite [Aeiva](https://github.com/chatsci/Aeiva) in publications, please use th
 
 ## Contact
 
-![contact](assets/contact.png)
+![contact](https://i.ibb.co/wwpPL23/contact.png)
 
 
 

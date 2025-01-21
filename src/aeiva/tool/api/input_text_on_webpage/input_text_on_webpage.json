@@ -1,0 +1,22 @@
+{
+  "type": "function",
+  "function": {
+    "name": "input_text_on_webpage",
+    "description": "Fill text into an input/textarea element by CSS selector.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": {
+          "type": "integer"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": ["page_id", "selector", "text"]
+    }
+  }
+}

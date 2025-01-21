@@ -3,10 +3,10 @@
 import asyncio
 import logging
 from typing import Any, List, Dict
-from aeiva.perception.sensor import Sensor
+from aeiva.perception.sensor.sensor import Sensor
 from aeiva.perception.stimuli import Stimuli
 from aeiva.perception.sensation import Signal
-from aeiva.perception.terminal_input_sensor import TerminalInputSensor
+from aeiva.perception.sensor.terminal_input_sensor import TerminalInputSensor
 
 class PerceptionSystem:
     """

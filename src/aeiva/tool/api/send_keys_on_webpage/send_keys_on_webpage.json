@@ -1,0 +1,23 @@
+{
+  "type": "function",
+  "function": {
+    "name": "send_keys_on_webpage",
+    "description": "Send key presses to an element or the page.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": { "type": "integer" },
+        "selector": {
+          "type": "string",
+          "description": "CSS selector or empty to target the body."
+        },
+        "keys": {
+          "type": "array",
+          "description": "A list of key presses, e.g. ['Enter', 'Tab'].",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["page_id", "keys"]
+    }
+  }
+}

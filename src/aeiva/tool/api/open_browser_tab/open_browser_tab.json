@@ -1,0 +1,17 @@
+{
+  "type": "function",
+  "function": {
+    "name": "open_browser_tab",
+    "description": "Open a new browser tab, optionally navigate to a URL.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Optional URL to open."
+        }
+      },
+      "required": []
+    }
+  }
+}

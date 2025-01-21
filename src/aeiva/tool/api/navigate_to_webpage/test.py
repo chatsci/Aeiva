@@ -1,76 +1,35 @@
-# navigate_to_webpage/test.py
+# aeiva/tool/api/navigate_to_webpage/test.py
 
-import pytest
-from unittest.mock import patch, MagicMock
-from navigate_to_webpage.api import navigate_to_webpage
-from selenium.common.exceptions import WebDriverException
+import asyncio
+import os
+import sys
 
-@pytest.mark.parametrize("request, mock_get_side_effect, expected", [
-    # Successful navigation
-    (
-        {
-            "url": "http://example.com",
-            "timeout": 5000
-        },
-        None,  # No exception
-        {
-            "output": {"message": "Navigated to the specified webpage."},
-            "error": None,
-            "error_code": "SUCCESS"
-        }
-    ),
-    # Missing required parameter
-    (
-        {
-            "timeout": 5000
-        },
-        None,
-        {
-            "output": None,
-            "error": "Missing required parameter: url",
-            "error_code": "VALIDATION_ERROR"
-        }
-    ),
-    # WebDriver exception during navigation
-    (
-        {
-            "url": "http://example.com",
-            "timeout": 5000
-        },
-        WebDriverException("Session not created"),
-        {
-            "output": None,
-            "error": "WebDriver Error: Session not created",
-            "error_code": "WEBDRIVER_ERROR"
-        }
-    ),
-    # Unexpected exception
-    (
-        {
-            "url": "http://example.com",
-            "timeout": 5000
-        },
-        Exception("Unexpected error"),
-        {
-            "output": None,
-            "error": "Unexpected Error: Unexpected error",
-            "error_code": "UNEXPECTED_ERROR"
-        }
-    ),
-])
-def test_navigate_to_webpage(request, mock_get_side_effect, expected):
-    with patch('navigate_to_webpage.api.webdriver.Chrome') as mock_webdriver:
-        mock_driver = MagicMock()
-        mock_webdriver.return_value = mock_driver
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
-        if mock_get_side_effect:
-            mock_driver.get.side_effect = mock_get_side_effect
-        else:
-            mock_driver.get.return_value = None
+from aeiva.tool.toolkit.browser.browser_toolkit import BrowserToolkit
+from aeiva.tool.api.open_browser_tab.api import open_browser_tab
+from aeiva.tool.api.navigate_to_webpage.api import navigate_to_webpage
 
-        # Mock driver.quit
-        mock_driver.quit.return_value = None
+async def main():
+    toolkit = BrowserToolkit()
+    await toolkit.asetup()
+    context = toolkit.context
 
-        result = navigate_to_webpage(request)
+    if not context:
+        print("[TEST] No BrowserContext found!")
+        return
 
-        assert result == expected
+    # 1) Open a blank tab
+    open_result = await open_browser_tab(context)
+    page_id = open_result["result"]["page_id"]
+    print("[TEST] open_browser_tab:", open_result)
+
+    # 2) Now navigate to example.com
+    nav_result = await navigate_to_webpage(context, page_id, "https://example.com")
+    print("[TEST] navigate_to_webpage:", nav_result)
+
+    await asyncio.sleep(5)
+    await toolkit.ateardown()
+
+if __name__ == "__main__":
+    asyncio.run(main())

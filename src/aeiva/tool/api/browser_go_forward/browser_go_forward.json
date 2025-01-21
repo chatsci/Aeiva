@@ -1,0 +1,17 @@
+{
+  "type": "function",
+  "function": {
+    "name": "browser_go_forward",
+    "description": "Go forward in browser history on a given page.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": {
+          "type": "integer",
+          "description": "Index of the page in the BrowserContext.pages list."
+        }
+      },
+      "required": ["page_id"]
+    }
+  }
+}

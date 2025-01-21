@@ -1,0 +1,16 @@
+{
+  "type": "function",
+  "function": {
+    "name": "upload_file_on_webpage",
+    "description": "Set a file input's value to a local file path for uploading.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": { "type": "integer" },
+        "selector": { "type": "string" },
+        "file_path": { "type": "string" }
+      },
+      "required": ["page_id", "selector", "file_path"]
+    }
+  }
+}

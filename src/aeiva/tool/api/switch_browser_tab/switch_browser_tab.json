@@ -1,0 +1,17 @@
+{
+  "type": "function",
+  "function": {
+    "name": "switch_browser_tab",
+    "description": "Switch focus to a different tab by page_id.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": {
+          "type": "integer",
+          "description": "Index of the target tab."
+        }
+      },
+      "required": ["page_id"]
+    }
+  }
+}

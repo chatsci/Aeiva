@@ -1,0 +1,16 @@
+{
+  "type": "function",
+  "function": {
+    "name": "select_dropdown_on_webpage",
+    "description": "Select an option from a dropdown by value.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": { "type": "integer" },
+        "selector": { "type": "string" },
+        "value": { "type": "string" }
+      },
+      "required": ["page_id", "selector", "value"]
+    }
+  }
+}

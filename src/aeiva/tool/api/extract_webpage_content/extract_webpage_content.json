@@ -1,0 +1,22 @@
+{
+  "type": "function",
+  "function": {
+    "name": "extract_webpage_content",
+    "description": "Extract the content of the page as text or html.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "page_id": {
+          "type": "integer",
+          "description": "Index of the page."
+        },
+        "format": {
+          "type": "string",
+          "description": "'text' or 'html'.",
+          "default": "text"
+        }
+      },
+      "required": ["page_id"]
+    }
+  }
+}
