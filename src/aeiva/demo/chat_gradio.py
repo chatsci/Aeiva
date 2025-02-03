@@ -16,13 +16,12 @@ import logging
 import time
 import queue  # Import thread-safe queue
 
-from aeiva.logger.logger import get_logger
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.agent.agent import Agent
 from aeiva.event.event import Event
 
 # Setup logger
-logger = get_logger(__name__, level="INFO")
+logger = logging.getLogger(__name__)
 
 # Load environment variables (API keys, etc.)
 load_dotenv()

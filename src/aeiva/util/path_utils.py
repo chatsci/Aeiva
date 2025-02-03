@@ -2,12 +2,36 @@ import os
 import sys
 import platform
 import importlib.util
+import pathlib
 from pathlib import Path
 import logging
 
-# Configure logging for the module
-logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
+
+
+def find_project_root_dir(marker_files=("pyproject.toml", ".git")) -> pathlib.Path:
+    """
+    Dynamically searches upward from the current file's directory until it
+    finds a directory containing at least one of the `marker_files`.
+    Returns that directory as the project root.
+    """
+    current_dir = pathlib.Path(__file__).resolve().parent
+    for parent in current_dir.parents:
+        # If any marker file/folder is in this parent
+        if any((parent / mf).exists() for mf in marker_files):
+            return parent
+    # Fallback if not found
+    return current_dir  # or raise an error
+
+
+def get_project_root_dir() -> pathlib.Path:
+    """
+    Returns the absolute path to the top-level Aeiva/ directory.
+    Adjust the number of `.parents[...]` as needed if this code
+    ever moves deeper in the project structure.
+    """
+    return pathlib.Path(__file__).resolve().parents[3]
 
 
 def get_package_root(package_name: str) -> str:

@@ -14,9 +14,9 @@ from aeiva.llm.llm_gateway_exceptions import (
     llm_gateway_exception,
 )
 from aeiva.llm.fault_tolerance import retry_async, retry_sync
-from aeiva.logger.logger import get_logger
 from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
 from aeiva.tool.tool import Tool
+import logging
 
 # # Enable verbose logging in litellm for debug
 # import litellm
@@ -33,7 +33,7 @@ class LLMClient:
     def __init__(self, config: LLMGatewayConfig):
         self.config = config
         self.metrics = LLMUsageMetrics()
-        self.logger = get_logger(__name__, level=config.llm_logging_level.upper())
+        self.logger = logging.getLogger(__name__)
         self._validate_config()
 
     def _validate_config(self):

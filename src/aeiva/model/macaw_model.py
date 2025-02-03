@@ -25,7 +25,8 @@ from transformers.activations import ACT2FN
 from transformers.modeling_utils import PreTrainedModel, PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutput
 import copy
-logger = logging.get_logger(__name__)
+
+logger = logging.getLogger(__name__)
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the GNU General Public License version 3.
 

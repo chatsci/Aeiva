@@ -1,0 +1,30 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  standard:
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: standard
+    stream: ext://sys.stdout
+
+  file_handler:
+    class: logging.FileHandler
+    level: WARNING
+    formatter: standard
+    filename: "logs/aeiva.log"  # we'll override this in code if needed
+
+loggers:
+  # Example of selectively raising logging level on a specific module
+  "aeiva.agent":
+    level: DEBUG
+    handlers: [file_handler]  # add concole if you want to see logs in the terminal
+    propagate: false
+
+root:
+  level: WARNING
+  handlers: [file_handler]

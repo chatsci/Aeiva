@@ -18,12 +18,13 @@ import soundfile as sf
 from PIL import Image
 
 from aeiva.util.file_utils import from_json_or_yaml
+from aeiva.util.path_utils import get_project_root_dir
+from aeiva.common.logger import setup_logging
 from aeiva.agent.agent import Agent
 from aeiva.event.event import Event
 from aeiva.command.command_utils import (
     get_package_root,
     get_log_dir,
-    setup_logging,
     validate_neo4j_home,
     start_neo4j,
     stop_neo4j,
@@ -50,7 +51,13 @@ def run(config, verbose):
     Starts the Aeiva chat Gradio interface with the provided configuration.
     """
     # Setup logging
-    logger = setup_logging(DEFAULT_LOG_PATH, verbose)
+    project_root = get_project_root_dir()
+    logger_config_path = project_root / "configs" / "logger_config.yaml"
+    logger = setup_logging(
+        config_file_path=logger_config_path,
+        log_file_path=DEFAULT_LOG_PATH,
+        verbose=verbose
+    )
     
     # Load environment variables (API keys, etc.)
     load_dotenv()

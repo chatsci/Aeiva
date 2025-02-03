@@ -4,13 +4,11 @@ Here we put util functions related to database, logging and so on for different 
 
 import os
 import sys
-import logging
 import subprocess
 import signal
 from pathlib import Path
 import click
 import importlib.resources as importlib_resources
-from aeiva.logger.logger import get_logger
 
 
 def get_package_root():
@@ -30,31 +28,6 @@ def get_log_dir():
     log_dir = home_dir / '.aeiva' / 'logs'  # Log saved to `~/.aeiva/logs/`
     log_dir.mkdir(parents=True, exist_ok=True)  # Ensure the log directory exists
     return log_dir
-
-def setup_logging(log_file, verbose=False):
-    """
-    Sets up logging to both file and console.
-    """
-    logger = get_logger(__name__, level="DEBUG" if verbose else "INFO")
-
-    # Create a file handler
-    file_handler = logging.FileHandler(log_file, mode='a')
-    file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-
-    # Create a console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-
-    # Create a logging format
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    # Add handlers to the logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-
-    return logger
 
 def validate_neo4j_home(logger, neo4j_home):
     """

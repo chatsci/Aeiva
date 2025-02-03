@@ -37,7 +37,7 @@ from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPa
 from transformers.models.whisper.modeling_whisper import WhisperEncoderLayer
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 # Adapted from transformers.models.bart.modeling_bart._make_causal_mask

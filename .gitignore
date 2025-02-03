@@ -38,6 +38,8 @@ uploads/*/*
 configs/*
 configs/*/*
 !configs/README.md
+!configs/logger_config.json
+!configs/logger_config.yaml
 
 *.egg-info/
 **/*.egg-info/

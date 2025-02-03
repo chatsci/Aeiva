@@ -16,10 +16,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 
+from aeiva.util.path_utils import get_project_root_dir
+from aeiva.common.logger import setup_logging
 from aeiva.command.command_utils import (
     get_package_root,
     get_log_dir,
-    setup_logging,
     validate_neo4j_home,
     start_neo4j,
     stop_neo4j,
@@ -111,7 +112,14 @@ def run(config, host, port, verbose):
     Starts the Aeiva Agent Server and launches the Unity application.
     """
     # Setup logging
-    logger = setup_logging(get_log_dir() / 'maid-chat.log', verbose)
+    project_root = get_project_root_dir()
+    logger_config_path = project_root / "configs" / "logger_config.yaml"
+    logger_file_path = get_log_dir() / 'maid-chat.log'
+    logger = setup_logging(
+        config_file_path=logger_config_path,
+        log_file_path=logger_file_path,
+        verbose=verbose
+    )
     
     # Load configuration
     if config is None:
