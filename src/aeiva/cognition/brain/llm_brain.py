@@ -1,7 +1,9 @@
 # File: cognition/brain/llm_brain.py
 
+import os
+import asyncio
 from typing import Any, List, Dict, AsyncGenerator, Optional
-from aeiva.cognition.brain.brain import Brain
+from aeiva.cognition.brain.base_brain import Brain
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 import sys
@@ -46,8 +48,13 @@ class LLMBrain(Brain):
         and ensuring that all necessary resources are in place.
         """
         llm_conf_dict = self.config_dict.get('llm_gateway_config', {})
+        llm_api_key = llm_conf_dict.get('llm_api_key')
+        if not llm_api_key:
+            env_var = llm_conf_dict.get('llm_api_key_env_var')
+            if env_var:
+                llm_api_key = os.getenv(env_var)
         self.config = LLMGatewayConfig(
-            llm_api_key=llm_conf_dict.get('llm_api_key'),
+            llm_api_key=llm_api_key,
             llm_model_name=llm_conf_dict.get('llm_model_name', 'gpt-4o'),
             llm_temperature=llm_conf_dict.get('llm_temperature', 0.7),
             llm_max_output_tokens=llm_conf_dict.get('llm_max_output_tokens', 10000),
@@ -110,6 +117,19 @@ class LLMBrain(Brain):
                 #return response
 
         except Exception as e:
+            if use_async and not stream:
+                try:
+                    response = await asyncio.to_thread(
+                        self.llm_client.generate,
+                        self.state["conversation"],
+                        tools=tools,
+                        stream=False,
+                    )
+                    self.state["cognitive_state"] = response
+                    yield response
+                    return
+                except Exception:
+                    pass
             self.handle_error(e)
             raise
 

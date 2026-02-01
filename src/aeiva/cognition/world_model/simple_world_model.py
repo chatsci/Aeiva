@@ -1,6 +1,6 @@
 # File: cognition/simple_world_model.py
 
-from aeiva.cognition.world_model.world_model import WorldModel
+from aeiva.cognition.world_model.base_world_model import WorldModel
 from typing import Any, List
 
 

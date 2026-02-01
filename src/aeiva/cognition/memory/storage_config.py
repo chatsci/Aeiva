@@ -1,4 +1,4 @@
-# memory_config.py
+# storage_config.py
 
 from dataclasses import dataclass, field
 from typing import Optional, Any

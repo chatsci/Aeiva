@@ -14,15 +14,34 @@ handlers:
 
   file_handler:
     class: logging.FileHandler
-    level: WARNING
+    level: INFO
     formatter: standard
     filename: "logs/aeiva.log"  # we'll override this in code if needed
 
 loggers:
-  # Example of selectively raising logging level on a specific module
   "aeiva.agent":
     level: DEBUG
-    handlers: [file_handler]  # add concole if you want to see logs in the terminal
+    handlers: [file_handler]
+    propagate: false
+
+  "aeiva.interface":
+    level: INFO
+    handlers: [file_handler]
+    propagate: false
+
+  "aeiva.cognition.memory.raw_memory":
+    level: DEBUG
+    handlers: [file_handler]
+    propagate: false
+
+  "aeiva.cognition.memory.summary_memory":
+    level: DEBUG
+    handlers: [file_handler]
+    propagate: false
+
+  "aeiva.neuron":
+    level: INFO
+    handlers: [file_handler]
     propagate: false
 
 root:

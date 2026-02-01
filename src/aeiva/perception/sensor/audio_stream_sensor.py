@@ -1,31 +1,35 @@
 import asyncio
 import threading
 import logging
-from typing import Optional, Union
+from typing import Optional
+
 import numpy as np
 import pyaudio
 
 from aeiva.perception.sensor.sensor import Sensor
 
+logger = logging.getLogger(__name__)
+
 class AudioStreamSensor(Sensor):
     """
-    A sensor that captures audio samples from various sources and emits them via the EventBus.
+    A sensor that captures audio samples (int16) from a 'microphone' source
+    and emits them via the EventBus.
 
-    Parameters (passed via `params` dict):
+    Parameters (via `params` dict):
     --------------------------------------------------------------------
     source_type: str
-        Type of audio source. Can be 'microphone', 'file', or 'none' (dummy source).
-        Currently, only 'microphone' is implemented in this example.
+        Type of audio source. Current valid value: 'microphone'
     device_index: Optional[int]
-        Device index for the PyAudio input device, if using a microphone. Defaults to None.
+        PyAudio device index for input. If None, default device is used.
     sample_rate: int
-        Sample rate in Hz. Defaults to 16000.
+        Audio sample rate in Hz. Defaults to 16000.
     channels: int
-        Number of audio channels. Defaults to 1.
+        Number of channels. Defaults to 1 (mono).
     chunk_size: int
-        Number of frames per buffer. Defaults to 1024.
+        Frames per buffer (default=1024).
     emit_event_name: str
-        The event name to emit on the event_bus. Defaults to 'perception.audio_chunk'.
+        The event name to emit with (sample_rate, audio_array) payload.
+        Defaults to 'perception.audio_chunk'.
     """
 
     def __init__(self, name: str, params: dict, event_bus):
@@ -40,68 +44,92 @@ class AudioStreamSensor(Sensor):
         # Internal state
         self._thread: Optional[threading.Thread] = None
         self._running = False
-        self._pyaudio_instance = pyaudio.PyAudio()
+        self._pyaudio_instance = None
         self._stream = None
 
     async def start(self):
         """
-        Starts capturing from the audio source in a background thread.
+        Start capturing audio in a background thread.
+        If 'source_type' is 'none', do nothing.
         """
         if self.source_type == "none":
-            logging.warning(f"[{self.name}] source_type is 'none'. No audio capturing.")
+            logger.warning(f"[{self.name}] source_type is 'none'. No audio capturing.")
             return
 
         if self.source_type != "microphone":
-            raise NotImplementedError(f"[{self.name}] Only 'microphone' source_type is implemented.")
+            raise NotImplementedError(f"[{self.name}] Unsupported source_type: {self.source_type}")
 
-        # Open the microphone (or other audio input device)
-        self._stream = self._pyaudio_instance.open(
-            format=pyaudio.paInt16,
-            channels=self.channels,
-            rate=self.sample_rate,
-            input=True,
-            frames_per_buffer=self.chunk_size,
-            input_device_index=self.device_index
-        )
+        # Ensure event_bus.loop is valid
+        if not self.event_bus.loop:
+            raise RuntimeError(f"[{self.name}] EventBus loop is not set. Cannot start audio capture.")
+
+        # Initialize PyAudio
+        self._pyaudio_instance = pyaudio.PyAudio()
+
+        # Open the input stream
+        try:
+            self._stream = self._pyaudio_instance.open(
+                format=pyaudio.paInt16,
+                channels=self.channels,
+                rate=self.sample_rate,
+                input=True,
+                frames_per_buffer=self.chunk_size,
+                input_device_index=self.device_index
+            )
+        except Exception as e:
+            logger.error(f"[{self.name}] Failed to open audio stream: {e}")
+            raise
 
         self._running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
 
-        logging.debug(f"[{self.name}] AudioStreamSensor started (device_index={self.device_index}).")
+        logger.debug(f"[{self.name}] AudioStreamSensor started (device_index={self.device_index}).")
 
     def _capture_loop(self):
         """
-        Continuously capture audio chunks from the source and emit them to the EventBus.
+        Continuously read audio chunks from PyAudio and emit them to the EventBus.
         """
         loop = self.event_bus.loop
         if not loop:
-            logging.error(f"[{self.name}] EventBus loop is not set. Cannot emit events.")
+            logger.error(f"[{self.name}] No event bus loop found; cannot emit events.")
             return
 
         while self._running and self._stream and not self._stream.is_stopped():
-            data = self._stream.read(self.chunk_size, exception_on_overflow=False)
+            try:
+                data = self._stream.read(self.chunk_size, exception_on_overflow=False)
+            except Exception as e:
+                logger.error(f"[{self.name}] Error reading audio stream: {e}")
+                break
+
             # Convert raw bytes to int16 numpy array
             audio_array = np.frombuffer(data, dtype=np.int16)
 
             # Emit the (sample_rate, audio_array) tuple
             asyncio.run_coroutine_threadsafe(
                 self.event_bus.emit(self.emit_event_name, payload=(self.sample_rate, audio_array)),
-                loop,
+                loop
             )
 
+        # Cleanup state if we exit the loop
         self._running = False
-        logging.debug(f"[{self.name}] Exiting capture loop.")
+        logger.debug(f"[{self.name}] Exiting audio capture loop.")
 
     async def stop(self):
         """
-        Stops the audio capturing thread and closes the audio stream.
+        Stop the capturing thread and close the audio stream.
         """
         self._running = False
         if self._thread and self._thread.is_alive():
-            self._thread.join()
+            self._thread.join(timeout=2.0)
+
         if self._stream:
-            self._stream.stop_stream()
+            if not self._stream.is_stopped():
+                self._stream.stop_stream()
             self._stream.close()
-        self._pyaudio_instance.terminate()
-        logging.debug(f"[{self.name}] AudioStreamSensor stopped.")
+
+        if self._pyaudio_instance:
+            self._pyaudio_instance.terminate()
+            self._pyaudio_instance = None
+
+        logger.debug(f"[{self.name}] AudioStreamSensor stopped.")

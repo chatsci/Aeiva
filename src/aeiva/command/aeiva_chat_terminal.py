@@ -7,8 +7,8 @@ import sys
 import signal
 import asyncio
 from pathlib import Path
+from uuid import uuid4
 import click
-from aeiva.agent.agent import Agent
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.util.path_utils import get_project_root_dir
 from aeiva.common.logger import setup_logging
@@ -19,12 +19,15 @@ from aeiva.command.command_utils import (
     start_neo4j,
     stop_neo4j,
     handle_exit,
+    build_runtime,
 )
 import logging
 
-# Get default agent config file path
+# Get default agent config file path (prefer JSON if available)
 PACKAGE_ROOT = get_package_root()
-DEFAULT_CONFIG_PATH = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
+_json_config = PACKAGE_ROOT / 'configs' / 'agent_config.json'
+_yaml_config = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
+DEFAULT_CONFIG_PATH = _json_config if _json_config.exists() else _yaml_config
 
 # Get default log file path
 LOGS_DIR = get_log_dir()
@@ -44,9 +47,14 @@ def run(config, verbose):
     # Setup logging
     project_root = get_project_root_dir()
     logger_config_path = project_root / "configs" / "logger_config.yaml"
+    log_file_path = DEFAULT_LOG_PATH
+    if not os.access(LOGS_DIR, os.W_OK):
+        fallback_dir = project_root / "logs"
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = fallback_dir / "aeiva-chat-terminal.log"
     logger = setup_logging(
         config_file_path=logger_config_path,
-        log_file_path=DEFAULT_LOG_PATH,
+        log_file_path=log_file_path,
         verbose=verbose
     )
     
@@ -74,15 +82,23 @@ def run(config, verbose):
     # Start Neo4j
     neo4j_process = start_neo4j(logger, neo4j_home)
     
-    # Register signal handlers to ensure Neo4j stops gracefully
-    signal.signal(signal.SIGINT, lambda s, f: handle_exit(s, f, neo4j_process))
-    signal.signal(signal.SIGTERM, lambda s, f: handle_exit(s, f, neo4j_process))
-    
-    # Start the Agent
+    raw_memory_cfg = config_data.get("raw_memory_config") or {}
+    raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
+    session_payload = {"session_id": uuid4().hex, "user_id": raw_user_id}
+
+    # Start the Agent or MAS
     try:
-        agent = Agent(config_data)
-        agent.setup()
-        asyncio.run(agent.run())
+        runtime, agent = build_runtime(config_data)
+
+        def _handle_sig(signum, frame):
+            logger.info(f"Received signal {signum}. Stopping agent.")
+            runtime.request_stop()
+
+        # Register signal handlers to ensure clean shutdown
+        signal.signal(signal.SIGINT, _handle_sig)
+        signal.signal(signal.SIGTERM, _handle_sig)
+
+        asyncio.run(runtime.run(raw_memory_session=session_payload))
     except KeyboardInterrupt:
         logger.info("Agent execution interrupted by user.")
         click.echo("\nAgent execution interrupted by user.")

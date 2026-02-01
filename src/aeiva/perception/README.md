@@ -6,7 +6,7 @@ The **Perception** module is a fundamental component of the AI system, responsib
 
 ### 1. Perception System
 
-**Location:** `perception/perception_system.py`
+**Location:** `perception/perception.py`
 
 **Role:**  
 The **Perception System** serves as the central orchestrator within the Perception module. It aggregates sensory inputs from various modalities using a unified `Stimulus` representation, manages the flow of data through preprocessing and feature extraction, and ensures that processed information is available for downstream cognitive processes.

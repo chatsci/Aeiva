@@ -349,4 +349,13 @@ class MilvusDatabase(VectorDatabase):
 
     def __del__(self):
         """Clean up resources."""
-        connections.disconnect("default")
+        self.close()
+
+    def close(self) -> None:
+        """Close Milvus connection (best-effort)."""
+        try:
+            if connections.has_connection("default"):
+                connections.disconnect("default")
+        except Exception:
+            # Best-effort cleanup; avoid noisy errors on interpreter shutdown.
+            pass

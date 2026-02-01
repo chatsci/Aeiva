@@ -16,6 +16,9 @@ setup(
         'console_scripts': [
             'aeiva-chat-terminal=aeiva.command.aeiva_chat_terminal:run',
             'aeiva-chat-gradio=aeiva.command.aeiva_chat_gradio:run',
+            'aeiva-chat-realtime=aeiva.command.aeiva_chat_realtime:run',
+            'aeiva-chat-slack=aeiva.command.aeiva_chat_slack:run',
+            'aeiva-chat-whatsapp=aeiva.command.aeiva_chat_whatsapp:run',
             'aeiva-server=aeiva.command.aeiva_server:run',
             'maid-chat=aeiva.command.maid_chat:run',
         ],

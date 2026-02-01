@@ -1,67 +1,65 @@
-# test_sensors.py
+# test.py
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict
-from aeiva.event.event_bus import EventBus, EventCancelled
+import sys
+import os
 
+# If needed, adjust path so Python can import your modules
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from aeiva.perception.sensor.audio_stream_sensor import AudioStreamSensor
+from aeiva.perception.sensor.video_stream_sensor import VideoStreamSensor
+
+# Mock event bus that just collects/prints events
+class MockEventBus:
+    def __init__(self):
+        self.loop = asyncio.get_event_loop()
+
+    async def emit(self, event_name: str, payload):
+        print(f"[EventBus] Emitted event '{event_name}' with payload type: {type(payload)}")
 
 async def main():
     logging.basicConfig(level=logging.DEBUG)
-    
-    event_bus = EventBus()
-    event_bus.start()
-    event_bus.loop = asyncio.get_running_loop()
 
-    # Register event handlers
-    @event_bus.on("perception.video_frame")
-    async def handle_video_frame(event):
-        # frame_data is a NumPy array (BGR)
-        # We'll just log shape
-        frame_data = event.payload
-        print(f"[handle_video_frame] Received frame of shape: {frame_data.shape}")
+    event_bus = MockEventBus()
 
-    @event_bus.on("perception.audio_chunk")
-    async def handle_audio_chunk(event):
-        # payload is (sample_rate, numpy_array)
-        sr, array = event.payload
-        print(f"[handle_audio_chunk] Audio chunk: sr={sr}, shape={array.shape}")
-
-    # Import the sensors
-    from aeiva.perception.sensor.video_stream_sensor import VideoStreamSensor
-    from aeiva.perception.sensor.audio_stream_sensor import AudioStreamSensor
-
-    # Example 1: Video from local camera, index=0
-    video_params = {
-        "source_type": "camera",
-        "video_source": 0,
-        "emit_event_name": "perception.video_frame",
-        "fps": 10,
-        "resize": (320, 240),  # Optional
-    }
-    video_sensor = VideoStreamSensor("local_cam", video_params, event_bus)
-
-    # Example 2: Audio from default microphone
+    # 1) Create the audio sensor
     audio_params = {
-        "source_type": "microphone",
-        "device_index": None,  # or specify if needed
+        "source_type": "microphone",  # or "none"
+        "device_index": None,
         "sample_rate": 16000,
         "channels": 1,
         "chunk_size": 1024,
-        "emit_event_name": "perception.audio_chunk",
+        "emit_event_name": "perception.audio_chunk"
     }
-    audio_sensor = AudioStreamSensor("mic_sensor", audio_params, event_bus)
+    audio_sensor = AudioStreamSensor(name="MicrophoneSensor", params=audio_params, event_bus=event_bus)
 
-    # Start the sensors
-    await video_sensor.start()
+    # 2) Create the video sensor
+    video_params = {
+        "source_type": "camera",  # or "none"
+        "video_source": 0,        # default camera
+        "emit_event_name": "perception.video_frame",
+        "fps": 10,                # lower FPS for demo
+        "resize": None            # e.g. (320, 240) if you want smaller frames
+    }
+    video_sensor = VideoStreamSensor(name="CameraSensor", params=video_params, event_bus=event_bus)
+
+    # Start sensors
+    print("[TEST] Starting sensors...")
     await audio_sensor.start()
+    await video_sensor.start()
 
-    # Let them run for 10 seconds
+    # Let them run ~10 seconds
+    print("[TEST] Sensors running. Recording events for 10s...")
     await asyncio.sleep(10)
 
     # Stop sensors
-    await video_sensor.stop()
+    print("[TEST] Stopping sensors...")
     await audio_sensor.stop()
+    await video_sensor.stop()
+
+    print("[TEST] Done.")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,5 +1,4 @@
 import networkx as nx
-import matplotlib.pyplot as plt
 from typing import List, Dict, Optional, Union, Any
 from aeiva.perception.sensation import Signal
 
@@ -89,6 +88,7 @@ class Stimuli:
         """
         Visualizes the procedure's structure using networkx and matplotlib.
         """
+        import matplotlib.pyplot as plt
         pos = nx.spring_layout(self.graph)  # Layout for the graph
         labels = {node: f"{node.id} ({node.type})" if isinstance(node, Signal) else f"{node.id} (Stimuli)"
                   for node in self.graph.nodes()}

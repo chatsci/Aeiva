@@ -1,10 +1,10 @@
-# terminal_input_sensor.py
-
 import asyncio
 import threading
 import logging
+
 from aeiva.perception.sensor.sensor import Sensor
 
+logger = logging.getLogger(__name__)
 
 class TerminalInputSensor(Sensor):
     """
@@ -15,7 +15,6 @@ class TerminalInputSensor(Sensor):
         self.prompt_message = params.get('prompt_message', 'You: ')
         self._running = False
         self._thread = None
-        # self.logger = logging.getLogger(f'TerminalInputSensor-{self.name}')
 
     async def start(self):
         """
@@ -24,7 +23,7 @@ class TerminalInputSensor(Sensor):
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        # self.logger.info(f"{self.name} started.")
+        logger.info(f"{self.name} started.")
 
     async def stop(self):
         """
@@ -32,8 +31,11 @@ class TerminalInputSensor(Sensor):
         """
         self._running = False
         if self._thread:
-            self._thread.join()
-            # self.logger.info(f"{self.name} stopped.")
+            self._thread.join(timeout=0.2)
+            if self._thread.is_alive():
+                logger.info(f"{self.name} stop requested; input thread still alive.")
+            else:
+                logger.info(f"{self.name} stopped.")
 
     def _run(self):
         """
@@ -50,6 +52,25 @@ class TerminalInputSensor(Sensor):
                 if not self._running:
                     break  # Exit if stopped during input
 
+                command = user_input.strip().lower()
+                if command in {"exit", "quit", "/exit", "/quit"}:
+                    logger.info("Exit command received. Stopping TerminalInputSensor.")
+                    self._running = False
+                    asyncio.run_coroutine_threadsafe(
+                        self.event_bus.emit("agent.stop"),
+                        loop
+                    )
+                    break
+                if command in {"/emotion", "/emotion-state"}:
+                    asyncio.run_coroutine_threadsafe(
+                        self.event_bus.emit(
+                            "emotion.query",
+                            payload={"type": "state", "show": True, "origin": "terminal"},
+                        ),
+                        loop,
+                    )
+                    continue
+
                 # # Process input into stimuli
                 # stimuli = self.signal_to_stimuli(user_input)
                 
@@ -60,12 +81,12 @@ class TerminalInputSensor(Sensor):
                 )
             except EOFError:
                 # Handle end of input (Ctrl+D)
-                # self.logger.info("EOF received. Stopping TerminalInputSensor.")
+                logger.info("EOF received. Stopping TerminalInputSensor.")
                 self._running = False
             except KeyboardInterrupt:
                 # Handle Ctrl+C
-                # self.logger.info("KeyboardInterrupt received. Stopping TerminalInputSensor.")
+                logger.info("KeyboardInterrupt received. Stopping TerminalInputSensor.")
                 self._running = False
             except Exception as e:
-                # self.logger.error(f"Error in TerminalInputSensor: {e}")
+                logger.error(f"Error in TerminalInputSensor: {e}")
                 self._running = False

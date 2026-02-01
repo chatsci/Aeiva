@@ -298,6 +298,10 @@ class LLMClient:
             "max_tokens": self.config.llm_max_output_tokens,
             "timeout": self.config.llm_timeout,
         }
+        if self.config.llm_base_url:
+            params["base_url"] = self.config.llm_base_url
+        if self.config.llm_api_version:
+            params["api_version"] = self.config.llm_api_version
         params.update(self.config.llm_additional_params)
         params.update(kwargs)
 

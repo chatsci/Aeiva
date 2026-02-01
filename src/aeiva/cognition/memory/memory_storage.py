@@ -2,8 +2,9 @@
 
 import logging
 import json
+import os
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from aeiva.cognition.memory.memory_unit import MemoryUnit
@@ -180,8 +181,8 @@ class MemoryUnitRepository:
             type=row['type'],
             status=row['status'],
             tags=json.loads(row['tags']) if row['tags'] else [],
-            embedding=json.loads(row['embedding']) if row['embedding'] else [],
-            location=json.loads(row['location']) if row['location'] else {},
+            embedding=json.loads(row['embedding']) if row['embedding'] else None,
+            location=json.loads(row['location']) if row['location'] else None,
             source_role=row['source_role'],
             source_name=row['source_name'],
             source_id=row['source_id'],
@@ -237,7 +238,7 @@ class MemoryEventRepository:
             event.get('id', uuid4().hex),
             event['memory_id'],
             event['event_type'],
-            datetime.utcnow().isoformat(),  # TODO: revise utcnow.
+            datetime.now(timezone.utc).isoformat(),
             event.get('memory_data'),
             event.get('previous_data')
         )
@@ -300,7 +301,7 @@ class MemoryEventRepository:
 
 class MemoryStorage:
     """
-    Handles storage operations for MemoryPalace, including interactions with vector,
+    Handles storage operations for the memory system, including interactions with vector,
     graph, and relational databases.
     """
 
@@ -335,6 +336,10 @@ class MemoryStorage:
             graph_db_conf_dict = self.config_dict.get('graph_db_config', {})
             graph_db_provider_name = graph_db_conf_dict.get('provider_name', 'neo4j')
             graph_db_password = graph_db_conf_dict.get('password')
+            if not graph_db_password:
+                env_var = graph_db_conf_dict.get('password_env_var')
+                if env_var:
+                    graph_db_password = os.getenv(env_var)
             graph_db_config = DatabaseConfigFactory.create(
                 provider_name=graph_db_conf_dict.get('provider_name', 'neo4j'),
                 uri=graph_db_conf_dict.get('uri', 'bolt://localhost:7687'),
@@ -392,8 +397,27 @@ class MemoryStorage:
             logger.info("MemoryStorage setup completed successfully.")
         except Exception as e:
             logger.error(f"Error during MemoryStorage setup: {e}")
-            self.handle_error(e)
-            raise  # Re-raise the exception after logging
+            raise
+
+    def close(self) -> None:
+        """Close all configured database connections (best-effort)."""
+        try:
+            if self.vector_db and hasattr(self.vector_db, "close"):
+                self.vector_db.close()
+        except Exception as e:
+            logger.warning(f"Error closing vector DB: {e}")
+
+        try:
+            if self.graph_db and hasattr(self.graph_db, "close"):
+                self.graph_db.close()
+        except Exception as e:
+            logger.warning(f"Error closing graph DB: {e}")
+
+        try:
+            if self.relational_db and hasattr(self.relational_db, "close"):
+                self.relational_db.close()
+        except Exception as e:
+            logger.warning(f"Error closing relational DB: {e}")
 
     def handle_error(self, error: Exception) -> None:
         """
@@ -434,7 +458,6 @@ class MemoryStorage:
             logger.info(f"Added MemoryUnit with ID: {memory_unit.id} to all databases.")
         except Exception as e:
             logger.error(f"Error adding MemoryUnit to databases: {e}")
-            self.handle_error(e)
             raise
 
     def get_memory_unit(self, unit_id: str) -> MemoryUnit:
@@ -459,7 +482,6 @@ class MemoryStorage:
             return memory_unit
         except Exception as e:
             logger.error(f"Error retrieving MemoryUnit with ID {unit_id}: {e}")
-            self.handle_error(e)
             raise
 
     def update_memory_unit(self, unit_id: str, updates: Dict[str, Any]) -> None:
@@ -501,7 +523,6 @@ class MemoryStorage:
             logger.info(f"Updated MemoryUnit with ID: {unit_id} in all databases.")
         except Exception as e:
             logger.error(f"Error updating MemoryUnit with ID {unit_id}: {e}")
-            self.handle_error(e)
             raise
 
     def delete_memory_unit(self, unit_id: str) -> None:
@@ -536,7 +557,6 @@ class MemoryStorage:
             logger.info(f"Deleted MemoryUnit with ID: {unit_id} from all databases.")
         except Exception as e:
             logger.error(f"Error deleting MemoryUnit with ID {unit_id}: {e}")
-            self.handle_error(e)
             raise
 
     def get_all_memory_units(self) -> List[MemoryUnit]:
@@ -555,7 +575,6 @@ class MemoryStorage:
             return memory_units
         except Exception as e:
             logger.error(f"Error retrieving all MemoryUnits: {e}")
-            self.handle_error(e)
             raise
 
     def delete_all_memory_units(self) -> None:
@@ -580,7 +599,6 @@ class MemoryStorage:
             logger.info("Deleted all MemoryUnits from all databases.")
         except Exception as e:
             logger.error(f"Error deleting all MemoryUnits: {e}")
-            self.handle_error(e)
             raise
 
     # Internal helper methods
@@ -615,7 +633,6 @@ class MemoryStorage:
             logger.info(f"Inserted embedding for MemoryUnit ID: {memory_unit.id} into Vector DB.")
         except Exception as e:
             logger.error(f"Error adding MemoryUnit to Vector DB: {e}")
-            self.handle_error(e)
             raise
 
     def _update_vector_db(self, memory_unit: MemoryUnit) -> None:
@@ -644,7 +661,6 @@ class MemoryStorage:
             logger.info(f"Updated embedding for MemoryUnit ID: {memory_unit.id} in Vector DB.")
         except Exception as e:
             logger.error(f"Error updating MemoryUnit in Vector DB: {e}")
-            self.handle_error(e)
             raise
 
     def _delete_from_vector_db(self, unit_id: str) -> None:
@@ -663,7 +679,6 @@ class MemoryStorage:
             logger.info(f"Deleted embedding for MemoryUnit ID: {unit_id} from Vector DB.")
         except Exception as e:
             logger.error(f"Error deleting MemoryUnit from Vector DB: {e}")
-            self.handle_error(e)
             raise
 
     def _add_to_graph_db(self, memory_unit: MemoryUnit) -> None:
@@ -717,7 +732,6 @@ class MemoryStorage:
             logger.info(f"Added {len(memory_unit.edges)} edges for MemoryUnit ID: {memory_unit.id} in Graph DB.")
         except Exception as e:
             logger.error(f"Error adding MemoryUnit to Graph DB: {e}")
-            self.handle_error(e)
             raise
 
     def _update_graph_db(self, memory_unit: MemoryUnit) -> None:
@@ -749,13 +763,27 @@ class MemoryStorage:
                 properties=properties
             )
 
-            # Handle edges updates as needed
-            # This can be complex and depends on your specific requirements
+            # Ensure edges exist in the graph (best-effort)
+            for link in memory_unit.edges:
+                edge_properties = {}
+                if link.metadata:
+                    edge_properties['metadata'] = json.dumps(link.metadata)
+                try:
+                    self.graph_db.add_edge(
+                        source_id=link.source_id,
+                        target_id=link.target_id,
+                        relationship=link.relationship,
+                        properties=edge_properties
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not ensure edge {link.source_id}->{link.target_id} "
+                        f"({link.relationship}): {e}"
+                    )
 
             logger.info(f"Updated MemoryUnit ID: {memory_unit.id} in Graph DB.")
         except Exception as e:
             logger.error(f"Error updating MemoryUnit in Graph DB: {e}")
-            self.handle_error(e)
             raise
 
     def _delete_from_graph_db(self, unit_id: str) -> None:
@@ -770,7 +798,6 @@ class MemoryStorage:
             logger.info(f"Deleted MemoryUnit ID: {unit_id} from Graph DB.")
         except Exception as e:
             logger.error(f"Error deleting MemoryUnit from Graph DB: {e}")
-            self.handle_error(e)
             raise
 
     def _add_to_relational_db(self, memory_unit: MemoryUnit) -> None:
@@ -867,7 +894,6 @@ class MemoryStorage:
             return memory_units
         except Exception as e:
             logger.error(f"Error retrieving similar MemoryUnits: {e}")
-            self.handle_error(e)
             raise
 
     def retrieve_related_memory_units(self, unit_id: str, relationship: Optional[str] = None) -> List[MemoryUnit]:
@@ -900,5 +926,4 @@ class MemoryStorage:
             return related_units
         except Exception as e:
             logger.error(f"Error retrieving related MemoryUnits: {e}")
-            self.handle_error(e)
             raise

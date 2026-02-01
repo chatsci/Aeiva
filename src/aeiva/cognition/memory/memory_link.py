@@ -1,30 +1,113 @@
-from pydantic import BaseModel, Field
-from typing import Any, Optional, Dict
+"""
+Memory link data structure.
+
+MemoryLink represents a relationship between two memory units.
+"""
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
-class MemoryLink(BaseModel):
+
+def _generate_id() -> str:
+    """Generate a unique ID."""
+    return uuid4().hex
+
+
+@dataclass
+class MemoryLink:
     """
-    MemoryLink represents a relationship between two memory units, allowing
-    complex structures to be built by linking individual memory units.
+    Represents a relationship between two memory units.
+
+    Memory links enable building knowledge graphs by connecting
+    related memory units with typed relationships.
 
     Attributes:
-        id (str): Unique identifier for the edge, generated as a UUID string by default.
-        source_id (str): Unique identifier of the source memory unit.
-        target_id (str): Unique identifier of the target memory unit.
-        relationship (str): Type of relationship between memory units, such as 'causal' or 'association'.
-        metadata (Optional[Dict[str, Any]]): Additional metadata for the edge.
+        source_id: ID of the source memory unit.
+        target_id: ID of the target memory unit.
+        relationship: Type of relationship (e.g., 'causal', 'temporal', 'part_of').
+        id: Unique identifier for this link.
+        weight: Optional strength/confidence of the relationship.
+        metadata: Additional metadata about the relationship.
     """
-    id: str = Field(default_factory=lambda: uuid4().hex, description="Unique identifier for the edge.")
-    source_id: str = Field(..., description="Unique identifier of the source memory unit.")
-    target_id: str = Field(..., description="Unique identifier of the target memory unit.")
-    relationship: str = Field("", description="Type of relationship, e.g., 'causal', 'temporal'.")
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata for the edge.")
 
-    def to_dict(self) -> dict:
-        """Converts the MemoryLink instance to a dictionary format for serialization."""
-        return self.dict()
+    source_id: str
+    target_id: str
+    relationship: str = ""
+    id: str = field(default_factory=_generate_id)
+    weight: float = 1.0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    # Common relationship types
+    CAUSAL = "causal"
+    TEMPORAL = "temporal"
+    PART_OF = "part_of"
+    SIMILAR_TO = "similar_to"
+    DERIVED_FROM = "derived_from"
+    REFERENCES = "references"
+    ASSOCIATION = "association"
+
+    @property
+    def is_bidirectional(self) -> bool:
+        """Check if this is a bidirectional relationship."""
+        bidirectional_types = {self.SIMILAR_TO, self.ASSOCIATION}
+        return self.relationship in bidirectional_types
+
+    def reverse(self) -> "MemoryLink":
+        """
+        Create a reversed link (target → source).
+
+        Returns:
+            New MemoryLink with swapped source and target.
+        """
+        return MemoryLink(
+            source_id=self.target_id,
+            target_id=self.source_id,
+            relationship=self.relationship,
+            weight=self.weight,
+            metadata=self.metadata.copy()
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary for serialization.
+
+        Returns:
+            Dictionary representation.
+        """
+        return {
+            "id": self.id,
+            "source_id": self.source_id,
+            "target_id": self.target_id,
+            "relationship": self.relationship,
+            "weight": self.weight,
+            "metadata": self.metadata.copy()
+        }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MemoryLink":
-        """Creates a MemoryLink instance from a dictionary."""
-        return cls(**data)
+    def from_dict(cls, data: Dict[str, Any]) -> "MemoryLink":
+        """
+        Create from dictionary.
+
+        Args:
+            data: Dictionary with link data.
+
+        Returns:
+            MemoryLink instance.
+        """
+        return cls(
+            id=data.get("id", _generate_id()),
+            source_id=data["source_id"],
+            target_id=data["target_id"],
+            relationship=data.get("relationship", ""),
+            weight=data.get("weight", 1.0),
+            metadata=data.get("metadata", {})
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.source_id[:8]}... --[{self.relationship}]--> {self.target_id[:8]}..."
+
+    def __repr__(self) -> str:
+        """Detailed representation."""
+        return f"MemoryLink(source={self.source_id}, target={self.target_id}, relationship='{self.relationship}')"

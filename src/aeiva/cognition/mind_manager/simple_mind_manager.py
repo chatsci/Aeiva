@@ -1,8 +1,7 @@
 # File: cognition/simple_mind_manager.py
 
-from cognition.memory.memory import Memory
-from cognition.world_model.world_model import WorldModel
-from cognition.emotion.emotion import Emotion
+from aeiva.cognition.memory.base_memory import Memory
+from aeiva.cognition.world_model.base_world_model import WorldModel
 from aeiva.cognition.mind_manager.mind_manager import MindManager
 
 from typing import Any, Dict, Optional
@@ -13,7 +12,7 @@ class SimpleMindManager(MindManager):
     World Model, and Emotion based on input and output data.
     """
 
-    def __init__(self, memory: Memory, world_model: WorldModel, emotion: Emotion, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, memory: Memory, world_model: WorldModel, emotion: Any, config: Optional[Dict[str, Any]] = None):
         """
         Initializes the SimpleMindManager with the provided Memory, World Model, and Emotion modules.
 

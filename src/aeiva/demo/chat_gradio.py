@@ -15,6 +15,7 @@ import asyncio
 import logging
 import time
 import queue  # Import thread-safe queue
+from uuid import uuid4
 
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.agent.agent import Agent
@@ -29,6 +30,8 @@ load_dotenv()
 # Initialize the Agent using the from_config class method
 config_path = 'agent_config.yaml'  # Ensure this path is correct
 config_dict = from_json_or_yaml(config_path)
+raw_memory_cfg = config_dict.get("raw_memory_config") or {}
+raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
 
 try:
     agent = Agent(config_dict)
@@ -141,22 +144,50 @@ def clear_media():
     return ""
 
 
-async def bot(user_input, history):
+def _emit_raw_memory(event_name, payload):
+    if agent is None or agent.event_bus.loop is None:
+        logger.warning("Raw memory event skipped (event bus not ready).")
+        return False
+    emit_future = asyncio.run_coroutine_threadsafe(
+        agent.event_bus.emit(event_name, payload=payload),
+        agent.event_bus.loop
+    )
+    emit_future.result()
+    return True
+
+
+def _end_session(session_id):
+    if session_id:
+        _emit_raw_memory(
+            "raw_memory.session.end",
+            {"session_id": session_id, "user_id": raw_user_id}
+        )
+    return [], "", ""
+
+
+async def bot(user_input, history, session_id):
     """
     Handles chatbot logic by emitting perception.gradio events to the Agent and retrieving responses.
     """
     if agent is None:
         logger.error("Agent is not initialized.")
         history.append({"role": "assistant", "content": "Agent is not initialized."})
-        yield history, ''
+        yield history, '', session_id
         return
 
     try:
+        if not session_id:
+            session_id = uuid4().hex
+            _emit_raw_memory(
+                "raw_memory.session.start",
+                {"session_id": session_id, "user_id": raw_user_id}
+            )
+
         # Append user's message to history
         history.append({"role": "user", "content": user_input})
         # Append an empty assistant response
         history.append({"role": "assistant", "content": ""})
-        yield history, ''  # Display the user's message
+        yield history, '', session_id  # Display the user's message
         logger.info(f"User input appended to history: {user_input}")
 
         stream = config_dict["llm_gateway_config"]["llm_stream"]
@@ -188,13 +219,13 @@ async def bot(user_input, history):
                     new_history = history.copy()
                     new_history[-1]["content"] = assistant_message
                     logger.info(f"Yielding updated history: {new_history}")
-                    yield new_history, ''
+                    yield new_history, '', session_id
                 except asyncio.TimeoutError:
                     logger.warning("Timeout: No response received from Agent.")
                     # Create a new history list to ensure Gradio detects the update
                     new_history = history.copy()
                     new_history[-1]["content"] = "I'm sorry, I didn't receive a response in time."
-                    yield new_history, ''
+                    yield new_history, '', session_id
                     break
         else:
             try:
@@ -209,20 +240,20 @@ async def bot(user_input, history):
                 new_history = history.copy()
                 new_history[-1]["content"] = assistant_message
                 logger.info(f"Yielding updated history: {new_history}")
-                yield new_history, ''
+                yield new_history, '', session_id
             except asyncio.TimeoutError:
                 logger.warning("Timeout: No response received from Agent.")
                 # Create a new history list to ensure Gradio detects the update
                 new_history = history.copy()
                 new_history[-1]["content"] = "I'm sorry, I didn't receive a response in time."
-                yield new_history, ''
+                yield new_history, '', session_id
 
     except Exception as e:
         logger.error(f"Unexpected Error in bot function: {e}")
         # Create a new history list to ensure Gradio detects the update
         new_history = history.copy()
         new_history[-1]["content"] = "An unexpected error occurred."
-        yield new_history, ''
+        yield new_history, '', session_id
 
 if __name__ == "__main__":
     with gr.Blocks(title="Multimodal LLM Chatbot with Tools") as demo:
@@ -316,6 +347,7 @@ if __name__ == "__main__":
                     elem_id="chatbot",
                     height=730
                 )
+                session_state = gr.State(value="")
 
                 # Input Textbox and Upload Button
                 with gr.Row():
@@ -345,8 +377,8 @@ if __name__ == "__main__":
         # Text input submission with streaming
         txt.submit(
             bot,
-            inputs=[txt, chatbot],
-            outputs=[chatbot, txt],
+            inputs=[txt, chatbot, session_state],
+            outputs=[chatbot, txt, session_state],
             queue=True,    # Enable queue for better performance
             # stream=True    # Enable streaming
         )
@@ -411,17 +443,17 @@ if __name__ == "__main__":
         # Action Buttons Functionality (To Be Implemented)
         # Clear History
         clear_history_btn.click(
-            lambda: ([], ""),
-            inputs=None,
-            outputs=[chatbot, txt],
+            _end_session,
+            inputs=session_state,
+            outputs=[chatbot, txt, session_state],
             queue=False
         )
 
         # New Conversation
         new_conv_btn.click(
-            lambda: ([], ""),
-            inputs=None,
-            outputs=[chatbot, txt],
+            _end_session,
+            inputs=session_state,
+            outputs=[chatbot, txt, session_state],
             queue=False
         )
 
@@ -432,6 +464,14 @@ if __name__ == "__main__":
             outputs=chatbot,
             queue=False
         )
+
+        if hasattr(demo, "unload"):
+            demo.unload(
+                _end_session,
+                inputs=session_state,
+                outputs=[chatbot, txt, session_state],
+                queue=False
+            )
 
     # Launch the app
     demo.launch(share=True)

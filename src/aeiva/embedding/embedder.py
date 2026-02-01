@@ -1,5 +1,6 @@
 # embedder.py
 
+import os
 from typing import Any, List, Union, Optional, Dict
 from aeiva.embedding.embedder_config import EmbedderConfig
 import litellm
@@ -20,10 +21,15 @@ class Embedder:
             config (EmbedderConfig): Configuration for the Embedder.
         """
         self.config_dict = config
+        api_key = self.config_dict.get('api_key')
+        if not api_key:
+            env_var = self.config_dict.get('api_key_env_var')
+            if env_var:
+                api_key = os.getenv(env_var)
         self.config = EmbedderConfig(
                 provider_name=self.config_dict.get('provider_name', 'openai'),
                 model_name=self.config_dict.get('model_name', 'text-embedding-ada-002'),
-                api_key=self.config_dict.get('api_key')
+                api_key=api_key
             )
         self._setup_environment()
 

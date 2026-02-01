@@ -176,6 +176,62 @@ Gradio 界面如下所示：
 
 ---
 
+### 🪄⭐Slack 模式聊天
+
+**安装 Slack 依赖**：
+
+```bash
+pip install -e '.[slack]'
+```
+
+**Slack App 配置检查清单**：
+
+1. **Socket Mode**：在 App Settings 里启用  
+2. **Event Subscriptions** → Bot Events：
+	- `message.im`（接收 DM）
+	- `app_mention`（接收 @mention）
+	- `app_home_opened`（Home tab，可选）
+3. **OAuth & Permissions** → Bot Token Scopes：
+	- `chat:write`
+	- `app_mentions:read`
+	- `im:history`
+	- `im:read`
+	- `app_home:read`, `app_home:write`（Home tab）
+4. **App-level Token**：创建带 `connections:write` 的 `xapp-` token  
+5. **安装 App** 到你的 workspace
+
+*可选（频道消息）*：
+	- Bot Events：`message.channels`
+	- Scopes：`channels:history`
+
+**设置 Token**（环境变量或配置文件）：
+
+```bash
+export SLACK_BOT_TOKEN="xoxb-..."
+export SLACK_APP_TOKEN="xapp-..."
+```
+
+在 `configs/agent_config.yaml` 中：
+
+```yaml
+slack_config:
+  enabled: true
+  bot_token_env_var: "SLACK_BOT_TOKEN"
+  app_token_env_var: "SLACK_APP_TOKEN"
+```
+
+**启动**：
+
+```bash
+aeiva-chat-slack --config configs/agent_config.yaml -v
+```
+
+* **备注**：
+	- 在频道里需要先 `/invite @Aeiva`
+	- 日志：`~/.aeiva/logs/aeiva-chat-slack.log`
+
+---
+
 ### 🪄⭐Maid 聊天
 
 在终端运行以下命令，获取一个桌面上的动画虚拟助手，可以语音模式或输入文本与您互动：

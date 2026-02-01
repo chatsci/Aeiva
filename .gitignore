@@ -5,6 +5,8 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .gradio/
+.claude/
+.venv/
 
 lightning_logs/
 site/
@@ -13,6 +15,10 @@ build/
 dist/
 flagged/
 logs/
+papers/
+packages/
+packages/*
+packages/*/*
 datasets/*/*
 !datasets/*/*.py
 !datasets/*/*.ipynb
@@ -22,6 +28,9 @@ virtual_worlds/*
 outputs/
 storage/
 resource/
+notes/
+tests/
+.pytest_cache/
 
 configs/llm_api_keys.yaml
 
@@ -30,6 +39,7 @@ CODING_GUIDELINES.md
 TODO.md
 ROADMAP.md
 directory_tree.txt
+CLAUDE.md
 
 uploads/*
 uploads/*/*

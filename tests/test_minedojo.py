@@ -1,7 +1,9 @@
-import minedojo
+import pytest
+
+minedojo = pytest.importorskip("minedojo")
 
 
-if __name__ == "__main__":
+def test_minedojo_smoke():
     env = minedojo.make(
         task_id="combat_spider_plains_leather_armors_diamond_sword_shield",
         image_size=(288, 512),
@@ -9,11 +11,11 @@ if __name__ == "__main__":
         seed=42,
     )
 
-    print(f"[INFO] Create a task with prompt: {env.task_prompt}")
-
     env.reset()
     for _ in range(20):
-        obs, reward, done, info = env.step(env.action_space.no_op())
+        env.step(env.action_space.no_op())
     env.close()
 
-    print("[INFO] Installation Success")
+
+if __name__ == "__main__":
+    test_minedojo_smoke()

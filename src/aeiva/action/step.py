@@ -1,95 +1,181 @@
-from typing import List, Dict, Optional, Any
+"""
+Step: The atomic unit for Tasks and Actions.
+
+A Step represents a single unit of work with:
+    - Identity (name, id, description)
+    - Parameters for execution
+    - Dependencies on other steps
+    - Status tracking
+
+Inheritance:
+    Step
+    ├── Task (visualizable, for planning)
+    └── Action (executable, with Tool)
+"""
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+import uuid
+
 from aeiva.action.status import Status
 
+
+def generate_step_id() -> str:
+    """Generate a unique step identifier."""
+    return f"step_{uuid.uuid4().hex[:8]}"
+
+
+@dataclass
 class Step:
     """
-    Abstract base class for atomic units like Task and Action.
-    Contains shared attributes and methods for managing their execution and dependencies.
+    Base class for atomic units like Task and Action.
+
+    A Step contains:
+        - name: The operation name (tool/function/task name)
+        - params: Parameters for execution
+        - id: Unique identifier
+        - dependent_ids: Steps that must complete before this one
+        - description: Human-readable description
+        - metadata: Additional context
+
+    Attributes:
+        name: The name of the operation to perform
+        params: Parameters to pass to the operation
+        id: Unique identifier for this step
+        dependent_ids: IDs of steps that must complete first
+        description: Human-readable description
+        metadata: Additional context and configuration
+        status: Current execution status
+        result: Result of execution (for Actions)
     """
 
-    def __init__(self, name: str, params: Dict[str, Any] = None,
-                 id: Optional[str] = None, dependent_ids: Optional[List[str]] = None, 
-                 type: Optional[str] = None, description: Optional[str] = None,
-                 metadata: Optional[Dict[str, Any]] = None,
-                 *args, **kwargs):
-        self.name = name  # The name of the step. It can be a task/action/tool/api/function name
-        self.params = params  # The parameters for this step. it can be a task/action/tool/api/function's params
-        self.id = id  # Unique identifier for the step
-        self.dependent_ids = dependent_ids or []  # List of IDs of steps that must be completed before this one
-        self.type = type  # The type of this step, e.g., task or action
-        self.description = description  # A description for this step
-        self.metadata = metadata or {}  # Optional metadata (e.g., id, type, description, priority, etc.)
-        self.status = Status.NOT_EXECUTED  # Initial status
+    name: str
+    params: Dict[str, Any] = field(default_factory=dict)
+    id: str = field(default_factory=generate_step_id)
+    dependent_ids: List[str] = field(default_factory=list)
+    description: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    status: Status = field(default=Status.NOT_EXECUTED)
+    result: Any = field(default=None, repr=False)
+
+    @property
+    def step_type(self) -> str:
+        """Return the type name of this step."""
+        return self.__class__.__name__
 
     def reset(self) -> None:
-        """
-        Resets the step status, making it ready for re-execution.
-        """
+        """Reset to initial state, ready for re-execution."""
         self.status = Status.NOT_EXECUTED
+        self.result = None
 
     def start(self) -> None:
         """
-        Marks the step as in progress. Raises an error if the step is already started or finished.
+        Mark execution as started.
+
+        Raises:
+            ValueError: If step has already started or finished
         """
         if self.status != Status.NOT_EXECUTED:
-            raise ValueError(f"{self.type} {self.description} {self.id} has already been started or finished.")
+            raise ValueError(
+                f"{self.step_type} '{self.id}' cannot start: "
+                f"current status is {self.status}"
+            )
         self.status = Status.EXECUTING
 
-    def end(self, success: bool) -> None:
+    def succeed(self, result: Any = None) -> None:
         """
-        Marks the step as finished and indicates whether it was successful.
-        Can only be called if the step is in progress.
+        Mark execution as successful.
+
+        Args:
+            result: Optional result of the execution
+
+        Raises:
+            ValueError: If step is not currently executing
         """
         if self.status != Status.EXECUTING:
-            raise ValueError(f"Cannot finish a {self.type} that hasn't started.")
-        self.status = Status.SUCCESS if success else Status.FAIL
+            raise ValueError(
+                f"{self.step_type} '{self.id}' cannot succeed: "
+                f"not currently executing (status: {self.status})"
+            )
+        self.status = Status.SUCCESS
+        self.result = result
+
+    def fail(self, error: Any = None) -> None:
+        """
+        Mark execution as failed.
+
+        Args:
+            error: Optional error information
+
+        Raises:
+            ValueError: If step is not currently executing
+        """
+        if self.status != Status.EXECUTING:
+            raise ValueError(
+                f"{self.step_type} '{self.id}' cannot fail: "
+                f"not currently executing (status: {self.status})"
+            )
+        self.status = Status.FAIL
+        self.result = error
 
     @property
     def is_successful(self) -> bool:
-        """
-        Returns True if the step was completed successfully.
-        """
+        """Check if step completed successfully."""
         return self.status == Status.SUCCESS
 
     @property
     def is_failed(self) -> bool:
-        """
-        Returns True if the step has finished but failed.
-        """
+        """Check if step failed."""
         return self.status == Status.FAIL
 
     @property
-    def is_in_progress(self) -> bool:
-        """
-        Returns True if the step is in progress (executing but not finished).
-        """
+    def is_executing(self) -> bool:
+        """Check if step is currently executing."""
         return self.status == Status.EXECUTING
 
     @property
-    def is_not_started(self) -> bool:
-        """
-        Returns True if the step has not started yet.
-        """
+    def is_pending(self) -> bool:
+        """Check if step has not started."""
         return self.status == Status.NOT_EXECUTED
 
     @property
     def is_finished(self) -> bool:
-        """
-        Returns True if the step has finished execution, either successfully or failed.
-        """
-        return self.status == Status.SUCCESS or self.status == Status.FAIL
+        """Check if step has completed (success or fail)."""
+        return self.status.is_terminal
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Converts the step into a dictionary representation.
-        """
+        """Convert to dictionary representation."""
         return {
+            "type": self.step_type,
             "name": self.name,
             "params": self.params,
             "id": self.id,
             "dependent_ids": self.dependent_ids,
-            "type": self.type,
             "description": self.description,
-            "status": self.status,
-            "metadata": self.metadata
+            "metadata": self.metadata,
+            "status": str(self.status),
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Step":
+        """
+        Create a Step from dictionary representation.
+
+        Args:
+            data: Dictionary with step data
+
+        Returns:
+            New Step instance
+        """
+        status_str = data.get("status", "not_executed")
+        status = Status(status_str) if isinstance(status_str, str) else status_str
+
+        return cls(
+            name=data["name"],
+            params=data.get("params", {}),
+            id=data.get("id", generate_step_id()),
+            dependent_ids=data.get("dependent_ids", []),
+            description=data.get("description", ""),
+            metadata=data.get("metadata", {}),
+            status=status,
+        )

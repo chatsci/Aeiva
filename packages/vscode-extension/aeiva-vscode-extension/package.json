@@ -1,0 +1,100 @@
+{
+  "name": "aeiva-vscode-extension",
+  "displayName": "aeiva-vscode-extension",
+  "description": "Aeiva: Context-grounded annotation and AI patch assistant for VS Code.",
+  "version": "0.0.1",
+  "publisher": "chatsci",
+  "engines": { "vscode": "^1.105.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+
+  "contributes": {
+    "commands": [
+      { "command": "aeiva.removeAnnotation", "title": "Aeiva: Remove Annotation" },
+      { "command": "aeiva.annotate.selection", "title": "Aeiva: Annotate Selection" },
+      { "command": "aeiva.requestPatch", "title": "Aeiva: Preview AI Patch for Selection" },
+      { "command": "aeiva.toggleAnnotations", "title": "Aeiva: Toggle Annotations" },
+
+      {
+        "command": "aeiva.openTerminalChat",
+        "title": "Aeiva: Open Terminal Chat",
+        "icon": { "light": "media/aeiva.svg", "dark": "media/aeiva.svg" }
+      },
+
+      {
+        "command": "aeiva.openChat",
+        "title": "Aeiva: Open Chat (Right Panel)",
+        "icon": { "light": "media/aeiva.svg", "dark": "media/aeiva.svg" }
+      }
+    ],
+
+    "configuration": {
+      "title": "Aeiva",
+      "properties": {
+        "aeiva.daemonUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8787",
+          "description": "Local Aeiva daemon URL (FastAPI)."
+        }
+      }
+    },
+
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "aeiva", "title": "Aeiva", "icon": "media/aeiva.svg" }
+      ]
+    },
+
+    "views": {
+      "aeiva": [
+        {
+          "id": "aeivaChat",
+          "name": "Aeiva Chat",
+          "contextualTitle": "Aeiva Chat",
+          "type": "webview"
+        }
+      ]
+    },
+
+    "menus": { 
+      "editor/title": [
+        { "command": "aeiva.openTerminalChat", "group": "navigation@88" }
+      ],
+      "editor/context": [
+        { "command": "aeiva.removeAnnotation", "when": "editorTextFocus", "group": "navigation@3" },
+        { "command": "aeiva.annotate.selection", "when": "editorHasSelection", "group": "navigation@1" },
+        { "command": "aeiva.requestPatch", "when": "editorHasSelection", "group": "navigation@2" }
+      ]
+    }
+  },
+
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+
+  "devDependencies": { 
+    "@types/vscode": "^1.105.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "eslint": "^9.36.0",
+    "esbuild": "^0.25.10",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2"
+  } 
+}

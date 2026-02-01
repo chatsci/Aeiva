@@ -9,6 +9,7 @@ import signal
 from pathlib import Path
 import click
 import importlib.resources as importlib_resources
+from typing import Any, Dict
 
 
 def get_package_root():
@@ -73,6 +74,11 @@ def stop_neo4j(logger, neo4j_process):
     """
     Stops the Neo4j database subprocess gracefully.
     """
+    global _neo4j_stop_called
+    if _neo4j_stop_called:
+        return
+    _neo4j_stop_called = True
+
     try:
         # Check if the process is still running
         if neo4j_process.poll() is None:
@@ -108,7 +114,30 @@ def handle_exit(signum, frame, logger, neo4j_process):
     """
     Handles termination signals to ensure Neo4j is stopped gracefully.
     """
+    if _neo4j_stop_called:
+        return
     logger.info(f"Received signal {signum}. Shutting down Neo4j.")
     click.echo(f"\nReceived signal {signum}. Shutting down Neo4j.")
     stop_neo4j(logger, neo4j_process)
     sys.exit(0)
+_neo4j_stop_called = False
+
+
+def build_runtime(config_dict: Dict[str, Any]):
+    """
+    Build either a single Agent or a MultiAgentSystem based on config.
+
+    Returns:
+        (runtime, main_agent)
+    """
+    from aeiva.agent.agent import Agent
+    mas_cfg = config_dict.get("mas_config") or {}
+    if mas_cfg.get("enabled"):
+        from aeiva.mas import MultiAgentSystem
+        runtime = MultiAgentSystem(config_dict)
+        runtime.setup()
+        return runtime, runtime.main_agent
+
+    agent = Agent(config_dict)
+    agent.setup()
+    return agent, agent

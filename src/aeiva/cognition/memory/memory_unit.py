@@ -1,122 +1,210 @@
-# memory_unit.py
+"""
+Memory unit data structure.
 
-from pydantic import BaseModel, Field
-from typing import Any, Optional, List, Dict, Union
-from uuid import uuid4
+MemoryUnit represents a single unit of memory with rich metadata.
+"""
+
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import json
+from typing import Any, Dict, List, Optional, Union
+from uuid import uuid4
+
 from aeiva.cognition.memory.memory_link import MemoryLink
 
 
-class MemoryUnit(BaseModel):
+def _generate_id() -> str:
+    """Generate a unique ID."""
+    return uuid4().hex
+
+
+def _utc_now() -> datetime:
+    """Get current UTC time."""
+    return datetime.now(timezone.utc)
+
+
+@dataclass
+class MemoryUnit:
     """
-    MemoryUnit represents a single unit of memory with core content and rich metadata.
-    It includes fields for tracking information about the memory’s source, modality,
-    temporal and spatial attributes, and its connections to other memory units.
+    Represents a single unit of memory with core content and rich metadata.
 
-    Essential Fields:
-        id (str): Unique identifier for the memory unit, generated as a UUID string by default.
-        content (Any): Core content of the memory, which is convertible to a string.
-
-    Metadata:
-        timestamp (datetime): Creation timestamp, defaulting to the current time.
-        modality (Optional[str]): Modality type, such as 'text', 'image', 'audio'.
-        type (Optional[str]): Semantic type, such as 'dialogue', 'summary', 'document'.
-        status (Optional[str]): Processing status, e.g., 'raw', 'cleaned', 'processed'.
-        tags (Optional[List[str]]): Tags for categorization and filtering.
-        embedding (Optional[List[float]]): Vector embedding for retrieval.
-        location (Optional[Union[str, Dict]]): Spatial location data.
-
-    Source Information:
-        source_role (Optional[str]): Role of the source, e.g., 'user', 'agent'.
-        source_name (Optional[str]): Descriptive name of the source.
-        source_id (Optional[str]): Unique identifier for the memory source, generated as a UUID string.
-
-    Connections:
-        edges (List[MemoryLink]): List of edges connecting this memory unit to others.
-
-    Additional Metadata:
-        metadata (Optional[Dict[str, Any]]): Dictionary for extensible metadata.
+    Attributes:
+        id: Unique identifier for the memory unit.
+        content: Core content of the memory (can be any type).
+        timestamp: Creation timestamp (UTC).
+        modality: Type of content ('text', 'image', 'audio', etc.).
+        type: Semantic type ('dialogue', 'summary', 'document', etc.).
+        status: Processing status ('raw', 'cleaned', 'processed', etc.).
+        tags: Tags for categorization and filtering.
+        embedding: Vector embedding for similarity search.
+        location: Spatial location data.
+        source_role: Role of the source ('user', 'agent', etc.).
+        source_name: Descriptive name of the source.
+        source_id: Unique identifier for the source.
+        edges: Relationships to other memory units.
+        metadata: Additional extensible metadata.
     """
 
-    # Essential Fields
-    id: str = Field(default_factory=lambda: uuid4().hex, description="Unique identifier for the memory unit.")
-    content: Any = Field("", description="Core content of the memory unit, convertible to a string.")
+    # Essential fields
+    content: Any
+    id: str = field(default_factory=_generate_id)
 
-    # Metadata Fields
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp of the memory.")
-    modality: Optional[str] = Field(None, description="Modality type, e.g., 'text', 'image', 'audio'.")
-    type: Optional[str] = Field(None, description="Semantic type, e.g., 'dialogue', 'summary'.")
-    status: Optional[str] = Field(None, description="Processing status, e.g., 'raw', 'cleaned', 'derived', 'grouped', 'structured', 'indexed'.")
-    tags: Optional[List[str]] = Field(default_factory=list, description="Tags for categorization or filtering.")
-    embedding: Optional[List[float]] = Field(None, description="Embedding vector for memory.")
-    location: Optional[Union[str, Dict]] = Field(None, description="Location data as a string or structured dictionary.")
+    # Temporal metadata
+    timestamp: datetime = field(default_factory=_utc_now)
 
-    # Source Information
-    source_role: Optional[str] = Field(None, description="Role of the memory source, e.g., 'user', 'agent'.")
-    source_name: Optional[str] = Field(None, description="Descriptive name of the source, e.g., 'User123'.")
-    source_id: Optional[str] = Field(default_factory=lambda: uuid4().hex, description="Unique identifier associated with the source.")
+    # Content classification
+    modality: Optional[str] = None
+    type: Optional[str] = None
+    status: str = "raw"
+    tags: List[str] = field(default_factory=list)
 
-    # Connections
-    edges: List[MemoryLink] = Field(default_factory=list, description="List of edges linking this memory unit to others.")
+    # Vector representation
+    embedding: Optional[List[float]] = None
 
-    # Additional Metadata
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Dictionary for extensible metadata.")
+    # Spatial information
+    location: Optional[Union[str, Dict[str, Any]]] = None
+
+    # Source information
+    source_role: Optional[str] = None
+    source_name: Optional[str] = None
+    source_id: Optional[str] = field(default_factory=_generate_id)
+
+    # Graph connections
+    edges: List[MemoryLink] = field(default_factory=list)
+
+    # Extensible metadata
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def is_embedded(self) -> bool:
+        """Check if this memory unit has an embedding."""
+        return self.embedding is not None and len(self.embedding) > 0
+
+    @property
+    def is_processed(self) -> bool:
+        """Check if this memory unit has been processed."""
+        return self.status not in ("raw", None)
+
+    @property
+    def has_connections(self) -> bool:
+        """Check if this memory unit has connections to other units."""
+        return len(self.edges) > 0
+
+    def add_edge(self, target_id: str, relationship: str, **kwargs) -> MemoryLink:
+        """
+        Add a connection to another memory unit.
+
+        Args:
+            target_id: ID of the target memory unit.
+            relationship: Type of relationship.
+            **kwargs: Additional metadata for the link.
+
+        Returns:
+            The created MemoryLink.
+        """
+        link = MemoryLink(
+            source_id=self.id,
+            target_id=target_id,
+            relationship=relationship,
+            metadata=kwargs
+        )
+        self.edges.append(link)
+        return link
+
+    def get_edges_by_relationship(self, relationship: str) -> List[MemoryLink]:
+        """Get all edges with a specific relationship type."""
+        return [e for e in self.edges if e.relationship == relationship]
+
+    def add_tag(self, tag: str) -> None:
+        """Add a tag if not already present."""
+        if tag not in self.tags:
+            self.tags.append(tag)
+
+    def remove_tag(self, tag: str) -> bool:
+        """Remove a tag if present. Returns True if removed."""
+        if tag in self.tags:
+            self.tags.remove(tag)
+            return True
+        return False
+
+    def set_metadata(self, key: str, value: Any) -> None:
+        """Set a metadata value."""
+        self.metadata[key] = value
+
+    def get_metadata(self, key: str, default: Any = None) -> Any:
+        """Get a metadata value with optional default."""
+        return self.metadata.get(key, default)
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        Converts the MemoryUnit instance to a dictionary format for serialization.
-        Each field is handled explicitly to ensure proper serialization.
+        Convert to dictionary for serialization.
 
         Returns:
-            Dict[str, Any]: A dictionary representation of the MemoryUnit.
+            Dictionary representation.
         """
         return {
             "id": self.id,
-            "content": self.content,
-            "timestamp": self.timestamp.isoformat(),  # Convert datetime to string
+            "content": self.content if isinstance(self.content, (str, int, float, bool, list, dict)) else str(self.content),
+            "timestamp": self.timestamp.isoformat(),
             "modality": self.modality,
             "type": self.type,
             "status": self.status,
-            "tags": self.tags,
+            "tags": self.tags.copy(),
             "embedding": self.embedding,
             "location": self.location,
             "source_role": self.source_role,
             "source_name": self.source_name,
             "source_id": self.source_id,
-            "edges": [edge.to_dict() for edge in self.edges],  # Serialize each MemoryLink
-            "metadata": self.metadata
+            "edges": [e.to_dict() for e in self.edges],
+            "metadata": self.metadata.copy()
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MemoryUnit":
+    def from_dict(cls, data: Dict[str, Any]) -> "MemoryUnit":
         """
-        Creates a MemoryUnit instance from a dictionary.
-        Each field is handled explicitly to ensure proper deserialization.
+        Create from dictionary.
 
         Args:
-            data (dict): A dictionary containing MemoryUnit data.
+            data: Dictionary with memory unit data.
 
         Returns:
-            MemoryUnit: The created MemoryUnit instance.
+            MemoryUnit instance.
         """
-        try:
-            return cls(
-                id=data.get('id', uuid4().hex),
-                content=data.get('content', ""),
-                timestamp=datetime.fromisoformat(data['timestamp']) if 'timestamp' in data else datetime.now(UTC),
-                modality=data.get('modality'),
-                type=data.get('type'),
-                status=data.get('status'),
-                tags=data.get('tags', []),
-                embedding=data.get('embedding'),
-                location=data.get('location'),
-                source_role=data.get('source_role'),
-                source_name=data.get('source_name'),
-                source_id=data.get('source_id', uuid4().hex),
-                edges=[MemoryLink.from_dict(edge) for edge in data.get('edges', [])],
-                metadata=data.get('metadata', {})
-            )
-        except Exception as e:
-            # logger.error(f"Error deserializing MemoryUnit from dict: {e}")
-            raise e
+        # Parse timestamp
+        timestamp = data.get("timestamp")
+        if isinstance(timestamp, str):
+            timestamp = datetime.fromisoformat(timestamp)
+        elif timestamp is None:
+            timestamp = _utc_now()
+
+        # Parse edges
+        edges_data = data.get("edges", [])
+        edges = [
+            MemoryLink.from_dict(e) if isinstance(e, dict) else e
+            for e in edges_data
+        ]
+
+        return cls(
+            id=data.get("id", _generate_id()),
+            content=data.get("content", ""),
+            timestamp=timestamp,
+            modality=data.get("modality"),
+            type=data.get("type"),
+            status=data.get("status", "raw"),
+            tags=data.get("tags", []),
+            embedding=data.get("embedding"),
+            location=data.get("location"),
+            source_role=data.get("source_role"),
+            source_name=data.get("source_name"),
+            source_id=data.get("source_id"),
+            edges=edges,
+            metadata=data.get("metadata", {})
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        content_preview = str(self.content)[:50] + "..." if len(str(self.content)) > 50 else str(self.content)
+        return f"MemoryUnit(id={self.id[:8]}..., content='{content_preview}', status={self.status})"
+
+    def __repr__(self) -> str:
+        """Detailed representation."""
+        return f"MemoryUnit(id='{self.id}', modality={self.modality}, type={self.type}, status={self.status}, edges={len(self.edges)})"

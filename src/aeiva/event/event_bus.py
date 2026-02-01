@@ -1,8 +1,10 @@
 # event_bus.py
 
 import asyncio
+import collections
 import logging
 import re
+import time
 from functools import wraps
 from typing import Callable, Dict, List, Any, Optional, Union
 from aeiva.event.event import Event
@@ -29,15 +31,25 @@ class EventBus:
     - emit, emit_after, and emit_only methods for flexible event emission.
     """
 
-    def __init__(self):
+    MAX_HOP_COUNT: int = 10
+    MAX_HISTORY: int = 10_000
+
+    def __init__(self, *, max_hop_count: int = None, max_history: int = None):
         """
         Initializes the event bus.
+
+        Args:
+            max_hop_count: Maximum allowed hop_count for signals (default: MAX_HOP_COUNT).
+            max_history: Maximum trace history entries to retain (default: MAX_HISTORY).
         """
         self._subscribers: List[Dict] = []  # List of subscriber dictionaries
         self._event_queue = asyncio.PriorityQueue()
         self._processing_task: Optional[asyncio.Task] = None
         self._event_counter = 0  # Counter to maintain order of events with same priority
         self.loop = None
+        self._max_hop_count = max_hop_count if max_hop_count is not None else self.MAX_HOP_COUNT
+        self._max_history = max_history if max_history is not None else self.MAX_HISTORY
+        self._history: collections.deque = collections.deque(maxlen=self._max_history)
 
     def subscribe(
         self,
@@ -226,16 +238,45 @@ class EventBus:
                 return sync_wrapper
         return decorator
 
-    async def emit(self, event_name: str, payload: Any = None, priority: int = 0):
+    async def emit(self, event_name: str, payload: Any = None, priority: int = 0) -> bool:
         """
         Emits an event to all matching subscribers.
+
+        If the payload is a Signal whose hop_count exceeds the configured
+        maximum, the event is blocked and False is returned.
 
         Args:
             event_name (str): The name of the event to emit.
             payload (Any, optional): The payload of the event.
             priority (int, optional): The priority of the event.
+
+        Returns:
+            bool: True if emitted, False if blocked by hop-count limit.
         """
+        # Lazy import to avoid circular dependency
+        from aeiva.neuron.signal import Signal
+
+        # Hop-count enforcement: only applies when payload is a Signal
+        if isinstance(payload, Signal) and payload.hop_count > self._max_hop_count:
+            logger.warning(
+                f"Blocked signal trace_id={payload.trace_id} on event '{event_name}': "
+                f"hop_count {payload.hop_count} exceeds max {self._max_hop_count}"
+            )
+            return False
+
+        # Record trace history for Signal payloads
+        if isinstance(payload, Signal):
+            self._history.append({
+                "time": time.time(),
+                "event": event_name,
+                "trace_id": payload.trace_id,
+                "parent_id": payload.parent_id,
+                "hop": payload.hop_count,
+                "source": payload.source,
+            })
+
         await self.publish(Event(name=event_name, payload=payload, priority=priority))
+        return True
 
     async def emit_only(self, event_name: str, subscriber_names: Union[str, List[str]], payload: Any = None, priority: int = 0):
         """
@@ -248,6 +289,42 @@ class EventBus:
             priority (int, optional): The priority of the event.
         """
         await self.publish(Event(name=event_name, payload=payload, priority=priority), only=subscriber_names)
+
+    def dump_trace(self, trace_id: str) -> List[Dict]:
+        """
+        Reconstruct a signal's journey by following its parent chain.
+
+        Walks the recorded history to find the entry matching *trace_id*,
+        then follows parent_id links backward. Returns entries in
+        chronological order (oldest first).
+
+        Args:
+            trace_id: The trace_id to look up.
+
+        Returns:
+            A list of history records forming the signal's lineage.
+        """
+        # Build a lookup: trace_id -> record (last occurrence wins)
+        by_trace: Dict[str, Dict] = {}
+        for record in self._history:
+            by_trace[record["trace_id"]] = record
+
+        chain: List[Dict] = []
+        current_id: Optional[str] = trace_id
+        seen: set = set()
+        while current_id and current_id in by_trace and current_id not in seen:
+            seen.add(current_id)
+            record = by_trace[current_id]
+            chain.append(record)
+            current_id = record.get("parent_id")
+
+        chain.reverse()  # chronological order
+        return chain
+
+    @property
+    def trace_history(self) -> int:
+        """Return the number of entries currently in the trace history."""
+        return len(self._history)
 
     async def wait_until_all_events_processed(self):
         """

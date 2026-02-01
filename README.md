@@ -182,6 +182,60 @@ By visiting the gradio interface, you will see a gradio web-ui like below:
 
 ---
 
+### 🪄⭐Aeiva Chat in Slack Mode
+
+**Install Slack dependency**:
+
+```bash
+pip install -e '.[slack]'
+```
+
+**Configure Slack App** (checklist):
+
+1. **Socket Mode**: enable it in App Settings  
+2. **Event Subscriptions** → Bot Events:
+	- `message.im` (DM)
+	- `app_mention` (mentions)
+	- `app_home_opened` (Home tab, optional)
+3. **OAuth & Permissions** → Bot Token Scopes:
+	- `chat:write`
+	- `app_mentions:read`
+	- `im:history`
+	- `im:read`
+	- `app_home:read`, `app_home:write` (Home tab)
+4. **App-level Token**: create `xapp-` token with `connections:write`
+5. **Install** the App to your workspace
+
+*Optional (for channel messages)*:
+	- Bot Events: `message.channels`
+	- Scopes: `channels:history`
+
+**Set tokens** (env or config):
+
+```bash
+export SLACK_BOT_TOKEN="xoxb-..."
+export SLACK_APP_TOKEN="xapp-..."
+```
+
+In `configs/agent_config.yaml`:
+
+```yaml
+slack_config:
+  enabled: true
+  bot_token_env_var: "SLACK_BOT_TOKEN"
+  app_token_env_var: "SLACK_APP_TOKEN"
+```
+
+**Run**:
+
+```bash
+aeiva-chat-slack --config configs/agent_config.yaml --verbose
+```
+
+* **Notes**:
+	- In channels, invite the bot: `/invite @Aeiva`
+	- Logs: `~/.aeiva/logs/aeiva-chat-slack.log`
+
 
 ### 🪄⭐Aeiva Server
 
@@ -297,7 +351,5 @@ To cite [Aeiva](https://github.com/chatsci/Aeiva) in publications, please use th
 ## Contact
 
 ![contact](assets/contact.png)
-
-
 
 

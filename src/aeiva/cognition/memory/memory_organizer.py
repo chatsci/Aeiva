@@ -1,9 +1,9 @@
 # memory_organizer.py
 
 import logging
-from typing import List, Dict, Any, Optional
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
 
 from aeiva.cognition.memory.memory_unit import MemoryUnit
 from aeiva.cognition.memory.memory_link import MemoryLink
@@ -159,27 +159,49 @@ class MemoryOrganizer:
             self.logger.error(f"Error organizing by dialogue: {e}")
             raise MemoryOrganizerError(f"Error organizing by dialogue: {e}")
 
-    def derive_summary(self, memory_units: List[MemoryUnit]) -> str: # TODO: replace with lmp implementation
+    def derive_summary(self, memory_units: List[MemoryUnit]) -> str:
         """
         Derives a summary from the given memory units.
 
+        Tries LMP-based derivation (GPT-4) first; falls back to plain-text
+        concatenation if the LMP call fails (e.g. no API key).
+
         Args:
-            memory_units (List[MemoryUnit]): The list of memory units to summarize.
+            memory_units: The list of memory units to summarize.
 
         Returns:
-            str: A summary string.
+            A summary string.
         """
-        self.logger.debug(f"Deriving summary from {len(memory_units)} memory units.")
+        if not memory_units:
+            return ""
+
+        parts = []
+        for mu in memory_units:
+            if mu.content is None:
+                continue
+            text = mu.content if isinstance(mu.content, str) else str(mu.content)
+            if text:
+                parts.append(text)
+
+        if not parts:
+            return ""
+
+        combined_content = "\n".join(parts)
+
+        # Try LMP-based derivation; fall back to plain-text truncation.
         try:
-            summary = "Summary of dialogue session:\n"
-            for mu in memory_units:
-                summary += f"- {mu.content}\n"
-            derived_summary = summary.strip()
-            self.logger.debug(f"Derived summary: {derived_summary}")
-            return derived_summary
+            from aeiva.cognition.memory.memory_utils import derive_content
+            derived = derive_content("summary", combined_content)
+            if derived:
+                return derived
         except Exception as e:
-            self.logger.error(f"Failed to derive summary: {e}")
-            raise MemoryOrganizerError(f"Failed to derive summary: {e}")
+            self.logger.warning(f"LMP derive_content failed, using plain-text fallback: {e}")
+
+        # Plain-text fallback: first 500 chars as a best-effort summary
+        max_len = 500
+        if len(combined_content) <= max_len:
+            return combined_content
+        return combined_content[:max_len] + "..."
 
     def derive_reflection(self, memory_units: List[MemoryUnit]) -> str: # TODO: replace with lmp implementation
         """
@@ -202,3 +224,5 @@ class MemoryOrganizer:
         except Exception as e:
             self.logger.error(f"Failed to derive reflection: {e}")
             raise MemoryOrganizerError(f"Failed to derive reflection: {e}")
+
+
