@@ -121,6 +121,23 @@ Our memory module utilizes different types of databases.
 
 After installing Neo4j and setting the environment variable, follow these steps to run different aeiva chat commands.
 
+### 🪄⭐Unified Gateway (Multi-Channel, Shared Context)
+Run a single process that can serve multiple interfaces (terminal, Slack, Gradio realtime, WhatsApp, Maid) with shared state:
+
+```bash
+aeiva-gateway --config configs/agent_config.yaml --verbose
+```
+
+* **Enable/disable interfaces** in `configs/agent_config.yaml`:
+	- `terminal_config.enabled`
+	- `slack_config.enabled`
+	- `realtime_config.enabled` (Gradio realtime UI)
+	- `whatsapp_config.enabled`
+	- `maid_config.enabled`
+* **Gradio realtime UI** will be available at `http://127.0.0.1:7860` when enabled.
+* **Shared context**: all enabled channels share the same agent state by default.
+* If you want **separate processes/contexts**, use the standalone commands below.
+
 
 ### 🪄⭐Aeiva Chat in Terminal Mode
 Run the following command in terminal:
@@ -351,5 +368,4 @@ To cite [Aeiva](https://github.com/chatsci/Aeiva) in publications, please use th
 ## Contact
 
 ![contact](assets/contact.png)
-
 
