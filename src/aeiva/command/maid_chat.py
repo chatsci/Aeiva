@@ -8,6 +8,7 @@ import subprocess
 import signal
 from pathlib import Path
 from typing import Any, Optional
+from uuid import uuid4
 
 import click
 from fastapi import FastAPI, HTTPException
@@ -21,13 +22,44 @@ from aeiva.common.logger import setup_logging
 from aeiva.command.command_utils import (
     get_package_root,
     get_log_dir,
-    validate_neo4j_home,
-    start_neo4j,
-    stop_neo4j,
-    handle_exit,
+    build_runtime,
 )
-from aeiva.agent.agent import Agent
+from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.util.file_utils import from_json_or_yaml
+from aeiva.interface.gateway_base import GatewayBase
+
+
+def _try_start_neo4j(logger):
+    """Start Neo4j if NEO4J_HOME is set; return process or None."""
+    neo4j_home = os.getenv("NEO4J_HOME")
+    if not neo4j_home:
+        logger.info("NEO4J_HOME not set — skipping Neo4j startup.")
+        return None
+    try:
+        from aeiva.command.command_utils import validate_neo4j_home, start_neo4j
+        validate_neo4j_home(logger, neo4j_home)
+        return start_neo4j(logger, neo4j_home)
+    except SystemExit:
+        logger.warning("Neo4j validation failed — continuing without Neo4j.")
+        return None
+    except Exception as exc:
+        logger.warning("Neo4j start failed (%s) — continuing without Neo4j.", exc)
+        return None
+
+
+def _try_stop_neo4j(logger, neo4j_process):
+    if neo4j_process is None:
+        return
+    try:
+        from aeiva.command.command_utils import stop_neo4j
+        stop_neo4j(logger, neo4j_process)
+    except Exception as exc:
+        logger.warning("Neo4j stop failed: %s", exc)
+
+
+class MaidChatGateway(GatewayBase[None]):
+    def requires_route(self) -> bool:
+        return False
 
 # Define the request and response models
 class MessageRequest(BaseModel):
@@ -35,6 +67,85 @@ class MessageRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     response: str
+
+
+def build_maid_app(
+    *,
+    config_dict: dict,
+    runtime: Any,
+    agent: Any,
+    gateway_cfg: dict,
+    raw_user_id: str,
+    session_id: str,
+    logger: logging.Logger,
+    response_timeout: float,
+    start_runtime: bool,
+) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.agent = agent
+        app.state.router = MaidChatGateway(
+            gateway_cfg,
+            agent.event_bus,
+            response_timeout=response_timeout,
+        )
+        app.state.router.register_handlers()
+        runtime_task = None
+        if start_runtime:
+            runtime_task = asyncio.create_task(
+                runtime.run(raw_memory_session={"session_id": session_id, "user_id": raw_user_id})
+            )
+            logger.info("Agent runtime started.")
+        try:
+            yield
+        finally:
+            if start_runtime:
+                logger.info("Shutting down the agent server.")
+                runtime.request_stop()
+                if runtime_task:
+                    runtime_task.cancel()
+                    await asyncio.gather(runtime_task, return_exceptions=True)
+
+    app = FastAPI(lifespan=lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.post("/process_text", response_model=MessageResponse)
+    async def process_text(request: MessageRequest):
+        if not request.message:
+            raise HTTPException(status_code=400, detail="No message provided")
+
+        logger.info(f"Received message: {request.message}")
+
+        try:
+            meta = {"user_id": raw_user_id, "session_id": session_id}
+            signal = app.state.router.build_input_signal(
+                request.message,
+                source="perception.maid",
+                meta=meta,
+            )
+            response_text = await app.state.router.emit_input(
+                signal,
+                event_name="perception.stimuli",
+                await_response=True,
+            )
+            logger.info(f"Agent response: {response_text}")
+            return MessageResponse(response=response_text)
+        except asyncio.TimeoutError:
+            logger.error("Timed out waiting for agent response.")
+            raise HTTPException(status_code=504, detail="Timeout waiting for agent response")
+        except Exception as e:
+            logger.error(f"Error processing input: {e}")
+            raise HTTPException(status_code=500, detail="Internal Server Error")
+
+    return app
+
 
 def start_unity_app(maid_home: str, logger: logging.Logger) -> Optional[subprocess.Popen]:
     """
@@ -130,26 +241,25 @@ def run(config, host, port, verbose):
     
     logger.info(f"Loading configuration from {config_path}")
     config_dict = from_json_or_yaml(config_path)
+    agent_cfg = config_dict.get("agent_config") or {}
+    agent_cfg["ui_enabled"] = False
+    config_dict["agent_config"] = agent_cfg
+
+    raw_memory_cfg = config_dict.get("raw_memory_config") or {}
+    raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
+    session_id = uuid4().hex
     
-    # Validate and start Neo4j
-    neo4j_home = os.getenv('NEO4J_HOME')
-    if not neo4j_home:
-        logger.error("NEO4J_HOME environment variable is not set.")
-        click.echo("Error: NEO4J_HOME environment variable is not set.")
-        sys.exit(1)
+    # Optionally start Neo4j
+    neo4j_process = _try_start_neo4j(logger)
     
-    validate_neo4j_home(logger, neo4j_home)
-    neo4j_process = start_neo4j(logger, neo4j_home)
-    
-    # Initialize the Agent
+    # Initialize the Agent or MAS
     try:
-        agent = Agent(config_dict)
-        agent.setup()
+        runtime, agent = build_runtime(config_dict)
         logger.info("Agent initialized successfully.")
     except Exception as e:
         logger.error(f"Failed to initialize Agent: {e}")
         click.echo(f"Error: Failed to initialize Agent: {e}")
-        stop_neo4j(logger, neo4j_process)
+        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
     # Read MAID_HOME environment variable
@@ -157,70 +267,38 @@ def run(config, host, port, verbose):
     if not maid_home:
         logger.error("MAID_HOME environment variable is not set.")
         click.echo("Error: MAID_HOME environment variable is not set.")
-        stop_neo4j(logger, neo4j_process)
+        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
     maid_home_path = Path(maid_home)
     if not maid_home_path.exists():
         logger.error(f"Unity application not found at MAID_HOME: {maid_home}")
         click.echo(f"Error: Unity application not found at MAID_HOME: {maid_home}")
-        stop_neo4j(logger, neo4j_process)
+        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
     # Start the Unity application
     unity_process = start_unity_app(str(maid_home_path), logger)
     if unity_process is None:
-        stop_neo4j(logger, neo4j_process)
+        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
-    # Define the FastAPI app with lifespan
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        app.state.agent = agent
-        logger.info("Agent has been initialized and is ready to receive messages.")
-        try:
-            yield
-        finally:
-            logger.info("Shutting down the agent server.")
-            # If the Agent class has a shutdown method, call it here
-            if hasattr(app.state.agent, 'shutdown'):
-                await app.state.agent.shutdown()
-            stop_neo4j(logger, neo4j_process)
-            # Terminate the Unity application
-            stop_unity_app(unity_process, logger)
-            logger.info("Agent server shut down gracefully.")
-    
-    app = FastAPI(lifespan=lifespan)
-    
-    # Enable CORS for all origins (for development purposes)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Adjust in production
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+    registry = GatewayRegistry(config_dict)
+    maid_gateway_cfg = registry.resolve_channel_config("maid")
+    response_timeout = float(
+        (config_dict.get("llm_gateway_config") or {}).get("llm_timeout", 60)
     )
-    
-    # Define the endpoint
-    @app.post("/process_text", response_model=MessageResponse)
-    async def process_text(request: MessageRequest):
-        if not request.message:
-            raise HTTPException(status_code=400, detail="No message provided")
-        
-        logger.info(f"Received message: {request.message}")
-    
-        # Process the message using the agent
-        try:
-            response_text = await app.state.agent.process_input(request.message)
-            logger.info(f"Agent response: {response_text}")
-            return MessageResponse(response=response_text)
-        except Exception as e:
-            logger.error(f"Error processing input: {e}")
-            raise HTTPException(status_code=500, detail="Internal Server Error")
-    
-    # Register signal handlers for graceful shutdown using handle_exit
-    for sig in [signal.SIGINT, signal.SIGTERM]:
-        signal.signal(sig, lambda s, f: handle_exit(s, f, logger, neo4j_process, unity_process))
+    app = build_maid_app(
+        config_dict=config_dict,
+        runtime=runtime,
+        agent=agent,
+        gateway_cfg=maid_gateway_cfg,
+        raw_user_id=raw_user_id,
+        session_id=session_id,
+        logger=logger,
+        response_timeout=response_timeout,
+        start_runtime=True,
+    )
     
     # Run the FastAPI app using Uvicorn
     try:
@@ -228,7 +306,8 @@ def run(config, host, port, verbose):
         uvicorn.run(app, host=host, port=port)
     except Exception as e:
         logger.error(f"Server encountered an error: {e}")
-        handle_exit(None, None, logger, neo4j_process, unity_process)  # Ensure cleanup on exception
         sys.exit(1)
     finally:
+        _try_stop_neo4j(logger, neo4j_process)
+        stop_unity_app(unity_process, logger)
         logger.info("Server has been stopped.")

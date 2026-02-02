@@ -246,8 +246,6 @@ class RawMemoryJournal:
                 line += f" (session={session_id})"
             line += f" {entry.strip()}\n"
             lines.append(line)
-        if meta:
-            lines.append(f"  - meta: {_json_dump(meta)}\n")
 
         self._append_to_file(self._user_memory_path, "".join(lines), header=header)
         return self._user_memory_path
@@ -300,8 +298,6 @@ class RawMemoryJournal:
     @staticmethod
     def _format_summary_block(summary: str, meta: Optional[Dict[str, Any]]) -> str:
         block = summary.strip() + "\n"
-        if meta:
-            block += f"\n- meta: {_json_dump(meta)}\n"
         block += "\n"
         return block
 
@@ -326,9 +322,6 @@ class RawMemoryJournal:
         meta: Optional[Dict[str, Any]],
     ) -> str:
         lines = [cls.summary_heading(period), "", summary.strip()]
-        if meta:
-            lines.append("")
-            lines.append(f"- meta: {_json_dump(meta)}")
         lines.append("")
         return "\n".join(lines) + "\n"
 
@@ -339,9 +332,6 @@ class RawMemoryJournal:
         meta: Optional[Dict[str, Any]],
     ) -> str:
         lines = [f"### Session Summary {session_id}", "", summary.strip()]
-        if meta:
-            lines.append("")
-            lines.append(f"- meta: {_json_dump(meta)}")
         lines.append("")
         return "\n".join(lines) + "\n"
 
@@ -710,7 +700,6 @@ class RawMemoryNeuron(BaseNeuron):
             "user_id": user_id,
             "session_id": session_id,
             "start_time": start_time,
-            "meta": {"auto": True},
         }
         await self.events.emit("raw_memory.session.start", payload=payload)
 

@@ -16,6 +16,7 @@ from aeiva.command.command_utils import (
     get_log_dir,
     build_runtime,
 )
+from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.slack_gateway import SlackGateway
 from aeiva.util.file_utils import from_json_or_yaml
 
@@ -89,7 +90,8 @@ def run(config, verbose):
         click.echo(f"Error: Failed to parse configuration file: {exc}")
         sys.exit(1)
 
-    slack_cfg = config_dict.get("slack_config") or {}
+    registry = GatewayRegistry(config_dict)
+    slack_cfg = registry.resolve_channel_config("slack")
     if not slack_cfg.get("enabled", False):
         click.echo("Error: slack_config.enabled is false. Enable Slack in config first.")
         sys.exit(1)

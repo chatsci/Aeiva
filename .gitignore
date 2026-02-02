@@ -16,9 +16,6 @@ dist/
 flagged/
 logs/
 papers/
-packages/
-packages/*
-packages/*/*
 datasets/*/*
 !datasets/*/*.py
 !datasets/*/*.ipynb

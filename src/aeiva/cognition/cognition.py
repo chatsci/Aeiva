@@ -136,6 +136,28 @@ class Cognition(BaseNeuron):
         self.skipped += 1
         return None
 
+    async def send(self, output: Any, parent: Signal = None) -> None:
+        """
+        Send output to the configured cognition output event.
+
+        This keeps non-streaming cognition aligned with the expected
+        `cognition.thought` event.
+        """
+        if output is None:
+            return
+
+        if parent:
+            signal = parent.child(self.name, output)
+        else:
+            signal = Signal(source=self.name, data=output)
+
+        self.working.last_output = output
+
+        if self.events:
+            event_name = self.config.output_event or "cognition.thought"
+            emit_args = self.signal_to_event_args(event_name, signal)
+            await self.events.emit(**emit_args)
+
     async def handle_think(self, signal: Signal) -> Optional[Dict[str, Any]]:
         """Handle a think request - the core cognitive processing."""
         self.state.thinking = True

@@ -141,3 +141,23 @@ def build_runtime(config_dict: Dict[str, Any]):
     agent = Agent(config_dict)
     agent.setup()
     return agent, agent
+
+
+async def build_runtime_async(config_dict: Dict[str, Any]):
+    """
+    Build either a single Agent or a MultiAgentSystem asynchronously.
+
+    Returns:
+        (runtime, main_agent)
+    """
+    from aeiva.agent.agent import Agent
+    mas_cfg = config_dict.get("mas_config") or {}
+    if mas_cfg.get("enabled"):
+        from aeiva.mas import MultiAgentSystem
+        runtime = MultiAgentSystem(config_dict)
+        await runtime.setup_async()
+        return runtime, runtime.main_agent
+
+    agent = Agent(config_dict)
+    await agent.setup_async()
+    return agent, agent

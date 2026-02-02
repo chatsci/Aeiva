@@ -1,15 +1,15 @@
 import asyncio
 import logging
 import os
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import requests
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 
-from aeiva.neuron import Signal
+from aeiva.interface.gateway_base import GatewayBase
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class WhatsAppRoute:
     display_name: Optional[str] = None
 
 
-class WhatsAppGateway:
+class WhatsAppGateway(GatewayBase[WhatsAppRoute]):
     """
     WhatsApp Cloud API gateway that bridges WhatsApp messages to AEIVA EventBus.
 
@@ -39,8 +39,15 @@ class WhatsAppGateway:
     """
 
     def __init__(self, config: Dict[str, Any], event_bus: Any) -> None:
+        super().__init__(
+            config or {},
+            event_bus,
+            stream_mode="buffer",
+            response_timeout=float((config or {}).get("response_timeout", 60.0)),
+            max_routes=int((config or {}).get("max_route_cache", 2048)),
+            pending_queue_max=int((config or {}).get("max_pending_routes", 256)),
+        )
         self.config = config or {}
-        self.events = event_bus
         self._stop_event = asyncio.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -48,19 +55,6 @@ class WhatsAppGateway:
         self._access_token: Optional[str] = None
         self._verify_token: Optional[str] = None
         self._phone_number_id: Optional[str] = None
-
-        # Route cache: trace_id -> WhatsAppRoute
-        self._routes: "OrderedDict[str, WhatsAppRoute]" = OrderedDict()
-        self._routes_lock = asyncio.Lock()
-        self._max_routes = int(self.config.get("max_route_cache", 2048))
-
-        # Pending FIFO queue for fallback routing
-        self._pending_whatsapp: deque[WhatsAppRoute] = deque(maxlen=256)
-        self._pending_lock = asyncio.Lock()
-
-        # Streaming buffer
-        self._streaming_chunks: List[str] = []
-        self._streaming_route: Optional[WhatsAppRoute] = None
 
         # Message dedup: bounded set of recently seen message IDs
         self._seen_ids: "OrderedDict[str, None]" = OrderedDict()
@@ -102,10 +96,7 @@ class WhatsAppGateway:
             self._phone_number_id,
         )
 
-        if self.events:
-            self.events.subscribe("perception.output", self._handle_perception_output)
-            self.events.subscribe("cognition.thought", self._handle_cognition_event)
-            self.events.subscribe("agent.stop", self._handle_agent_stop)
+        self.register_handlers()
 
     def get_fastapi_app(self) -> FastAPI:
         if self._app is not None:
@@ -234,126 +225,31 @@ class WhatsAppGateway:
     ) -> None:
         route = WhatsAppRoute(phone_number=phone_number, display_name=display_name)
 
-        signal = Signal(source="perception.whatsapp", data=text)
-        await self._remember_route(signal.trace_id, route)
-        async with self._pending_lock:
-            self._pending_whatsapp.append(route)
+        signal = self.build_input_signal(
+            text,
+            source="perception.whatsapp",
+            route=route,
+        )
+        await self.emit_input(
+            signal,
+            route=route,
+            add_pending_route=True,
+            event_name="perception.stimuli",
+        )
 
-        if self.events:
-            await self.events.emit("perception.stimuli", payload=signal)
-
-    # ------------------------------------------------------------------
-    # Trace-id chaining: intercept perception.output to extend route map
-    # ------------------------------------------------------------------
-
-    async def _handle_perception_output(self, event: Any) -> None:
-        payload = event.payload
-        if not isinstance(payload, Signal):
-            return
-        parent_id = payload.parent_id
-        if not parent_id:
-            return
-        route = await self._get_route(parent_id, pop=False)
-        if route:
-            await self._remember_route(payload.trace_id, route)
-
-    # ------------------------------------------------------------------
-    # Outbound: Agent -> WhatsApp
-    # ------------------------------------------------------------------
-
-    async def _handle_cognition_event(self, event: Any) -> None:
-        payload = event.payload
-        if isinstance(payload, Signal):
-            data = (
-                payload.data
-                if isinstance(payload.data, dict)
-                else {"text": str(payload.data)}
-            )
-        elif isinstance(payload, dict):
-            data = payload
-        else:
-            return
-
-        if data.get("streaming"):
-            await self._handle_streaming_chunk(data, payload)
-            return
-
-        text = data.get("thought") or data.get("output") or data.get("text")
-        if not text:
-            return
-
-        route = await self._resolve_route(payload)
+    async def send_message(self, route: Optional[WhatsAppRoute], text: str) -> None:
         if not route:
             return
-
         logger.info("WhatsApp response sending (to=%s).", route.phone_number)
         await self._send_message(route, str(text))
 
-    async def _handle_streaming_chunk(
-        self, data: Dict[str, Any], payload: Any
-    ) -> None:
-        is_final = bool(data.get("final", False))
+    def matches_source(self, source: str) -> bool:
+        return "whatsapp" in (source or "").lower()
 
-        if not is_final:
-            chunk = data.get("thought", "")
-            if chunk:
-                self._streaming_chunks.append(chunk)
-            if self._streaming_route is None:
-                self._streaming_route = await self._resolve_route(payload)
-            return
-
-        text = "".join(self._streaming_chunks).strip()
-        route = self._streaming_route
-        self._streaming_chunks.clear()
-        self._streaming_route = None
-
-        if not text or not route:
-            return
-
-        logger.info(
-            "WhatsApp streaming response sending (to=%s, len=%d).",
-            route.phone_number,
-            len(text),
-        )
-        await self._send_message(route, text)
-
-    async def _resolve_route(self, payload: Any) -> Optional[WhatsAppRoute]:
-        # 1. Try trace_id chain via Signal parent_id
-        if isinstance(payload, Signal) and payload.parent_id:
-            route = await self._get_route(payload.parent_id, pop=True)
-            if route:
-                return route
-
-        # 2. Try origin_trace_id field
-        origin = None
-        if isinstance(payload, Signal) and isinstance(payload.data, dict):
-            origin = payload.data.get("origin_trace_id")
-        elif isinstance(payload, dict):
-            origin = payload.get("origin_trace_id")
-        if origin:
-            route = await self._get_route(origin, pop=True)
-            if route:
-                return route
-
-        # 3. Check if source indicates WhatsApp, use pending FIFO
-        source = ""
-        if isinstance(payload, Signal):
-            source = (
-                payload.data.get("source", "")
-                if isinstance(payload.data, dict)
-                else ""
-            )
-            if not source:
-                source = payload.source or ""
-        elif isinstance(payload, dict):
-            source = payload.get("source", "")
-
-        if "whatsapp" in source.lower():
-            async with self._pending_lock:
-                if self._pending_whatsapp:
-                    return self._pending_whatsapp.popleft()
-
-        return None
+    def route_user_id(self, route: Optional[WhatsAppRoute]) -> Optional[str]:
+        if not route:
+            return None
+        return route.phone_number
 
     async def _send_message(self, route: WhatsAppRoute, text: str) -> None:
         if not self._access_token or not self._phone_number_id:
@@ -392,26 +288,6 @@ class WhatsAppGateway:
 
     async def _handle_agent_stop(self, event: Any) -> None:
         await self.stop()
-
-    # ------------------------------------------------------------------
-    # Route cache helpers
-    # ------------------------------------------------------------------
-
-    async def _remember_route(
-        self, trace_id: str, route: WhatsAppRoute
-    ) -> None:
-        async with self._routes_lock:
-            self._routes[trace_id] = route
-            while len(self._routes) > self._max_routes:
-                self._routes.popitem(last=False)
-
-    async def _get_route(
-        self, trace_id: str, *, pop: bool = False
-    ) -> Optional[WhatsAppRoute]:
-        async with self._routes_lock:
-            if pop:
-                return self._routes.pop(trace_id, None)
-            return self._routes.get(trace_id)
 
     # ------------------------------------------------------------------
     # Token resolution

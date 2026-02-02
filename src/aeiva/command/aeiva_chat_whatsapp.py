@@ -18,6 +18,7 @@ from aeiva.command.command_utils import (
     get_log_dir,
     build_runtime,
 )
+from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.whatsapp_gateway import WhatsAppGateway
 from aeiva.util.file_utils import from_json_or_yaml
 
@@ -95,7 +96,8 @@ def run(config, host, port, verbose):
         click.echo(f"Error: Failed to parse configuration file: {exc}")
         sys.exit(1)
 
-    wa_cfg = config_dict.get("whatsapp_config") or {}
+    registry = GatewayRegistry(config_dict)
+    wa_cfg = registry.resolve_channel_config("whatsapp")
     if not wa_cfg.get("enabled", False):
         click.echo("Error: whatsapp_config.enabled is false. Enable WhatsApp in config first.")
         sys.exit(1)

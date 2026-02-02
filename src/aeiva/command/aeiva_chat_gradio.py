@@ -1,45 +1,73 @@
 """
-We can run the command like below: (specify your own config file path)
-> aeiva-chat-gradio --config configs/agent_config.yaml
+Aeiva Chat Gradio command.
+
+Uses ResponseQueueGateway (GatewayBase) for event-driven communication
+with the Agent, plus a Gradio UI for text input, chatbot display,
+and multimodal file uploads.
+
+Launch:
+    aeiva-chat-gradio --config configs/agent_config.yaml
+
+Requires gradio:
+    pip install gradio
 """
 
 import os
 import sys
 import threading
 import asyncio
-import signal
 import queue
+import logging
 from datetime import datetime
 from uuid import uuid4
+from typing import Any, Optional
+
 import click
-import gradio as gr
 from dotenv import load_dotenv
-import numpy as np
-import soundfile as sf
-from PIL import Image
 
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.util.path_utils import get_project_root_dir
 from aeiva.common.logger import setup_logging
-from aeiva.event.event import Event
-from aeiva.command.command_utils import (
-    get_package_root,
-    get_log_dir,
-    validate_neo4j_home,
-    start_neo4j,
-    stop_neo4j,
-    handle_exit,
-    build_runtime,
-)
+from aeiva.command.command_utils import get_package_root, get_log_dir, build_runtime
+from aeiva.command.gateway_registry import GatewayRegistry
+from aeiva.interface.gateway_base import ResponseQueueGateway
 
-# Get default agent config file path
+logger = logging.getLogger(__name__)
+
 PACKAGE_ROOT = get_package_root()
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
 
-# Get default log file path
 LOGS_DIR = get_log_dir()
-LOGS_DIR.mkdir(parents=True, exist_ok=True)  # Ensure the log directory exists
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_LOG_PATH = LOGS_DIR / 'aeiva-chat-gradio.log'
+
+
+def _try_start_neo4j(logger):
+    """Start Neo4j if NEO4J_HOME is set; return process or None."""
+    neo4j_home = os.getenv("NEO4J_HOME")
+    if not neo4j_home:
+        logger.info("NEO4J_HOME not set — skipping Neo4j startup.")
+        return None
+    try:
+        from aeiva.command.command_utils import validate_neo4j_home, start_neo4j
+        validate_neo4j_home(logger, neo4j_home)
+        return start_neo4j(logger, neo4j_home)
+    except SystemExit:
+        logger.warning("Neo4j validation failed — continuing without Neo4j.")
+        return None
+    except Exception as exc:
+        logger.warning("Neo4j start failed (%s) — continuing without Neo4j.", exc)
+        return None
+
+
+def _try_stop_neo4j(logger, neo4j_process):
+    if neo4j_process is None:
+        return
+    try:
+        from aeiva.command.command_utils import stop_neo4j
+        stop_neo4j(logger, neo4j_process)
+    except Exception as exc:
+        logger.warning("Neo4j stop failed: %s", exc)
 
 
 @click.command(name="aeiva-chat-gradio")
@@ -51,132 +79,206 @@ def run(config, verbose):
     """
     Starts the Aeiva chat Gradio interface with the provided configuration.
     """
-    # Setup logging
     project_root = get_project_root_dir()
     logger_config_path = project_root / "configs" / "logger_config.yaml"
-    logger = setup_logging(
+    log = setup_logging(
         config_file_path=logger_config_path,
         log_file_path=DEFAULT_LOG_PATH,
-        verbose=verbose
+        verbose=verbose,
     )
-    
-    # Load environment variables (API keys, etc.)
+
     load_dotenv()
-    
-    logger.info(f"Loading configuration from {config}")
+
+    log.info(f"Loading configuration from {config}")
     config_dict = from_json_or_yaml(config)
-    raw_memory_cfg = config_dict.get("raw_memory_config") or {}
-    raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
-    
-    # Initialize the Agent or MAS
+
+    # Initialize the Agent
     try:
         runtime, agent = build_runtime(config_dict)
-        logger.info("Agent initialized successfully.")
+        log.info("Agent initialized successfully.")
     except Exception as e:
-        logger.error(f"Failed to initialize Agent: {e}")
+        log.error(f"Failed to initialize Agent: {e}")
         click.echo(f"Error: Failed to initialize Agent: {e}")
         sys.exit(1)
-    
-    # Function to run the Agent's run method in a separate thread
+
+    # Start Agent in daemon thread
+    raw_memory_cfg = config_dict.get("raw_memory_config", {})
+    raw_memory_session = None
+    if raw_memory_cfg.get("enabled", True):
+        raw_memory_session = {
+            "user_id": raw_memory_cfg.get("user_id", "user"),
+        }
+
     def run_agent(runtime_instance):
         try:
-            if not session_id:
-                session_id = uuid4().hex
-                _emit_raw_memory(
-                    "raw_memory.session.start",
-                    {"session_id": session_id, "user_id": raw_user_id}
-                )
-            asyncio.run(runtime_instance.run())
+            asyncio.run(runtime_instance.run(raw_memory_session=raw_memory_session))
         except Exception as e:
-            logger.error(f"Error running Agent: {e}")
-    
-    # Start the Agent in a separate daemon thread
+            log.error(f"Error running Agent: {e}")
+
     agent_thread = threading.Thread(target=run_agent, args=(runtime,), daemon=True)
     agent_thread.start()
-    logger.info("Agent run thread started.")
-    
-    # Initialize a thread-safe queue to receive responses from the Agent
+    log.info("Agent run thread started.")
+
+    # Create response queue and gateway
     response_queue = queue.Queue()
-    
-    # Define a handler for 'response.gradio' events
-    def handle_response_gradio(event: Event):
-        response = event.payload
-        response_queue.put_nowait(response)  # Put response into the thread-safe queue
-        logger.info(f"Received 'response.gradio' event: {response}")
-    
-    # Register the handler with the Agent's EventBus
-    agent.event_bus.on('response.gradio')(handle_response_gradio)
-    logger.info("Registered handler for 'response.gradio' events.")
-    
-    # Validate and start Neo4j
-    neo4j_home = os.getenv('NEO4J_HOME')
-    if not neo4j_home:
-        logger.error("NEO4J_HOME environment variable is not set.")
-        click.echo("Error: NEO4J_HOME environment variable is not set.")
-        sys.exit(1)
-    
-    validate_neo4j_home(logger, neo4j_home)
-    neo4j_process = start_neo4j(logger, neo4j_home)
-    
-    # Register signal handlers to ensure Neo4j stops gracefully
-    for sig in [signal.SIGINT, signal.SIGTERM]:
-        signal.signal(sig, lambda s, f: handle_exit(s, f, logger, neo4j_process))
-    
-    # Define handlers for multimodal inputs
-    
+    response_timeout = float(
+        (config_dict.get("llm_gateway_config") or {}).get("llm_timeout", 60.0)
+    )
+    registry = GatewayRegistry(config_dict)
+    gradio_cfg = registry.resolve_channel_config("gradio")
+    queue_gateway = ResponseQueueGateway(
+        gradio_cfg,
+        agent.event_bus,
+        response_queue,
+        response_timeout=response_timeout,
+    )
+    queue_gateway.register_handlers()
+    log.info("Registered response queue gateway handlers.")
+
+    # Optionally start Neo4j
+    neo4j_process = _try_start_neo4j(log)
+
+    # Build and launch the Gradio UI
+    gradio_share = (config_dict.get("gradio_config") or {}).get("share", True)
+    demo = build_gradio_chat_ui(
+        config_dict=config_dict,
+        agent=agent,
+        queue_gateway=queue_gateway,
+        response_queue=response_queue,
+        log=log,
+    )
+
+    log.info("Launching Gradio interface...")
+    demo.launch(share=gradio_share)
+
+    # Graceful shutdown
+    log.info("Gradio exited. Requesting agent shutdown...")
+    agent.request_stop()
+    agent_thread.join(timeout=60)
+
+    if agent_thread.is_alive():
+        log.warning("Agent thread did not stop in time. Forcing session close.")
+        if agent.raw_memory:
+            try:
+                agent.raw_memory._close_all_sessions()
+            except Exception as e:
+                log.error(f"Error in fallback session close: {e}")
+
+    log.info("Agent shutdown complete.")
+    _try_stop_neo4j(log, neo4j_process)
+
+
+def build_gradio_chat_ui(
+    *,
+    config_dict: dict,
+    agent: Any,
+    queue_gateway: ResponseQueueGateway,
+    response_queue: queue.Queue,
+    log: logging.Logger,
+    route_token: Optional[str] = None,
+):
+    """Build and return the Gradio Blocks demo for chat UI.
+
+    This function is also used by the unified gateway (aeiva_gateway.py)
+    to embed the Gradio chat interface.
+    """
+    import gradio as gr
+    import numpy as np
+    import soundfile as sf
+    from PIL import Image
+
+    raw_memory_cfg = config_dict.get("raw_memory_config") or {}
+    raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
+
+    def _emit_raw_memory(event_name, payload):
+        if agent is None or agent.event_bus.loop is None:
+            log.warning("Raw memory event skipped (event bus not ready).")
+            return False
+        emit_future = asyncio.run_coroutine_threadsafe(
+            agent.event_bus.emit(event_name, payload=payload),
+            agent.event_bus.loop,
+        )
+        try:
+            emit_future.result(timeout=5)
+        except Exception as e:
+            log.warning(f"Raw memory emit failed: {e}")
+            return False
+        return True
+
+    def _end_session(session_id):
+        if session_id:
+            _emit_raw_memory(
+                "raw_memory.session.end",
+                {"session_id": session_id, "user_id": raw_user_id},
+            )
+        return [], "", ""
+
+    # Multimodal upload handlers
+
     def handle_image_upload(image: Image.Image):
         if image is not None:
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             image_path = f"uploads/uploaded_image_{timestamp}.jpg"
             try:
+                os.makedirs("uploads", exist_ok=True)
                 image.save(image_path)
-                logger.info(f"Image uploaded and saved to {image_path}")
+                log.info(f"Image uploaded and saved to {image_path}")
                 return "User uploaded an image."
             except Exception as e:
-                logger.error(f"Error saving uploaded image: {e}")
+                log.error(f"Error saving uploaded image: {e}")
                 return "Failed to upload image."
         return ""
-    
+
     def handle_video_upload(video):
         if video is not None:
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             video_path = f"uploads/uploaded_video_{timestamp}.mp4"
             try:
+                os.makedirs("uploads", exist_ok=True)
                 with open(video_path, "wb") as f:
                     f.write(video.read())
-                logger.info(f"Video uploaded and saved to {video_path}")
+                log.info(f"Video uploaded and saved to {video_path}")
                 return "User uploaded a video."
             except Exception as e:
-                logger.error(f"Error saving uploaded video: {e}")
+                log.error(f"Error saving uploaded video: {e}")
                 return "Failed to upload video."
         return ""
-    
-    def handle_audio_upload(audio):
+
+    def handle_audio_file_upload(audio_file):
+        """Handle audio from gr.File (receives a file path string)."""
+        if audio_file is not None:
+            try:
+                import shutil
+                timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                audio_path = f"uploads/uploaded_audio_{timestamp}.wav"
+                os.makedirs("uploads", exist_ok=True)
+                src = audio_file.name if hasattr(audio_file, "name") else str(audio_file)
+                shutil.copy2(src, audio_path)
+                log.info(f"Audio file uploaded and saved to {audio_path}")
+                return "User uploaded an audio file."
+            except Exception as e:
+                log.error(f"Error saving uploaded audio file: {e}")
+                return "Failed to upload audio."
+        return ""
+
+    def handle_audio_record(audio):
+        """Handle audio from gr.Audio (receives (sample_rate, np.ndarray) tuple)."""
         if audio is not None:
             try:
                 sample_rate, audio_data = audio
-                # Normalize audio_data to float32 in the range -1.0 to 1.0
-                audio_data_normalized = audio_data.astype(np.float32) / np.abs(audio_data).max()
+                audio_data_normalized = audio_data.astype(np.float32) / max(np.abs(audio_data).max(), 1e-8)
                 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-                audio_path = f"uploads/uploaded_audio_{timestamp}.wav"
+                audio_path = f"uploads/recorded_audio_{timestamp}.wav"
+                os.makedirs("uploads", exist_ok=True)
                 sf.write(audio_path, audio_data_normalized, sample_rate, subtype='PCM_16')
-                logger.info(f"Audio uploaded and saved to {audio_path}")
-                return "User uploaded an audio file."
+                log.info(f"Recorded audio saved to {audio_path}")
+                return "User recorded an audio clip."
             except Exception as e:
-                logger.error(f"Error saving uploaded audio: {e}")
-                return "Failed to upload audio."
+                log.error(f"Error saving recorded audio: {e}")
+                return "Failed to save recording."
         return ""
-    
+
     def handle_upload(file):
-        """
-        Handles file uploads and delegates to specific handlers based on file type.
-
-        Args:
-            file: Uploaded file object.
-
-        Returns:
-            str: Message indicating the upload status.
-        """
         if file is None:
             return ""
         if file.type.startswith("image"):
@@ -184,44 +286,19 @@ def run(config, verbose):
         elif file.type.startswith("video"):
             return handle_video_upload(file)
         elif file.type.startswith("audio"):
-            return handle_audio_upload(file)
+            return handle_audio_file_upload(file)
         else:
-            logger.warning(f"Unsupported file type uploaded: {file.type}")
+            log.warning(f"Unsupported file type uploaded: {file.type}")
             return "Unsupported file type uploaded."
-    
+
     def clear_media():
-        """
-        Clears the uploaded media paths.
-        """
-        # Implement any necessary logic to clear media paths or data
-        logger.info("Cleared uploaded media paths.")
+        log.info("Cleared uploaded media paths.")
         return ""
 
-    def _emit_raw_memory(event_name, payload):
-        if agent is None or agent.event_bus.loop is None:
-            logger.warning("Raw memory event skipped (event bus not ready).")
-            return False
-        emit_future = asyncio.run_coroutine_threadsafe(
-            agent.event_bus.emit(event_name, payload=payload),
-            agent.event_bus.loop
-        )
-        emit_future.result()
-        return True
-
-    def _end_session(session_id):
-        if session_id:
-            _emit_raw_memory(
-                "raw_memory.session.end",
-                {"session_id": session_id, "user_id": raw_user_id}
-            )
-        return [], "", ""
-    
-    async def bot(user_input, history, session_id):
-        """
-        Handles chatbot logic by emitting perception.gradio events to the Agent and retrieving responses.
-        """
+    def bot(user_input, history, session_id):
+        """Handle chatbot logic via ResponseQueueGateway."""
         if agent is None:
-            logger.error("Agent is not initialized.")
+            log.error("Agent is not initialized.")
             history.append({"role": "assistant", "content": "Agent is not initialized."})
             yield history, '', session_id
             return
@@ -231,304 +308,196 @@ def run(config, verbose):
                 session_id = uuid4().hex
                 _emit_raw_memory(
                     "raw_memory.session.start",
-                    {"session_id": session_id, "user_id": raw_user_id}
+                    {"session_id": session_id, "user_id": raw_user_id},
                 )
 
-            # Append user's message to history
+            # Append user message
             history.append({"role": "user", "content": user_input})
-            # Append an empty assistant response
             history.append({"role": "assistant", "content": ""})
-            yield history, '', session_id  # Display the user's message
-            logger.info(f"User input appended to history: {user_input}")
+            yield history, '', session_id
 
-            stream = config_dict["llm_gateway_config"]["llm_stream"]
-            use_async = config_dict["llm_gateway_config"]["llm_use_async"]
-
-            # Emit the 'perception.gradio' event with stream=True
-            emit_future = asyncio.run_coroutine_threadsafe(
-                agent.event_bus.emit('perception.gradio', payload=user_input),
-                agent.event_bus.loop
+            stream = (config_dict.get("llm_gateway_config") or {}).get("llm_stream", False)
+            resp_timeout = float(
+                (config_dict.get("gradio_config") or {}).get("response_timeout", 60.0)
             )
-            emit_future.result()  # Ensure the event is emitted
-            logger.info(f"Emitted 'perception.gradio' event with payload: {user_input} | Stream: {stream}")
+
+            # Emit input via gateway
+            signal = queue_gateway.build_input_signal(
+                user_input,
+                source="perception.gradio",
+                route=route_token,
+            )
+            asyncio.run_coroutine_threadsafe(
+                queue_gateway.emit_input(
+                    signal,
+                    route=route_token,
+                    add_pending_route=True,
+                    event_name="perception.stimuli",
+                ),
+                agent.event_bus.loop,
+            ).result(timeout=5)
+
+            log.info(f"Emitted perception.stimuli for gradio input: {user_input[:80]}")
 
             assistant_message = ''
             if stream:
                 while True:
                     try:
-                        # Non-blocking response retrieval from the thread-safe queue with timeout
-                        response = await asyncio.wait_for(
-                            asyncio.to_thread(response_queue.get, True, 30),
-                            timeout=30
-                        )
-                        logger.info(f"Retrieved response from queue: {response}")
-                        if response == "<END_OF_RESPONSE>":
-                            logger.info("Received end of response signal.")
+                        chunk = response_queue.get(timeout=resp_timeout)
+                        if chunk == "<END_OF_RESPONSE>":
                             break
-                        assistant_message += response
-                        # Create a new history list to ensure Gradio detects the update
-                        new_history = history.copy()
-                        new_history[-1]["content"] = assistant_message
-                        logger.info(f"Yielding updated history: {new_history}")
+                        assistant_message += str(chunk)
+                        new_history = list(history)
+                        new_history[-1] = {"role": "assistant", "content": assistant_message}
                         yield new_history, '', session_id
-                    except asyncio.TimeoutError:
-                        logger.warning("Timeout: No response received from Agent.")
-                        # Create a new history list to ensure Gradio detects the update
-                        new_history = history.copy()
-                        new_history[-1]["content"] = "I'm sorry, I didn't receive a response in time."
+                    except queue.Empty:
+                        log.warning("Timeout: No response received from Agent.")
+                        new_history = list(history)
+                        new_history[-1] = {"role": "assistant", "content": "I'm sorry, I didn't receive a response in time."}
                         yield new_history, '', session_id
                         break
             else:
                 try:
-                    # Non-blocking response retrieval from the thread-safe queue with timeout
-                    response = await asyncio.wait_for(
-                        asyncio.to_thread(response_queue.get, True, 30),
-                        timeout=30
-                    )
-                    logger.info(f"Retrieved response from queue: {response}")
-                    assistant_message += response
-                    # Create a new history list to ensure Gradio detects the update
-                    new_history = history.copy()
-                    new_history[-1]["content"] = assistant_message
-                    logger.info(f"Yielding updated history: {new_history}")
-                    yield new_history, '', session_id
-                except asyncio.TimeoutError:
-                    logger.warning("Timeout: No response received from Agent.")
-                    # Create a new history list to ensure Gradio detects the update
-                    new_history = history.copy()
-                    new_history[-1]["content"] = "I'm sorry, I didn't receive a response in time."
-                    yield new_history, '', session_id
+                    response = response_queue.get(timeout=resp_timeout)
+                    assistant_message = str(response)
+                except queue.Empty:
+                    log.warning("Timeout: No response received from Agent.")
+                    assistant_message = "I'm sorry, I didn't receive a response in time."
+                new_history = list(history)
+                new_history[-1] = {"role": "assistant", "content": assistant_message}
+                yield new_history, '', session_id
 
         except Exception as e:
-            logger.error(f"Unexpected Error in bot function: {e}")
-            # Create a new history list to ensure Gradio detects the update
-            new_history = history.copy()
-            new_history[-1]["content"] = "An unexpected error occurred."
+            log.error(f"Unexpected error in bot function: {e}")
+            new_history = list(history)
+            new_history[-1] = {"role": "assistant", "content": "An unexpected error occurred."}
             yield new_history, '', session_id
 
-    def launch_gradio_interface():
-        """
-        Main gradio interface.
-        """
-        with gr.Blocks(title="Multimodal LLM Chatbot with Tools") as demo:
-            # Header Section
-            gr.Markdown("""
-            <h1 align="center">
-                <a href="https://github.com/chatsci/Aeiva">
-                    <img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png",
-                    alt="Aeiva" border="0" style="margin: 0 auto; height: 200px;" />
-                </a>
-            </h1>
+    # Build the Gradio interface
 
-            <h2 align="center">
-                AEIVA: An Evolving Intelligent Virtual Assistant
-            </h2>
+    with gr.Blocks(title="AEIVA Chat", css="""
+        #chatbot { flex-grow: 1; overflow-y: auto; }
+        .action-btn { min-width: 70px !important; }
+        /* Keep the mic recorder compact */
+        #audio-recorder { max-height: 80px; overflow: hidden; }
+    """) as demo:
+        # Compact header
+        gr.HTML(
+            "<div style='text-align:center; padding: 8px 0;'>"
+            "<a href='https://github.com/chatsci/Aeiva'>"
+            "<img src='https://i.ibb.co/P4zQHDk/aeiva-1024.png' "
+            "alt='Aeiva' style='height:80px; vertical-align:middle;' /></a>"
+            "&nbsp;&nbsp;"
+            "<span style='font-size:1.4em; font-weight:600; vertical-align:middle;'>"
+            "AEIVA: An Evolving Intelligent Virtual Assistant</span>"
+            "<br/>"
+            "<a href='https://github.com/chatsci/Aeiva'>"
+            "<img src='https://img.shields.io/badge/Github-Code-blue'></a> "
+            "<a href='https://arxiv.org/abs/2304.14178'>"
+            "<img src='https://img.shields.io/badge/Arxiv-2304.14178-red'></a> "
+            "<a href='https://github.com/chatsci/Aeiva/stargazers'>"
+            "<img src='https://img.shields.io/github/stars/chatsci/Aeiva.svg?style=social'></a>"
+            "</div>"
+        )
 
-            <h5 align="center">
-                If you like our project, please give us a star ✨ on Github for the latest update.
-            </h5>
+        session_state = gr.State(value="")
 
-            <div align="center">
-                <div style="display:flex; gap: 0.25rem;" align="center">
-                    <a href='https://github.com/chatsci/Aeiva'><img src='https://img.shields.io/badge/Github-Code-blue'></a>
-                    <a href="https://arxiv.org/abs/2304.14178"><img src="https://img.shields.io/badge/Arxiv-2304.14178-red"></a>
-                    <a href='https://github.com/chatsci/Aeiva/stargazers'><img src='https://img.shields.io/github/stars/chatsci/Aeiva.svg?style=social'></a>
-                </div>
-            </div>
-            """)
-
-            # Main Layout: Two Columns
-            with gr.Row():
-                # Left Column: Parameter Settings and Multimodal Inputs
-                with gr.Column(scale=1, min_width=700):
-                    # Parameter Settings Tab
-                    with gr.Tab(label="Parameter Setting"):
-                        gr.Markdown("# Parameters")
-                        top_p = gr.Slider(
-                            minimum=0,
-                            maximum=1.0,
-                            value=0.95,
-                            step=0.05,
-                            interactive=True,
-                            label="Top-p"
-                        )
-                        temperature = gr.Slider(
-                            minimum=0.1,
-                            maximum=2.0,
-                            value=1.0,
-                            step=0.1,
-                            interactive=True,
-                            label="Temperature"
-                        )
-                        max_length_tokens = gr.Slider(
-                            minimum=0,
-                            maximum=512,
-                            value=512,
-                            step=8,
-                            interactive=True,
-                            label="Max Generation Tokens"
-                        )
-                        max_context_length_tokens = gr.Slider(
-                            minimum=0,
-                            maximum=4096,
-                            value=2048,
-                            step=128,
-                            interactive=True,
-                            label="Max History Tokens"
-                        )
-
-                    # Multimodal Inputs Section
-                    with gr.Row():
-                        imagebox = gr.Image(type="pil", label="Upload Image")
-                        videobox = gr.File(label="Upload Video", file_types=["video"])
-                        audiobox = gr.Audio(label="Upload Audio", type="numpy")
-
-                    with gr.Row():
-                        record_videobox = gr.Video(label="Record Video")
-                        record_audiobox = gr.Audio(label="Record Audio")
-
-                    # Clear Media Button
-                    with gr.Row():
-                        clear_media_btn = gr.Button("🧹 Clear Media", variant="secondary")
-
-                # Right Column: Chat Interface and Action Buttons
-                with gr.Column(scale=1, min_width=700):
-                    # Chatbot Component
-                    chatbot = gr.Chatbot(
-                        [],
-                        type="messages",  # Specify type as 'messages'
-                        elem_id="chatbot",
-                        height=730
-                    )
-                    session_state = gr.State(value="")
-
-                    # Input Textbox and Upload Button
-                    with gr.Row():
-                        with gr.Column(scale=4, min_width=300):
-                            txt = gr.Textbox(
-                                show_label=False,
-                                placeholder="Enter text and press enter, or upload an image/video/audio",
-                                lines=1,
-                                elem_classes=["input-textbox"]  # Assign a CSS class for styling
-                            )
-                        with gr.Column(scale=1, min_width=100):
-                            btn = gr.UploadButton("📁", file_types=["image", "video", "audio"], elem_classes=["upload-button"])
-                            # Changed the button label to an icon for a more compact look
-
-                    # Action Buttons Placed Below the Input Box
-                    with gr.Row():
-                        upvote_btn = gr.Button("👍 Upvote", interactive=True)
-                        downvote_btn = gr.Button("👎 Downvote", interactive=True)
-                        flag_btn = gr.Button("⚠️ Flag", interactive=True)
-                        regenerate_btn = gr.Button("🔄 Regenerate", interactive=True)
-                        clear_history_btn = gr.Button("🗑️ Clear History", interactive=True)
-                        new_conv_btn = gr.Button("🧹 New Conversation", interactive=True)
-                        del_last_turn_btn = gr.Button("🗑️ Remove Last Turn", interactive=True)
-
-            # Define interactions
-
-            # Text input submission with streaming
-            txt.submit(
-                bot,
-                inputs=[txt, chatbot, session_state],
-                outputs=[chatbot, txt, session_state],
-                queue=True,    # Enable queue for better performance
-                # stream=True    # Enable streaming (already handled in the bot function)
-            )
-            # Removed the .then callback to prevent layout shifts
-
-            # File upload (image/video/audio)
-            btn.upload(
-                handle_upload,
-                inputs=btn,
-                outputs=txt,  # Set message in textbox to trigger bot
-                queue=True
-            )
-
-            # Image upload
-            imagebox.upload(
-                handle_image_upload,
-                inputs=imagebox,
-                outputs=txt,  # Set message in textbox to trigger bot
-                queue=True
-            )
-
-            # Video upload
-            videobox.upload(
-                handle_video_upload,
-                inputs=videobox,
-                outputs=txt,  # Set message in textbox to trigger bot
-                queue=True
-            )
-
-            # Audio upload
-            audiobox.upload(
-                handle_audio_upload,
-                inputs=audiobox,
-                outputs=txt,  # Set message in textbox to trigger bot
-                queue=True
-            )
-
-            # Record Video
-            record_videobox.change(
-                handle_video_upload,
-                inputs=record_videobox,
-                outputs=txt,  # Set message in textbox to trigger bot
-                queue=True
-            )
-
-            # Record Audio
-            record_audiobox.change(
-                handle_audio_upload,
-                inputs=record_audiobox,
-                outputs=txt,  # Set message in textbox to trigger bot
-                queue=True
-            )
-
-            # Clear Media Button
-            clear_media_btn.click(
-                clear_media,
-                inputs=None,
-                outputs=None,
-                queue=False
-            )
-
-            # Action Buttons Functionality
-
-            # Clear History
-            clear_history_btn.click(
-                _end_session,
-                inputs=session_state,
-                outputs=[chatbot, txt, session_state],
-                queue=False
-            )
-
-            # New Conversation
-            new_conv_btn.click(
-                _end_session,
-                inputs=session_state,
-                outputs=[chatbot, txt, session_state],
-                queue=False
-            )
-
-            # Remove Last Turn (Removes the last user and assistant messages)
-            del_last_turn_btn.click(
-                lambda history: history[:-2] if len(history) >= 2 else history,
-                inputs=chatbot,
-                outputs=chatbot,
-                queue=False
-            )
-
-            if hasattr(demo, "unload"):
-                demo.unload(
-                    _end_session,
-                    inputs=session_state,
-                    outputs=[chatbot, txt, session_state],
-                    queue=False
+        with gr.Row():
+            # ---- Main chat area (dominant) ----
+            with gr.Column(scale=3, min_width=400):
+                chatbot = gr.Chatbot(
+                    [], type="messages", elem_id="chatbot", height=550,
                 )
 
-        # Launch the Gradio interface
-        demo.launch(share=True)
-    
-    # Launch aeiva chat gradio
-    launch_gradio_interface()
+                # Input row: textbox + upload button
+                with gr.Row():
+                    txt = gr.Textbox(
+                        show_label=False,
+                        placeholder="Type a message and press Enter ...",
+                        lines=1,
+                        scale=5,
+                    )
+                    btn = gr.UploadButton(
+                        "Upload", file_types=["image", "video", "audio"],
+                        scale=1,
+                    )
+
+                # Action buttons
+                with gr.Row():
+                    clear_history_btn = gr.Button("Clear History", size="sm", elem_classes=["action-btn"])
+                    new_conv_btn = gr.Button("New Conversation", size="sm", elem_classes=["action-btn"])
+                    del_last_turn_btn = gr.Button("Remove Last Turn", size="sm", elem_classes=["action-btn"])
+                    regenerate_btn = gr.Button("Regenerate", size="sm", elem_classes=["action-btn"])
+
+            # ---- Sidebar: settings & media (collapsible) ----
+            with gr.Column(scale=1, min_width=250):
+                with gr.Accordion("Parameters", open=False):
+                    top_p = gr.Slider(
+                        minimum=0, maximum=1.0, value=0.95, step=0.05,
+                        interactive=True, label="Top-p",
+                    )
+                    temperature = gr.Slider(
+                        minimum=0.1, maximum=2.0, value=1.0, step=0.1,
+                        interactive=True, label="Temperature",
+                    )
+                    max_length_tokens = gr.Slider(
+                        minimum=0, maximum=512, value=512, step=8,
+                        interactive=True, label="Max Generation Tokens",
+                    )
+                    max_context_length_tokens = gr.Slider(
+                        minimum=0, maximum=4096, value=2048, step=128,
+                        interactive=True, label="Max History Tokens",
+                    )
+
+                with gr.Accordion("Media Uploads", open=False):
+                    imagebox = gr.Image(type="pil", label="Image", height=120)
+                    videobox = gr.File(label="Video File", file_types=["video"], height=60)
+                    record_videobox = gr.Video(label="Record Video", height=120)
+                    # Audio upload as a plain file picker (compact)
+                    audiobox = gr.File(label="Audio File", file_types=["audio"], height=60)
+                    # Mic recorder (constrained by CSS above)
+                    record_audiobox = gr.Audio(
+                        label="Record Audio",
+                        sources=["microphone"],
+                        type="numpy",
+                        elem_id="audio-recorder",
+                    )
+                    clear_media_btn = gr.Button("Clear Media", variant="secondary", size="sm")
+
+        # ---- Wire up interactions ----
+
+        txt.submit(
+            bot,
+            inputs=[txt, chatbot, session_state],
+            outputs=[chatbot, txt, session_state],
+            queue=True,
+        )
+
+        btn.upload(handle_upload, inputs=btn, outputs=txt, queue=True)
+        imagebox.upload(handle_image_upload, inputs=imagebox, outputs=txt, queue=True)
+        videobox.upload(handle_video_upload, inputs=videobox, outputs=txt, queue=True)
+        audiobox.upload(handle_audio_file_upload, inputs=audiobox, outputs=txt, queue=True)
+        record_videobox.change(handle_video_upload, inputs=record_videobox, outputs=txt, queue=True)
+        record_audiobox.change(handle_audio_record, inputs=record_audiobox, outputs=txt, queue=True)
+        clear_media_btn.click(clear_media, inputs=None, outputs=None, queue=False)
+
+        clear_history_btn.click(
+            _end_session, inputs=session_state,
+            outputs=[chatbot, txt, session_state], queue=False,
+        )
+        new_conv_btn.click(
+            _end_session, inputs=session_state,
+            outputs=[chatbot, txt, session_state], queue=False,
+        )
+        del_last_turn_btn.click(
+            lambda history: history[:-2] if len(history) >= 2 else history,
+            inputs=chatbot, outputs=chatbot, queue=False,
+        )
+
+        if hasattr(demo, "unload"):
+            demo.unload(
+                _end_session, inputs=session_state,
+                outputs=[chatbot, txt, session_state], queue=False,
+            )
+
+    return demo

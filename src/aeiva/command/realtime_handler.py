@@ -24,6 +24,8 @@ import logging
 import queue
 from typing import Any, Generator, Optional, Union
 
+from aeiva.neuron import Signal
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,16 +77,20 @@ class RealtimePipelineHandler:
     def __init__(
         self,
         agent: Any,
+        gateway: Any,
         response_queue: queue.Queue,
         stt_model: Any,
         tts_model: Any,
         config_dict: dict,
+        route_token: Optional[str] = None,
     ):
         self.agent = agent
+        self.gateway = gateway
         self.response_queue = response_queue
         self.stt_model = stt_model
         self.tts_model = tts_model
         self.config_dict = config_dict
+        self.route_token = route_token
         self.latest_camera_frame: Any = None
 
     def update_latest_frame(self, frame: Any) -> None:
@@ -98,6 +104,8 @@ class RealtimePipelineHandler:
         chatbot: Optional[list] = None,
         camera_image: Any = None,
         uploaded_image: Any = None,
+        files: Any = None,
+        *extra: Any,
     ) -> Generator:
         """Called by ReplyOnPause. Accepts audio data or WebRTCData (audio + textbox).
 
@@ -128,12 +136,31 @@ class RealtimePipelineHandler:
         # 3. Build payload (text-only or multimodal)
         payload = self._build_payload(text, camera_image, uploaded_image)
 
-        # 4. Emit to Agent EventBus
+        # 4. Emit to Agent EventBus (through gateway)
         try:
-            asyncio.run_coroutine_threadsafe(
-                self.agent.event_bus.emit('perception.realtime', payload=payload),
-                self.agent.event_bus.loop
-            ).result(timeout=5)
+            if self.gateway is not None:
+                signal = self.gateway.build_input_signal(
+                    payload,
+                    source="perception.realtime",
+                    route=self.route_token,
+                )
+            else:
+                signal = Signal(source="perception.realtime", data=payload)
+            if self.gateway is None:
+                asyncio.run_coroutine_threadsafe(
+                    self.agent.event_bus.emit('perception.realtime', payload=payload),
+                    self.agent.event_bus.loop
+                ).result(timeout=5)
+            else:
+                asyncio.run_coroutine_threadsafe(
+                    self.gateway.emit_input(
+                        signal,
+                        route=self.route_token,
+                        add_pending_route=True,
+                        event_name="perception.stimuli",
+                    ),
+                    self.agent.event_bus.loop
+                ).result(timeout=5)
         except Exception as e:
             logger.error(f"Failed to emit perception.realtime: {e}")
             chatbot.append({"role": "assistant", "content": f"Error: {e}"})

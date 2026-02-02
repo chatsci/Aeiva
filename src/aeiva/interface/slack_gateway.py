@@ -1,17 +1,16 @@
 import asyncio
 import logging
 import os
-from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web.async_client import AsyncWebClient
 
-from aeiva.neuron import Signal
+from aeiva.interface.gateway_base import GatewayBase
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class SlackRoute:
     user: Optional[str]
 
 
-class SlackGateway:
+class SlackGateway(GatewayBase[SlackRoute]):
     """
     Slack Socket Mode gateway that bridges Slack messages to AEIVA EventBus.
 
@@ -39,26 +38,20 @@ class SlackGateway:
     """
 
     def __init__(self, config: Dict[str, Any], event_bus: Any) -> None:
+        super().__init__(
+            config or {},
+            event_bus,
+            stream_mode="buffer",
+            response_timeout=float((config or {}).get("response_timeout", 60.0)),
+            max_routes=int((config or {}).get("max_route_cache", 2048)),
+            pending_queue_max=int((config or {}).get("max_pending_routes", 256)),
+        )
         self.config = config or {}
-        self.events = event_bus
         self._client: Optional[SocketModeClient] = None
         self._web_client: Optional[AsyncWebClient] = None
         self._bot_user_id: Optional[str] = None
         self._stop_event = asyncio.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
-
-        # Route cache: trace_id -> SlackRoute
-        self._routes: "OrderedDict[str, SlackRoute]" = OrderedDict()
-        self._routes_lock = asyncio.Lock()
-        self._max_routes = int(self.config.get("max_route_cache", 2048))
-
-        # Pending FIFO queue for fallback routing (serial conversations)
-        self._pending_slack: deque[SlackRoute] = deque(maxlen=256)
-        self._pending_lock = asyncio.Lock()
-
-        # Streaming buffer: accumulate chunks before sending
-        self._streaming_chunks: List[str] = []
-        self._streaming_route: Optional[SlackRoute] = None
 
         # Home view
         self._home_view_enabled = bool(self.config.get("home_view_enabled", True))
@@ -80,10 +73,7 @@ class SlackGateway:
         self._loop = asyncio.get_running_loop()
         logger.info("Slack gateway ready (bot_user_id=%s).", self._bot_user_id)
 
-        if self.events:
-            self.events.subscribe("perception.output", self._handle_perception_output)
-            self.events.subscribe("cognition.thought", self._handle_cognition_event)
-            self.events.subscribe("agent.stop", self._handle_agent_stop)
+        self.register_handlers()
 
     async def run(self) -> None:
         if not self._client:
@@ -151,128 +141,40 @@ class SlackGateway:
         ts = event.get("ts")
         thread_ts = event.get("thread_ts")
         reply_in_thread = bool(self.config.get("reply_in_thread", True))
+        if channel and channel.startswith("D"):
+            reply_in_thread = False
         if reply_in_thread and not thread_ts:
             thread_ts = ts
 
         route = SlackRoute(channel=channel, thread_ts=thread_ts, user=user)
 
-        signal = Signal(source="perception.slack", data=text)
-        await self._remember_route(signal.trace_id, route)
-        async with self._pending_lock:
-            self._pending_slack.append(route)
+        signal = self.build_input_signal(
+            text,
+            source="perception.slack",
+            route=route,
+        )
+        await self.emit_input(
+            signal,
+            route=route,
+            add_pending_route=True,
+            event_name="perception.stimuli",
+        )
 
         await self._ensure_home_view(user)
-        if self.events:
-            await self.events.emit("perception.stimuli", payload=signal)
 
-    # ------------------------------------------------------------------
-    # Trace-id chaining: intercept perception.output to extend route map
-    # ------------------------------------------------------------------
-
-    async def _handle_perception_output(self, event: Any) -> None:
-        """When perception.output fires, its parent_id points to our original
-        gateway Signal.  Store the route under this new trace_id so that the
-        next hop (cognition) can find it via parent_id."""
-        payload = event.payload
-        if not isinstance(payload, Signal):
-            return
-        parent_id = payload.parent_id
-        if not parent_id:
-            return
-        route = await self._get_route(parent_id, pop=False)
-        if route:
-            await self._remember_route(payload.trace_id, route)
-
-    # ------------------------------------------------------------------
-    # Outbound: Agent -> Slack
-    # ------------------------------------------------------------------
-
-    async def _handle_cognition_event(self, event: Any) -> None:
-        payload = event.payload
-        if isinstance(payload, Signal):
-            data = payload.data if isinstance(payload.data, dict) else {"text": str(payload.data)}
-        elif isinstance(payload, dict):
-            data = payload
-        else:
-            return
-
-        # --- Streaming handling ---
-        if data.get("streaming"):
-            await self._handle_streaming_chunk(data, payload)
-            return
-
-        # --- Non-streaming (complete response) ---
-        # Skip the streaming_complete signal for the UI (but we DO want it)
-        text = data.get("thought") or data.get("output") or data.get("text")
-        if not text:
-            return
-
-        route = await self._resolve_route(payload)
+    async def send_message(self, route: Optional[SlackRoute], text: str) -> None:
         if not route:
             return
-
         logger.info("Slack response sending (channel=%s).", route.channel)
         await self._send_message(route, str(text))
 
-    async def _handle_streaming_chunk(self, data: Dict[str, Any], payload: Any) -> None:
-        """Accumulate streaming chunks; send assembled text on final=True."""
-        is_final = bool(data.get("final", False))
+    def matches_source(self, source: str) -> bool:
+        return "slack" in (source or "").lower()
 
-        if not is_final:
-            chunk = data.get("thought", "")
-            if chunk:
-                self._streaming_chunks.append(chunk)
-            # On first chunk, resolve and cache the route
-            if self._streaming_route is None:
-                self._streaming_route = await self._resolve_route(payload)
-            return
-
-        # Final chunk: assemble and send
-        text = "".join(self._streaming_chunks).strip()
-        route = self._streaming_route
-        self._streaming_chunks.clear()
-        self._streaming_route = None
-
-        if not text or not route:
-            return
-
-        logger.info("Slack streaming response sending (channel=%s, len=%d).", route.channel, len(text))
-        await self._send_message(route, text)
-
-    async def _resolve_route(self, payload: Any) -> Optional[SlackRoute]:
-        """Try to find the SlackRoute for this response."""
-        # 1. Try trace_id chain via Signal parent_id
-        if isinstance(payload, Signal) and payload.parent_id:
-            route = await self._get_route(payload.parent_id, pop=True)
-            if route:
-                return route
-
-        # 2. Try origin_trace_id field (set by Cognition for lineage tracking)
-        origin = None
-        if isinstance(payload, Signal) and isinstance(payload.data, dict):
-            origin = payload.data.get("origin_trace_id")
-        elif isinstance(payload, dict):
-            origin = payload.get("origin_trace_id")
-        if origin:
-            route = await self._get_route(origin, pop=True)
-            if route:
-                return route
-
-        # 3. Check if source indicates Slack, use pending FIFO
-        source = ""
-        if isinstance(payload, Signal):
-            source = payload.data.get("source", "") if isinstance(payload.data, dict) else ""
-            if not source:
-                source = payload.source or ""
-        elif isinstance(payload, dict):
-            source = payload.get("source", "")
-
-        if "slack" in source.lower():
-            async with self._pending_lock:
-                if self._pending_slack:
-                    return self._pending_slack.popleft()
-
-        return None
+    def route_user_id(self, route: Optional[SlackRoute]) -> Optional[str]:
+        if not route:
+            return None
+        return route.user
 
     async def _send_message(self, route: SlackRoute, text: str) -> None:
         if not self._web_client:
@@ -352,22 +254,6 @@ class SlackGateway:
                 },
             ],
         }
-
-    # ------------------------------------------------------------------
-    # Route cache helpers
-    # ------------------------------------------------------------------
-
-    async def _remember_route(self, trace_id: str, route: SlackRoute) -> None:
-        async with self._routes_lock:
-            self._routes[trace_id] = route
-            while len(self._routes) > self._max_routes:
-                self._routes.popitem(last=False)
-
-    async def _get_route(self, trace_id: str, *, pop: bool = False) -> Optional[SlackRoute]:
-        async with self._routes_lock:
-            if pop:
-                return self._routes.pop(trace_id, None)
-            return self._routes.get(trace_id)
 
     # ------------------------------------------------------------------
     # Token resolution

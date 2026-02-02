@@ -17,6 +17,7 @@ import threading
 import asyncio
 import queue
 import logging
+from typing import Any, Optional
 
 import click
 from dotenv import load_dotenv
@@ -24,8 +25,9 @@ from dotenv import load_dotenv
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.util.path_utils import get_project_root_dir
 from aeiva.common.logger import setup_logging
-from aeiva.event.event import Event
 from aeiva.command.command_utils import get_package_root, get_log_dir, build_runtime
+from aeiva.command.gateway_registry import GatewayRegistry
+from aeiva.interface.gateway_base import ResponseQueueGateway
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +105,6 @@ def run(config, verbose):
     if raw_memory_cfg.get("enabled", True):
         raw_memory_session = {
             "user_id": raw_memory_cfg.get("user_id", "user"),
-            "meta": {"mode": "realtime"},
         }
 
     def run_agent(runtime_instance):
@@ -118,13 +119,17 @@ def run(config, verbose):
 
     # 5. Create response_queue and register handler
     response_queue = queue.Queue()
-
-    def handle_response_realtime(event: Event):
-        response_queue.put_nowait(event.payload)
-        log.debug(f"Received 'response.realtime' event: {event.payload}")
-
-    agent.event_bus.on('response.realtime')(handle_response_realtime)
-    log.info("Registered handler for 'response.realtime' events.")
+    response_timeout = float((config_dict.get("llm_gateway_config") or {}).get("llm_timeout", 60.0))
+    registry = GatewayRegistry(config_dict)
+    realtime_gateway_cfg = registry.resolve_channel_config("realtime")
+    queue_gateway = ResponseQueueGateway(
+        realtime_gateway_cfg,
+        agent.event_bus,
+        response_queue,
+        response_timeout=response_timeout,
+    )
+    queue_gateway.register_handlers()
+    log.info("Registered response queue gateway handlers.")
 
     # 6. Optionally start Neo4j (skip if NEO4J_HOME not set)
     neo4j_home = os.getenv('NEO4J_HOME')
@@ -140,28 +145,69 @@ def run(config, verbose):
     else:
         log.info("NEO4J_HOME not set. Skipping Neo4j startup (optional for realtime mode).")
 
-    # 7. Import FastRTC and build UI
+    demo, _handler = build_turn_based_realtime_ui(
+        config_dict=config_dict,
+        agent=agent,
+        queue_gateway=queue_gateway,
+        response_queue=response_queue,
+        log=log,
+    )
+
+    log.info("Launching Gradio interface...")
+    demo.launch(share=True)
+
+    # Graceful shutdown: signal the agent to stop and wait for proper cleanup.
+    # This allows the agent's finally block to run, which:
+    # 1. Emits raw_memory.session.end → raw_memory writes file + emits session.closed
+    # 2. SummaryMemoryNeuron processes session.closed → LLM summary + user memory
+    log.info("Gradio exited. Requesting agent shutdown...")
+    agent.request_stop()
+    agent_thread.join(timeout=60)
+
+    if agent_thread.is_alive():
+        log.warning("Agent thread did not stop in time. Forcing session close.")
+        if agent.raw_memory:
+            try:
+                agent.raw_memory._close_all_sessions()
+            except Exception as e:
+                log.error(f"Error in fallback session close: {e}")
+
+    log.info("Agent shutdown complete.")
+
+    if neo4j_process:
+        from aeiva.command.command_utils import stop_neo4j
+        stop_neo4j(log, neo4j_process)
+
+
+def build_turn_based_realtime_ui(
+    *,
+    config_dict: dict,
+    agent: Any,
+    queue_gateway: ResponseQueueGateway,
+    response_queue: queue.Queue,
+    log: logging.Logger,
+    route_token: Optional[str] = None,
+):
     gr, ReplyOnPause, WebRTC, get_stt_model, get_tts_model = _try_import_fastrtc()
 
-    # 8. Load STT/TTS models (lazy download on first use, ~1GB total)
     log.info("Loading STT model (Moonshine)...")
     stt_model = get_stt_model("moonshine/base")
     log.info("Loading TTS model (Kokoro)...")
     tts_model = get_tts_model("kokoro")
     log.info("STT/TTS models loaded.")
 
-    # 9. Create the handler
     from aeiva.command.realtime_handler import RealtimePipelineHandler
 
     handler = RealtimePipelineHandler(
         agent=agent,
+        gateway=queue_gateway,
         response_queue=response_queue,
         stt_model=stt_model,
         tts_model=tts_model,
         config_dict=config_dict,
+        route_token=route_token,
     )
 
-    # 10. Build Gradio + WebRTC UI (turn-based)
     with gr.Blocks(title="AEIVA Multimodal Real-Time Chat") as demo:
         gr.HTML(
             "<h1 style='text-align:center;'>AEIVA - Multimodal Real-Time Chat</h1>"
@@ -169,7 +215,6 @@ def run(config, verbose):
         )
 
         with gr.Row():
-            # Left column: settings, camera, and uploads
             with gr.Column(scale=1, min_width=300):
                 gr.Markdown("### Settings")
                 gr.Markdown(
@@ -204,9 +249,8 @@ def run(config, verbose):
                     "*Enable webcam to send live frames with your messages. "
                     "The most recent frame is sent when you speak or type.*"
                 )
-                file_input = gr.File(label="Upload Files")
+                gr.File(label="Upload Files")
 
-            # Right column: chatbot + WebRTC
             with gr.Column(scale=2, min_width=500):
                 chatbot = gr.Chatbot(type="messages", height=600)
 
@@ -221,6 +265,7 @@ def run(config, verbose):
                     inputs=[webrtc, chatbot, camera_input, upload_image],
                     outputs=[webrtc],
                     time_limit=90,
+                    send_input_on="submit",
                 )
                 webrtc.on_additional_outputs(
                     lambda old, new: new,
@@ -228,104 +273,11 @@ def run(config, verbose):
                     outputs=[chatbot],
                 )
 
-                # Text-only submit (for users without mic)
-                with gr.Row():
-                    txt = gr.Textbox(
-                        show_label=False,
-                        placeholder="Type a message and press Enter (or use the mic above)",
-                        lines=1,
-                        scale=4,
-                    )
-
-                def text_submit(user_text, history, camera_frame=None, uploaded_image=None):
-                    """Handle text input (no mic), with optional camera image."""
-                    if not user_text or not user_text.strip():
-                        yield history, ""
-                        return
-                    history = list(history) if history else []
-                    history.append({"role": "user", "content": user_text})
-                    yield history, ""
-
-                    # Build payload (text-only or multimodal with image)
-                    from aeiva.command.realtime_handler import encode_image_to_base64
-                    payload = user_text
-                    image = uploaded_image if uploaded_image is not None else camera_frame
-                    if image is None:
-                        image = getattr(handler, "latest_camera_frame", None)
-                    if image is not None:
-                        img_b64 = encode_image_to_base64(image)
-                        if img_b64:
-                            payload = {"text": user_text, "images": [img_b64]}
-
-                    try:
-                        asyncio.run_coroutine_threadsafe(
-                            agent.event_bus.emit('perception.realtime', payload=payload),
-                            agent.event_bus.loop,
-                        ).result(timeout=5)
-                    except Exception as e:
-                        log.error(f"Failed to emit perception.realtime: {e}")
-                        history.append({"role": "assistant", "content": f"Error: {e}"})
-                        yield history, ""
-                        return
-
-                    stream = config_dict.get("llm_gateway_config", {}).get("llm_stream", False)
-                    response_parts = []
-                    if stream:
-                        history.append({"role": "assistant", "content": ""})
-                        while True:
-                            try:
-                                chunk = response_queue.get(timeout=30)
-                            except queue.Empty:
-                                break
-                            if chunk == "<END_OF_RESPONSE>":
-                                break
-                            response_parts.append(str(chunk))
-                            history[-1]["content"] = "".join(response_parts)
-                            yield history, ""
-                    else:
-                        try:
-                            resp = response_queue.get(timeout=30)
-                            response_parts.append(str(resp))
-                        except queue.Empty:
-                            response_parts.append("No response received in time.")
-                        history.append({"role": "assistant", "content": "".join(response_parts)})
-                        yield history, ""
-
-                txt.submit(
-                    text_submit,
-                    inputs=[txt, chatbot, camera_input, upload_image],
-                    outputs=[chatbot, txt],
-                )
-
-                # Action buttons
                 with gr.Row():
                     clear_btn = gr.Button("Clear History")
-                    clear_btn.click(lambda: ([], ""), outputs=[chatbot, txt])
+                    clear_btn.click(lambda: [], outputs=[chatbot])
 
-        log.info("Launching Gradio interface...")
-        demo.launch(share=True)
-
-    # Graceful shutdown: signal the agent to stop and wait for proper cleanup.
-    # This allows the agent's finally block to run, which:
-    # 1. Emits raw_memory.session.end → raw_memory writes file + emits session.closed
-    # 2. SummaryMemoryNeuron processes session.closed → LLM summary + user memory
-    log.info("Gradio exited. Requesting agent shutdown...")
-    agent.request_stop()
-    agent_thread.join(timeout=60)
-
-    if agent_thread.is_alive():
-        log.warning("Agent thread did not stop in time. Forcing session close.")
-        if agent.raw_memory:
-            try:
-                agent.raw_memory._close_all_sessions()
-            except Exception as e:
-                log.error(f"Error in fallback session close: {e}")
-
-    log.info("Agent shutdown complete.")
-
-    if neo4j_process:
-        from aeiva.command.command_utils import stop_neo4j
-        stop_neo4j(log, neo4j_process)
+    return demo, handler
 
 
 def run_live_realtime_ui(config_dict: dict, log: logging.Logger, provider: str) -> None:
