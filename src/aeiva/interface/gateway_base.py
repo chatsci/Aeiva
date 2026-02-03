@@ -1,6 +1,9 @@
 import asyncio
 import logging
+import queue
 from collections import OrderedDict, deque
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, Generic, List, Optional, Set, TypeVar
 
@@ -357,9 +360,36 @@ class ResponseQueueGateway(GatewayBase[None]):
         self._stream_end_marker = stream_end_marker
         self.deliver_final_on_pass = False
         self._require_route = require_route
+        self._trace_buffers: Dict[str, Deque[Any]] = {}
+        self._trace_lock = threading.Lock()
 
     def requires_route(self) -> bool:
         return self._require_route
+
+    async def _handle_cognition_event(self, event: Any) -> None:
+        payload = event.payload
+        signal = payload if isinstance(payload, Signal) else None
+        data = payload.data if isinstance(payload, Signal) else payload
+        if not isinstance(data, dict):
+            data = {"text": str(data)}
+
+        trace_key = self._extract_trace_key(signal, data)
+        route = await self._resolve_route(trace_key, data, payload)
+        if self._require_route and route is None:
+            return
+
+        if data.get("streaming"):
+            chunk = data.get("thought") or ""
+            if chunk:
+                self._queue.put_nowait((trace_key, chunk))
+            if data.get("final"):
+                self._queue.put_nowait((trace_key, self._stream_end_marker))
+            return
+
+        text = self._extract_text(data)
+        if text is None:
+            return
+        self._queue.put_nowait((trace_key, text))
 
     async def send_message(self, route: Optional[None], text: str) -> None:
         if self._require_route and route is None:
@@ -377,3 +407,27 @@ class ResponseQueueGateway(GatewayBase[None]):
         if self._require_route and route is None:
             return
         self._queue.put_nowait(self._stream_end_marker)
+
+    def get_for_trace(self, trace_id: Optional[str], timeout: float) -> Any:
+        if not trace_id:
+            return self._queue.get(timeout=timeout)
+        end = time.time() + timeout
+        while True:
+            with self._trace_lock:
+                buffer = self._trace_buffers.get(trace_id)
+                if buffer:
+                    return buffer.popleft()
+            remaining = end - time.time()
+            if remaining <= 0:
+                raise queue.Empty()
+            item = self._queue.get(timeout=remaining)
+            if isinstance(item, tuple) and len(item) == 2:
+                item_trace, payload = item
+            else:
+                item_trace, payload = None, item
+            if item_trace == trace_id:
+                return payload
+            if item_trace is None:
+                return payload
+            with self._trace_lock:
+                self._trace_buffers.setdefault(item_trace, deque()).append(payload)

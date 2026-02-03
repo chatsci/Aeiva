@@ -70,6 +70,7 @@ pip install -e .
 ```bash
 pip install -e ".[realtime]"   # FastRTC realtime UI
 pip install -e ".[slack]"      # Slack gateway
+pip install -e ".[media]"      # Movie/audio utilities (moviepy)
 ```
 
 ## Configuration

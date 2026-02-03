@@ -32,6 +32,14 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_LOG_PATH = LOGS_DIR / "aeiva-gateway.log"
 
 
+def _suppress_gradio_routes_print() -> None:
+    try:
+        import gradio.routes as gr_routes
+        gr_routes.print = lambda *args, **kwargs: None
+    except Exception:
+        pass
+
+
 @dataclass
 class UvicornHandle:
     server: Any
@@ -212,6 +220,7 @@ def run(config, verbose):
                     log=logger,
                     route_token=route_token,
                 )
+                _suppress_gradio_routes_print()
                 demo.launch(share=True, prevent_thread_lock=True)
                 logger.info("Realtime Gradio UI launched (scope=%s).", cfg.get("gateway_scope"))
             elif name == "maid":

@@ -92,6 +92,12 @@ class RealtimePipelineHandler:
         self.config_dict = config_dict
         self.route_token = route_token
         self.latest_camera_frame: Any = None
+        self.response_timeout = float(
+            (config_dict.get("llm_gateway_config") or {}).get("llm_timeout", 60.0)
+        )
+        self.emit_timeout = float(
+            (config_dict.get("realtime_config") or {}).get("emit_timeout", 10.0)
+        )
 
     def update_latest_frame(self, frame: Any) -> None:
         """Cache the latest webcam frame for fallback image sends."""
@@ -137,20 +143,23 @@ class RealtimePipelineHandler:
         payload = self._build_payload(text, camera_image, uploaded_image)
 
         # 4. Emit to Agent EventBus (through gateway)
+        trace_id = None
         try:
             if self.gateway is not None:
                 signal = self.gateway.build_input_signal(
                     payload,
                     source="perception.realtime",
                     route=self.route_token,
+                    meta={"llm_stream": False},
                 )
+                trace_id = signal.trace_id
             else:
                 signal = Signal(source="perception.realtime", data=payload)
             if self.gateway is None:
                 asyncio.run_coroutine_threadsafe(
                     self.agent.event_bus.emit('perception.realtime', payload=payload),
                     self.agent.event_bus.loop
-                ).result(timeout=5)
+                ).result(timeout=self.emit_timeout)
             else:
                 asyncio.run_coroutine_threadsafe(
                     self.gateway.emit_input(
@@ -160,21 +169,23 @@ class RealtimePipelineHandler:
                         event_name="perception.stimuli",
                     ),
                     self.agent.event_bus.loop
-                ).result(timeout=5)
+                ).result(timeout=self.emit_timeout)
         except Exception as e:
             logger.error(f"Failed to emit perception.realtime: {e}")
             chatbot.append({"role": "assistant", "content": f"Error: {e}"})
             yield AdditionalOutputs(chatbot)
             return
 
-        stream = self.config_dict.get("llm_gateway_config", {}).get("llm_stream", False)
+        stream = False  # Force non-streaming for realtime audio stability
 
         # 5. Collect response from Agent (streaming or non-streaming)
         if stream:
             chatbot.append({"role": "assistant", "content": ""})
-            response_text = yield from self._collect_response_stream(chatbot)
+            response_text = yield from self._collect_response_stream(
+                chatbot, trace_id, timeout=self.response_timeout
+            )
         else:
-            response_text = self._collect_response()
+            response_text = self._collect_response(trace_id, timeout=self.response_timeout)
             chatbot.append({"role": "assistant", "content": response_text})
             yield AdditionalOutputs(chatbot)
 
@@ -240,42 +251,24 @@ class RealtimePipelineHandler:
 
         return str(data) if data else ""
 
-    def _collect_response(self, timeout: float = 30.0) -> str:
-        """Collect streaming or non-streaming response from the Agent.
-
-        Reads from response_queue until <END_OF_RESPONSE> marker (streaming)
-        or a single message (non-streaming).
+    def _collect_response(self, trace_id: Optional[str], timeout: float = 30.0) -> str:
+        """Collect a single non-streaming response from the Agent.
 
         Args:
-            timeout: Maximum seconds to wait for response
+            trace_id: Trace ID for queue routing.
+            timeout: Maximum seconds to wait for response.
 
         Returns:
-            Complete response text
+            Complete response text.
         """
-        stream = self.config_dict.get("llm_gateway_config", {}).get("llm_stream", False)
-        response_parts = []
+        try:
+            response = self._queue_get(trace_id, timeout)
+            return str(response)
+        except queue.Empty:
+            logger.warning("Timeout waiting for response")
+            return "I'm sorry, I didn't receive a response in time."
 
-        if stream:
-            while True:
-                try:
-                    chunk = self.response_queue.get(timeout=timeout)
-                    if chunk == "<END_OF_RESPONSE>":
-                        break
-                    response_parts.append(str(chunk))
-                except queue.Empty:
-                    logger.warning("Timeout waiting for streaming response chunk")
-                    break
-        else:
-            try:
-                response = self.response_queue.get(timeout=timeout)
-                response_parts.append(str(response))
-            except queue.Empty:
-                logger.warning("Timeout waiting for response")
-                response_parts.append("I'm sorry, I didn't receive a response in time.")
-
-        return "".join(response_parts)
-
-    def _collect_response_stream(self, chatbot: list, timeout: float = 30.0) -> str:
+    def _collect_response_stream(self, chatbot: list, trace_id: Optional[str], timeout: float = 30.0) -> str:
         """Stream response chunks to the chatbot as they arrive.
 
         Args:
@@ -290,7 +283,7 @@ class RealtimePipelineHandler:
 
         while True:
             try:
-                chunk = self.response_queue.get(timeout=timeout)
+                chunk = self._queue_get(trace_id, timeout)
             except queue.Empty:
                 logger.warning("Timeout waiting for streaming response chunk")
                 break
@@ -303,3 +296,8 @@ class RealtimePipelineHandler:
             yield AdditionalOutputs(chatbot)
 
         return "".join(response_parts)
+
+    def _queue_get(self, trace_id: Optional[str], timeout: float) -> Any:
+        if self.gateway is not None and hasattr(self.gateway, "get_for_trace"):
+            return self.gateway.get_for_trace(trace_id, timeout)
+        return self.response_queue.get(timeout=timeout)

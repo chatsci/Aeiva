@@ -19,7 +19,6 @@ import whisper
 import cv2
 import PIL
 from PIL import Image
-import moviepy.editor as mp
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from aeiva.util.token_utils import pad_or_truncate_tokens
 from aeiva.util.sample_utils import draw_samples
@@ -213,6 +212,14 @@ def sample_frames_from_video(example: dict, num_frames: int, video_dir: str, fra
 
 
 def _extract_audio_from_video(input_video_path, output_audio_path):
+    try:
+        import moviepy.editor as mp
+    except Exception as exc:
+        raise ImportError(
+            "moviepy is required for audio extraction. "
+            "Install with `pip install -e '.[media]'`."
+        ) from exc
+
     clip = mp.VideoFileClip(input_video_path)
     clip.audio.write_audiofile(output_audio_path)
     clip.close()

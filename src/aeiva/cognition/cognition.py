@@ -177,6 +177,11 @@ class Cognition(BaseNeuron):
             if hasattr(self.brain, "config") and self.brain.config:
                 stream = getattr(self.brain.config, "llm_stream", False)
                 use_async = getattr(self.brain.config, "llm_use_async", False)
+            if isinstance(meta, dict):
+                if "llm_stream" in meta:
+                    stream = bool(meta["llm_stream"])
+                if "llm_use_async" in meta:
+                    use_async = bool(meta["llm_use_async"])
 
             origin_trace_id = signal.parent_id or signal.trace_id
             if stream and self.brain is not None:

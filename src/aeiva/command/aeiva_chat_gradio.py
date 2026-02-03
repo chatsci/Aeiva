@@ -183,6 +183,11 @@ def build_gradio_chat_ui(
     to embed the Gradio chat interface.
     """
     import gradio as gr
+    try:
+        import gradio.routes as gr_routes
+        gr_routes.print = lambda *args, **kwargs: None
+    except Exception:
+        pass
     import numpy as np
     import soundfile as sf
     from PIL import Image
@@ -327,6 +332,7 @@ def build_gradio_chat_ui(
                 source="perception.gradio",
                 route=route_token,
             )
+            trace_id = signal.trace_id
             asyncio.run_coroutine_threadsafe(
                 queue_gateway.emit_input(
                     signal,
@@ -343,7 +349,7 @@ def build_gradio_chat_ui(
             if stream:
                 while True:
                     try:
-                        chunk = response_queue.get(timeout=resp_timeout)
+                        chunk = queue_gateway.get_for_trace(trace_id, resp_timeout)
                         if chunk == "<END_OF_RESPONSE>":
                             break
                         assistant_message += str(chunk)
@@ -358,7 +364,7 @@ def build_gradio_chat_ui(
                         break
             else:
                 try:
-                    response = response_queue.get(timeout=resp_timeout)
+                    response = queue_gateway.get_for_trace(trace_id, resp_timeout)
                     assistant_message = str(response)
                 except queue.Empty:
                     log.warning("Timeout: No response received from Agent.")

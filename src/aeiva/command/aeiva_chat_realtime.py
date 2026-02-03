@@ -40,16 +40,21 @@ DEFAULT_LOG_PATH = LOGS_DIR / 'aeiva-chat-realtime.log'
 
 
 def _try_import_fastrtc():
-    """Import FastRTC components, raising a clear error if not installed."""
+    """Import core FastRTC UI components, raising a clear error if not installed.
+
+    STT/TTS model loading is handled separately by
+    :func:`aeiva.command.stt_tts_factory.create_stt_model` /
+    :func:`aeiva.command.stt_tts_factory.create_tts_model`.
+    """
     try:
         import gradio as gr
-        from fastrtc import (
-            ReplyOnPause,
-            WebRTC,
-            get_stt_model,
-            get_tts_model,
-        )
-        return gr, ReplyOnPause, WebRTC, get_stt_model, get_tts_model
+        try:
+            import gradio.routes as gr_routes
+            gr_routes.print = lambda *args, **kwargs: None
+        except ImportError:
+            pass
+        from fastrtc import ReplyOnPause, WebRTC
+        return gr, ReplyOnPause, WebRTC
     except ImportError as e:
         click.echo(
             "Error: FastRTC is not installed. "
@@ -188,12 +193,15 @@ def build_turn_based_realtime_ui(
     log: logging.Logger,
     route_token: Optional[str] = None,
 ):
-    gr, ReplyOnPause, WebRTC, get_stt_model, get_tts_model = _try_import_fastrtc()
+    gr, ReplyOnPause, WebRTC = _try_import_fastrtc()
 
-    log.info("Loading STT model (Moonshine)...")
-    stt_model = get_stt_model("moonshine/base")
-    log.info("Loading TTS model (Kokoro)...")
-    tts_model = get_tts_model("kokoro")
+    from aeiva.command.stt_tts_factory import create_stt_model, create_tts_model
+
+    realtime_cfg = config_dict.get("realtime_config", {})
+    log.info("Loading STT model (backend=%s)...", realtime_cfg.get("stt", {}).get("backend", "fastrtc"))
+    stt_model = create_stt_model(realtime_cfg)
+    log.info("Loading TTS model (backend=%s)...", realtime_cfg.get("tts", {}).get("backend", "fastrtc"))
+    tts_model = create_tts_model(realtime_cfg)
     log.info("STT/TTS models loaded.")
 
     from aeiva.command.realtime_handler import RealtimePipelineHandler
@@ -207,6 +215,19 @@ def build_turn_based_realtime_ui(
         config_dict=config_dict,
         route_token=route_token,
     )
+
+    class SafeReplyOnPause(ReplyOnPause):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._emit_lock = threading.Lock()
+
+        def emit(self):
+            if not self._emit_lock.acquire(blocking=False):
+                return None
+            try:
+                return super().emit()
+            finally:
+                self._emit_lock.release()
 
     with gr.Blocks(title="AEIVA Multimodal Real-Time Chat") as demo:
         gr.HTML(
@@ -260,11 +281,12 @@ def build_turn_based_realtime_ui(
                     variant="textbox",
                 )
 
+                webrtc_time_limit = int(realtime_cfg.get("webrtc_time_limit", 90))
                 webrtc.stream(
-                    ReplyOnPause(handler),
+                    SafeReplyOnPause(handler, can_interrupt=False),
                     inputs=[webrtc, chatbot, camera_input, upload_image],
                     outputs=[webrtc],
-                    time_limit=90,
+                    time_limit=webrtc_time_limit,
                     send_input_on="submit",
                 )
                 webrtc.on_additional_outputs(
@@ -352,11 +374,12 @@ def run_live_realtime_ui(config_dict: dict, log: logging.Logger, provider: str) 
                     mode="send-receive",
                 )
 
+                webrtc_time_limit = int(cfg.get("webrtc_time_limit", 90))
                 webrtc.stream(
                     handler,
                     inputs=[webrtc, chatbot],
                     outputs=[webrtc],
-                    time_limit=90,
+                    time_limit=webrtc_time_limit,
                 )
                 webrtc.on_additional_outputs(
                     lambda old, new: new,

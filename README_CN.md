@@ -69,6 +69,7 @@ pip install -e .
 ```bash
 pip install -e ".[realtime]"   # FastRTC 实时界面
 pip install -e ".[slack]"      # Slack 网关
+pip install -e ".[media]"      # 影音处理工具（moviepy）
 ```
 
 ## 配置
