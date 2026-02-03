@@ -5,6 +5,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from aeiva.interface.gateway_base import GatewayBase
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class TerminalGateway(GatewayBase[str]):
                 break
             except KeyboardInterrupt:
                 self._running = False
-                asyncio.run_coroutine_threadsafe(self.events.emit("agent.stop"), loop)
+                asyncio.run_coroutine_threadsafe(self.events.emit(EventNames.AGENT_STOP), loop)
                 break
 
             if not self._running:
@@ -112,13 +113,13 @@ class TerminalGateway(GatewayBase[str]):
             command = user_input.strip().lower()
             if command in {"exit", "quit", "/exit", "/quit"}:
                 self._running = False
-                asyncio.run_coroutine_threadsafe(self.events.emit("agent.stop"), loop)
+                asyncio.run_coroutine_threadsafe(self.events.emit(EventNames.AGENT_STOP), loop)
                 self.request_stop()
                 break
             if command in {"/emotion", "/emotion-state"}:
                 asyncio.run_coroutine_threadsafe(
                     self.events.emit(
-                        "emotion.query",
+                        EventNames.EMOTION_QUERY,
                         payload={"type": "state", "show": True, "origin": "terminal"},
                     ),
                     loop,
@@ -127,7 +128,7 @@ class TerminalGateway(GatewayBase[str]):
 
             signal = self.build_input_signal(
                 user_input,
-                source="perception.terminal",
+                source=EventNames.PERCEPTION_TERMINAL,
                 route=self._route_token,
             )
             asyncio.run_coroutine_threadsafe(
@@ -135,7 +136,7 @@ class TerminalGateway(GatewayBase[str]):
                     signal,
                     route=self._route_token,
                     add_pending_route=True,
-                    event_name="perception.stimuli",
+                    event_name=EventNames.PERCEPTION_STIMULI,
                 ),
                 loop,
             )

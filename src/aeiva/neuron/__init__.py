@@ -43,13 +43,39 @@ from .protocols import (
     Persistable,
     HealthCheckable,
 )
-from .base_neuron import BaseNeuron
+from .base_neuron import BaseNeuron, HealthStatus
+from .exceptions import (
+    NeuronError,
+    SignalError,
+    SignalValidationError,
+    SignalRoutingError,
+    ProcessingError,
+    ProcessingTimeoutError,
+    ProcessingFailedError,
+    StateError,
+    StatePersistenceError,
+    StateLoadError,
+    CircuitBreakerOpen,
+)
+from .validation import (
+    FieldSpec,
+    validate_signal_data,
+    require_type,
+    require_fields,
+    non_empty_string,
+    positive_number,
+    non_negative_number,
+    in_range,
+    one_of,
+    list_of,
+)
 
 
 __all__ = [
     # Core
     "Signal",
     "BaseNeuron",
+    "HealthStatus",
 
     # State
     "IdentityState",
@@ -71,6 +97,31 @@ __all__ = [
     "Lifecycle",
     "Persistable",
     "HealthCheckable",
+
+    # Exceptions
+    "NeuronError",
+    "SignalError",
+    "SignalValidationError",
+    "SignalRoutingError",
+    "ProcessingError",
+    "ProcessingTimeoutError",
+    "ProcessingFailedError",
+    "StateError",
+    "StatePersistenceError",
+    "StateLoadError",
+    "CircuitBreakerOpen",
+
+    # Validation
+    "FieldSpec",
+    "validate_signal_data",
+    "require_type",
+    "require_fields",
+    "non_empty_string",
+    "positive_number",
+    "non_negative_number",
+    "in_range",
+    "one_of",
+    "list_of",
 ]
 
 

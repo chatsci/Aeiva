@@ -27,6 +27,7 @@ from aeiva.command.command_utils import (
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.interface.gateway_base import GatewayBase
+from aeiva.event.event_names import EventNames
 
 
 def _try_start_neo4j(logger):
@@ -127,12 +128,12 @@ def build_maid_app(
             meta = {"user_id": raw_user_id, "session_id": session_id}
             signal = app.state.router.build_input_signal(
                 request.message,
-                source="perception.maid",
+                source=EventNames.PERCEPTION_MAID,
                 meta=meta,
             )
             response_text = await app.state.router.emit_input(
                 signal,
-                event_name="perception.stimuli",
+                event_name=EventNames.PERCEPTION_STIMULI,
                 await_response=True,
             )
             logger.info(f"Agent response: {response_text}")

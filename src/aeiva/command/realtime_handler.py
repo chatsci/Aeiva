@@ -25,6 +25,7 @@ import queue
 from typing import Any, Generator, Optional, Union
 
 from aeiva.neuron import Signal
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -148,16 +149,16 @@ class RealtimePipelineHandler:
             if self.gateway is not None:
                 signal = self.gateway.build_input_signal(
                     payload,
-                    source="perception.realtime",
+                    source=EventNames.PERCEPTION_REALTIME,
                     route=self.route_token,
                     meta={"llm_stream": False},
                 )
                 trace_id = signal.trace_id
             else:
-                signal = Signal(source="perception.realtime", data=payload)
+                signal = Signal(source=EventNames.PERCEPTION_REALTIME, data=payload)
             if self.gateway is None:
                 asyncio.run_coroutine_threadsafe(
-                    self.agent.event_bus.emit('perception.realtime', payload=payload),
+                    self.agent.event_bus.emit(EventNames.PERCEPTION_REALTIME, payload=payload),
                     self.agent.event_bus.loop
                 ).result(timeout=self.emit_timeout)
             else:
@@ -166,7 +167,7 @@ class RealtimePipelineHandler:
                         signal,
                         route=self.route_token,
                         add_pending_route=True,
-                        event_name="perception.stimuli",
+                        event_name=EventNames.PERCEPTION_STIMULI,
                     ),
                     self.agent.event_bus.loop
                 ).result(timeout=self.emit_timeout)

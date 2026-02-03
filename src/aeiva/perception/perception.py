@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from aeiva.neuron import BaseNeuron, Signal, NeuronConfig
+from aeiva.event.event_names import EventNames
 from aeiva.perception.stimuli import Stimuli
 from aeiva.perception.sensation import Signal as PerceptionSignal
 from aeiva.perception.sensor.sensor import Sensor
@@ -44,10 +45,10 @@ logger = logging.getLogger(__name__)
 def default_input_events() -> List[str]:
     """Default input events for perception."""
     return [
-        "perception.stimuli",   # Terminal input
-        "perception.gradio",    # Gradio input
-        "perception.api",       # API input
-        "perception.realtime",  # Realtime voice/video input
+        EventNames.PERCEPTION_STIMULI,   # Terminal input
+        EventNames.PERCEPTION_GRADIO,    # Gradio input
+        EventNames.PERCEPTION_API,       # API input
+        EventNames.PERCEPTION_REALTIME,  # Realtime voice/video input
     ]
 
 
@@ -63,7 +64,7 @@ class PerceptionNeuronConfig(NeuronConfig):
         sensors: List of sensor configurations
     """
     input_events: List[str] = field(default_factory=default_input_events)
-    output_event: str = "perception.output"
+    output_event: str = EventNames.PERCEPTION_OUTPUT
     default_modality: str = "text"
     sensors: List[Dict] = field(default_factory=list)
 
@@ -82,7 +83,7 @@ class PerceptionNeuron(BaseNeuron):
     backward compatibility with existing sensors and event names.
     """
 
-    EMISSIONS = ["perception.output"]
+    EMISSIONS = [EventNames.PERCEPTION_OUTPUT]
     CONFIG_CLASS = PerceptionNeuronConfig
 
     def __init__(
@@ -100,7 +101,6 @@ class PerceptionNeuron(BaseNeuron):
             config: Configuration dictionary (from agent_config.yaml perception_config)
             event_bus: EventBus for communication
         """
-        # Build neuron config from dict config
         neuron_config = self.build_config(config or {})
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
 
@@ -114,23 +114,6 @@ class PerceptionNeuron(BaseNeuron):
         # Track input sources and metadata
         self.identity.data["input_sources"] = []
         self.identity.data["sensors_active"] = False
-
-    def build_config(self, config_dict: Dict) -> PerceptionNeuronConfig:
-        """
-        Build PerceptionNeuronConfig from a dictionary.
-
-        Args:
-            config_dict: Configuration dictionary from YAML/JSON
-
-        Returns:
-            PerceptionNeuronConfig instance
-        """
-        return PerceptionNeuronConfig(
-            sensors=config_dict.get("sensors", []),
-            input_events=config_dict.get("input_events", default_input_events()),
-            output_event=config_dict.get("output_event", "perception.output"),
-            default_modality=config_dict.get("default_modality", "text"),
-        )
 
     async def setup(self) -> None:
         """

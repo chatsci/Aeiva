@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -10,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 
 from aeiva.interface.gateway_base import GatewayBase
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -227,14 +227,14 @@ class WhatsAppGateway(GatewayBase[WhatsAppRoute]):
 
         signal = self.build_input_signal(
             text,
-            source="perception.whatsapp",
+            source=EventNames.PERCEPTION_WHATSAPP,
             route=route,
         )
         await self.emit_input(
             signal,
             route=route,
             add_pending_route=True,
-            event_name="perception.stimuli",
+            event_name=EventNames.PERCEPTION_STIMULI,
         )
 
     async def send_message(self, route: Optional[WhatsAppRoute], text: str) -> None:
@@ -300,4 +300,6 @@ class WhatsAppGateway(GatewayBase[WhatsAppRoute]):
         if token:
             return token
         env_var = self.config.get(env_key) or default_env
-        return os.getenv(env_var)
+        if env_var:
+            logger.warning("WhatsApp %s not set. Provide it directly in config.", key)
+        return None

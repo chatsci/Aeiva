@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 from aeiva.neuron import BaseNeuron, NeuronConfig, Signal
+from aeiva.event.event_names import EventNames
 from aeiva.cognition.memory.memory_unit import MemoryUnit
 from aeiva.cognition.memory.memory_config import MemoryConfig
 from aeiva.cognition.memory.memory_service import MemoryService
@@ -18,20 +19,20 @@ logger = logging.getLogger(__name__)
 
 
 INPUT_EVENTS = [
-    "memory.store",
-    "memory.retrieve",
-    "memory.query",
-    "memory.get",
-    "memory.update",
-    "memory.delete",
-    "memory.filter",
-    "memory.organize",
-    "memory.structurize",
-    "memory.skillize",
-    "memory.parameterize",
-    "memory.embed",
-    "memory.load",
-    "memory.save",
+    EventNames.MEMORY_STORE,
+    EventNames.MEMORY_RETRIEVE,
+    EventNames.MEMORY_QUERY,
+    EventNames.MEMORY_GET,
+    EventNames.MEMORY_UPDATE,
+    EventNames.MEMORY_DELETE,
+    EventNames.MEMORY_FILTER,
+    EventNames.MEMORY_ORGANIZE,
+    EventNames.MEMORY_STRUCTURIZE,
+    EventNames.MEMORY_SKILLIZE,
+    EventNames.MEMORY_PARAMETERIZE,
+    EventNames.MEMORY_EMBED,
+    EventNames.MEMORY_LOAD,
+    EventNames.MEMORY_SAVE,
 ]
 
 
@@ -46,7 +47,7 @@ class MemoryNeuronConfig(NeuronConfig):
 
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     input_events: List[str] = field(default_factory=lambda: list(INPUT_EVENTS))
-    output_event: str = "memory.result"
+    output_event: str = EventNames.MEMORY_RESULT
 
     # Convenience proxies so callers can still write config.auto_embed etc.
     @property
@@ -71,15 +72,15 @@ class MemoryNeuron(BaseNeuron):
     """
 
     EMISSIONS = [
-        "memory.result",
-        "memory.stored",
-        "memory.retrieved",
-        "memory.error",
-        "memory.filtered",
-        "memory.organized",
-        "memory.structurized",
-        "memory.skillized",
-        "memory.parameterized",
+        EventNames.MEMORY_RESULT,
+        EventNames.MEMORY_STORED,
+        EventNames.MEMORY_RETRIEVED,
+        EventNames.MEMORY_ERROR,
+        EventNames.MEMORY_FILTERED,
+        EventNames.MEMORY_ORGANIZED,
+        EventNames.MEMORY_STRUCTURIZED,
+        EventNames.MEMORY_SKILLIZED,
+        EventNames.MEMORY_PARAMETERIZED,
     ]
     SUBSCRIPTIONS = list(INPUT_EVENTS)
 
@@ -90,12 +91,7 @@ class MemoryNeuron(BaseNeuron):
         event_bus: Optional[Any] = None,
         **kwargs
     ):
-        if config is None:
-            self.config = MemoryNeuronConfig()
-        elif isinstance(config, dict):
-            self.config = self._config_from_dict(config)
-        else:
-            self.config = config
+        self.config = self.build_config(config)
 
         super().__init__(
             name=name,
@@ -112,9 +108,14 @@ class MemoryNeuron(BaseNeuron):
         self._retrieves = 0
         self._errors = 0
 
-    @staticmethod
-    def _config_from_dict(d: Dict[str, Any]) -> "MemoryNeuronConfig":
+    @classmethod
+    def build_config(cls, data: Any) -> "MemoryNeuronConfig":
         """Build MemoryNeuronConfig from a flat dict (backward-compatible)."""
+        if isinstance(data, MemoryNeuronConfig):
+            return data
+        if not isinstance(data, dict):
+            return MemoryNeuronConfig()
+        d = data
         memory_keys = {f.name for f in MemoryConfig.__dataclass_fields__.values()}
         memory_kwargs = {k: v for k, v in d.items() if k in memory_keys}
         neuron_kwargs: Dict[str, Any] = {}
@@ -222,7 +223,7 @@ class MemoryNeuron(BaseNeuron):
         self._stores += 1
         core = self._require_core("store")
         unit = await core.create_async(data, **params)
-        await self._emit("memory.stored", {
+        await self._emit(EventNames.MEMORY_STORED, {
             "id": unit.id,
             "content": unit.content,
             "status": "stored",
@@ -239,7 +240,7 @@ class MemoryNeuron(BaseNeuron):
         retrieve_type = params.get("retrieve_type", self.config.default_retrieve_type)
         kwargs = {k: v for k, v in params.items() if k != "retrieve_type"}
         results = await core.retrieve_async(data, retrieve_type, **kwargs)
-        await self._emit("memory.retrieved", {
+        await self._emit(EventNames.MEMORY_RETRIEVED, {
             "query": data,
             "results": [r.to_dict() if hasattr(r, 'to_dict') else r for r in results],
             "count": len(results),
@@ -281,7 +282,7 @@ class MemoryNeuron(BaseNeuron):
             raise ValueError("Missing filter_type")
         core = self._require_core("filter")
         filtered = core.filter(params)
-        await self._emit("memory.filtered", {
+        await self._emit(EventNames.MEMORY_FILTERED, {
             "filter_type": filter_type, "count": len(filtered)
         })
         return {
@@ -297,7 +298,7 @@ class MemoryNeuron(BaseNeuron):
             raise ValueError("Missing unit_ids or organize_type")
         core = self._require_core("organize")
         group_id, organized = core.organize_units(unit_ids, organize_type, metadata=metadata)
-        await self._emit("memory.organized", {
+        await self._emit(EventNames.MEMORY_ORGANIZED, {
             "organize_type": organize_type, "count": len(organized)
         })
         return {
@@ -312,7 +313,7 @@ class MemoryNeuron(BaseNeuron):
             raise ValueError("Missing unit_ids or structure_type")
         core = self._require_core("structurize")
         core.structurize(unit_ids, structure_type, **params)
-        await self._emit("memory.structurized", {
+        await self._emit(EventNames.MEMORY_STRUCTURIZED, {
             "structure_type": structure_type, "count": 0
         })
         return {
@@ -327,7 +328,7 @@ class MemoryNeuron(BaseNeuron):
             raise ValueError("Missing unit_ids or skill_type")
         core = self._require_core("skillize")
         core.skillize(unit_ids, skill_type, **params)
-        await self._emit("memory.skillized", {"skill_type": skill_type})
+        await self._emit(EventNames.MEMORY_SKILLIZED, {"skill_type": skill_type})
         return {"success": True, "operation": "skillize", "results": []}
 
     async def _op_parameterize(self, _data: Any, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -336,7 +337,7 @@ class MemoryNeuron(BaseNeuron):
             raise ValueError("Missing parameterize_type")
         core = self._require_core("parameterize")
         core.parameterize(**params)
-        await self._emit("memory.parameterized", {"parameterize_type": parameterize_type})
+        await self._emit(EventNames.MEMORY_PARAMETERIZED, {"parameterize_type": parameterize_type})
         return {"success": True, "operation": "parameterize", "results": []}
 
     async def _op_embed(self, data: Any, _params: Dict[str, Any]) -> Dict[str, Any]:
@@ -368,7 +369,7 @@ class MemoryNeuron(BaseNeuron):
             await self.events.emit(event, payload=payload)
 
     async def _emit_error(self, error: str, original_signal: Signal) -> None:
-        await self._emit("memory.error", {
+        await self._emit(EventNames.MEMORY_ERROR, {
             "error": error,
             "source": original_signal.source,
             "trace_id": original_signal.trace_id
@@ -390,7 +391,7 @@ class MemoryNeuron(BaseNeuron):
 
     async def store(self, content: Any, modality: str = "text", **kwargs) -> str:
         signal = Signal(
-            source="memory.store",
+            source=EventNames.MEMORY_STORE,
             data={
                 "operation": "store",
                 "content": content,
@@ -402,7 +403,7 @@ class MemoryNeuron(BaseNeuron):
 
     async def retrieve_similar(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
         signal = Signal(
-            source="memory.retrieve",
+            source=EventNames.MEMORY_RETRIEVE,
             data={
                 "operation": "retrieve",
                 "query": query,
@@ -416,7 +417,7 @@ class MemoryNeuron(BaseNeuron):
         self, query: str, top_k: int = 10, threshold: float = 0.0
     ) -> List[Dict[str, Any]]:
         signal = Signal(
-            source="memory.retrieve",
+            source=EventNames.MEMORY_RETRIEVE,
             data={
                 "operation": "retrieve",
                 "query": query,

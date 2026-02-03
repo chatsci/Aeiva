@@ -1,12 +1,13 @@
 # File: cognition/brain/llm_brain.py
 
-import os
 import asyncio
-from typing import Any, List, Dict, AsyncGenerator, Optional
+from typing import Any, List, Dict, AsyncGenerator
+import logging
 from aeiva.cognition.brain.base_brain import Brain
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
-import sys
+
+logger = logging.getLogger(__name__)
 
 class LLMBrain(Brain):
     """
@@ -49,10 +50,6 @@ class LLMBrain(Brain):
         """
         llm_conf_dict = self.config_dict.get('llm_gateway_config', {})
         llm_api_key = llm_conf_dict.get('llm_api_key')
-        if not llm_api_key:
-            env_var = llm_conf_dict.get('llm_api_key_env_var')
-            if env_var:
-                llm_api_key = os.getenv(env_var)
         self.config = LLMGatewayConfig(
             llm_api_key=llm_api_key,
             llm_model_name=llm_conf_dict.get('llm_model_name', 'gpt-4o'),
@@ -67,7 +64,7 @@ class LLMBrain(Brain):
         if system_prompt is not None:  # TODO: only add system prompt for llms that support it.
                 self.state["conversation"] += [{ "role": "system", "content": system_prompt }]
         
-        print("LLMBrain setup complete.")
+        logger.info("LLMBrain setup complete.")
 
     async def think(
             self,
@@ -142,4 +139,4 @@ class LLMBrain(Brain):
         """
         super().handle_error(error)
         # Custom error handling logic for LLM-related issues
-        print(f"LLMBrain encountered an error: {error}")
+        logger.error("LLMBrain encountered an error: %s", error)

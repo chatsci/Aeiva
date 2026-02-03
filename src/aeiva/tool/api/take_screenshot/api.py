@@ -1,44 +1,35 @@
 # tools/take_screenshot/api.py
 
 from typing import Dict, Any
-import pyautogui
-import os
 from datetime import datetime
-from dotenv import load_dotenv
+from pathlib import Path
+
+import pyautogui
 
 def take_screenshot(save_path: str = None) -> Dict[str, Any]:
     """
     Captures the current screen.
 
     Args:
-        save_path (str, optional): The path to save the screenshot image. If not provided, saves to 'AI_ACCESSIBLE_PATH' with a timestamped filename.
+        save_path (str, optional): The path to save the screenshot image. If not provided, saves under storage/screenshots with a timestamped filename.
 
     Returns:
         Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
     """
     try:
-        # Load environment variables
-        load_dotenv()
-        SAVE_PATH = os.getenv('AI_ACCESSIBLE_PATH')
-
         screenshot = pyautogui.screenshot()
 
         if save_path is None:
-            if not SAVE_PATH:
-                return {
-                    "output": None,
-                    "error": "SAVE_PATH is not set in environment variables.",
-                    "error_code": "MISSING_SAVE_PATH"
-                }
+            default_dir = Path.cwd() / "storage" / "screenshots"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            save_path = os.path.expanduser(f"{SAVE_PATH}/screenshot_{timestamp}.png")
+            save_path = default_dir / f"screenshot_{timestamp}.png"
         else:
-            save_path = os.path.expanduser(save_path)
+            save_path = Path(save_path).expanduser()
 
         # Ensure the directory exists
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        screenshot.save(save_path)
+        screenshot.save(str(save_path))
 
         return {
             "output": f"Screenshot saved to {save_path}",

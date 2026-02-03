@@ -1,7 +1,19 @@
 # memory_utils.py
 
-from aeiva.lmp.lmp import simple
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
+
+
+def simple(model: str = 'gpt-4', temperature: float = 0.7) -> Callable:
+    """
+    Placeholder decorator for LLM-powered functions.
+
+    The original implementation was in aeiva.lmp which is deprecated.
+    This stub allows the code to import; actual LLM calls should use
+    the LLMClient directly.
+    """
+    def decorator(func: Callable) -> Callable:
+        return func
+    return decorator
 
 def extract_embedding_from_response(response: Any) -> Optional[List[float]]:
     """

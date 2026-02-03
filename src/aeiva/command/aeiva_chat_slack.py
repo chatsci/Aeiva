@@ -15,6 +15,7 @@ from aeiva.command.command_utils import (
     get_package_root,
     get_log_dir,
     build_runtime,
+    resolve_env_vars,
 )
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.slack_gateway import SlackGateway
@@ -85,6 +86,7 @@ def run(config, verbose):
     config_path = Path(config)
     try:
         config_dict = from_json_or_yaml(config_path)
+        resolve_env_vars(config_dict)
     except Exception as exc:
         logger.error(f"Failed to parse configuration file: {exc}")
         click.echo(f"Error: Failed to parse configuration file: {exc}")

@@ -1,7 +1,10 @@
 # File: cognition/world_model.py
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class WorldModel(ABC):
@@ -97,5 +100,4 @@ class WorldModel(ABC):
         Args:
             error (Exception): The exception that was raised.
         """
-        # Default error handling: log the error
-        print(f"WorldModel system encountered an error: {error}")
+        logger.error("WorldModel system encountered an error: %s", error)

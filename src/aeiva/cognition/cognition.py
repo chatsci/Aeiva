@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 import json
 
 from aeiva.neuron import BaseNeuron, Signal, NeuronConfig
+from aeiva.event.event_names import EventNames
 
 if TYPE_CHECKING:
     from aeiva.cognition.brain.base_brain import Brain
@@ -42,9 +43,9 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_INPUT_EVENTS = [
-    "perception.output",
-    "cognition.think",
-    "cognition.query",
+    EventNames.PERCEPTION_OUTPUT,
+    EventNames.COGNITION_THINK,
+    EventNames.COGNITION_QUERY,
 ]
 
 
@@ -52,7 +53,7 @@ DEFAULT_INPUT_EVENTS = [
 class CognitionConfig(NeuronConfig):
     """Configuration for Cognition neuron."""
     input_events: List[str] = field(default_factory=lambda: DEFAULT_INPUT_EVENTS.copy())
-    output_event: str = "cognition.thought"
+    output_event: str = EventNames.COGNITION_THOUGHT
     max_history: int = 20
 
 
@@ -93,7 +94,7 @@ class Cognition(BaseNeuron):
     and emits thoughts for downstream consumption.
     """
 
-    EMISSIONS = ["cognition.thought", "cognition.query.response"]
+    EMISSIONS = [EventNames.COGNITION_THOUGHT, EventNames.COGNITION_QUERY_RESPONSE]
     CONFIG_CLASS = CognitionConfig
 
     def __init__(
@@ -104,12 +105,7 @@ class Cognition(BaseNeuron):
         brain: "Brain" = None,
         **kwargs
     ):
-        cfg = config or {}
-        neuron_config = CognitionConfig(
-            input_events=cfg.get("input_events", DEFAULT_INPUT_EVENTS.copy()),
-            output_event=cfg.get("output_event", "cognition.thought"),
-            max_history=cfg.get("max_history", 20),
-        )
+        neuron_config = self.build_config(config or {})
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
 
         self.SUBSCRIPTIONS = self.config.input_events.copy()
@@ -127,10 +123,10 @@ class Cognition(BaseNeuron):
         """Process incoming signal and produce a thought."""
         source = signal.source
 
-        if "cognition.query" in source:
+        if EventNames.COGNITION_QUERY in source:
             return await self.handle_query(signal)
 
-        if source.startswith("perception.") or "cognition.think" in source:
+        if source.startswith(EventNames.ALL_PERCEPTION[:-1]) or EventNames.COGNITION_THINK in source:
             return await self.handle_think(signal)
 
         self.skipped += 1
@@ -154,7 +150,7 @@ class Cognition(BaseNeuron):
         self.working.last_output = output
 
         if self.events:
-            event_name = self.config.output_event or "cognition.thought"
+            event_name = self.config.output_event or EventNames.COGNITION_THOUGHT
             emit_args = self.signal_to_event_args(event_name, signal)
             await self.events.emit(**emit_args)
 
@@ -293,7 +289,7 @@ class Cognition(BaseNeuron):
         if isinstance(meta, dict) and meta:
             payload["meta"] = meta
         await self.events.emit(
-            "cognition.thought",
+            EventNames.COGNITION_THOUGHT,
             payload=payload,
         )
 

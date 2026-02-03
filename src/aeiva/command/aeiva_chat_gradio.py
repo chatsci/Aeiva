@@ -31,6 +31,7 @@ from aeiva.common.logger import setup_logging
 from aeiva.command.command_utils import get_package_root, get_log_dir, build_runtime
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.gateway_base import ResponseQueueGateway
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,7 @@ def build_gradio_chat_ui(
     def _end_session(session_id):
         if session_id:
             _emit_raw_memory(
-                "raw_memory.session.end",
+                EventNames.RAW_MEMORY_SESSION_END,
                 {"session_id": session_id, "user_id": raw_user_id},
             )
         return [], "", ""
@@ -312,7 +313,7 @@ def build_gradio_chat_ui(
             if not session_id:
                 session_id = uuid4().hex
                 _emit_raw_memory(
-                    "raw_memory.session.start",
+                    EventNames.RAW_MEMORY_SESSION_START,
                     {"session_id": session_id, "user_id": raw_user_id},
                 )
 
@@ -329,7 +330,7 @@ def build_gradio_chat_ui(
             # Emit input via gateway
             signal = queue_gateway.build_input_signal(
                 user_input,
-                source="perception.gradio",
+                source=EventNames.PERCEPTION_GRADIO,
                 route=route_token,
             )
             trace_id = signal.trace_id
@@ -338,7 +339,7 @@ def build_gradio_chat_ui(
                     signal,
                     route=route_token,
                     add_pending_route=True,
-                    event_name="perception.stimuli",
+                    event_name=EventNames.PERCEPTION_STIMULI,
                 ),
                 agent.event_bus.loop,
             ).result(timeout=5)

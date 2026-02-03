@@ -15,11 +15,12 @@ from typing import Any, Dict, List
 import click
 
 from aeiva.common.logger import setup_logging
-from aeiva.command.command_utils import get_log_dir, get_package_root, build_runtime_async
+from aeiva.command.command_utils import get_log_dir, get_package_root, build_runtime_async, resolve_env_vars
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.slack_gateway import SlackGateway
 from aeiva.interface.terminal_gateway import TerminalGateway
 from aeiva.interface.whatsapp_gateway import WhatsAppGateway
+from aeiva.event.event_names import EventNames
 from aeiva.util.file_utils import from_json_or_yaml
 
 PACKAGE_ROOT = get_package_root()
@@ -98,6 +99,7 @@ def run(config, verbose):
     click.echo(f"Loading configuration from {config}")
     config_path = Path(config)
     config_dict = from_json_or_yaml(config_path)
+    resolve_env_vars(config_dict)
 
     # Unified gateway shouldn't emit terminal UI output.
     agent_cfg = config_dict.setdefault("agent_config", {})
@@ -172,6 +174,13 @@ def run(config, verbose):
         for ctx in registry.contexts.values():
             runtime_tasks.append(asyncio.create_task(ctx.runtime.run()))
             logger.info("Gateway runtime started (gateway_id=%s).", ctx.gateway_id)
+            if ctx.agent and ctx.agent.event_bus:
+                async def _stop_from_agent(event: Any, *, _gateway_id: str = ctx.gateway_id) -> None:
+                    logger.info("Agent stop requested (gateway_id=%s).", _gateway_id)
+                    stop_event.set()
+
+                _stop_from_agent.__name__ = f"gateway_stop_from_{ctx.gateway_id}"
+                ctx.agent.event_bus.subscribe(EventNames.AGENT_STOP, _stop_from_agent)
 
         for name, ctx, cfg in pending_gateways:
             if name == "slack":

@@ -1,6 +1,6 @@
 [project]
 name = "aeiva"
-version = "0.8.2.6"
+version = "0.9"
 description = "aeiva is a general AI agent framework"
 authors = [{ name = "Bang Liu", email = "chatsci.ai@gmail.com" }]
 requires-python = ">=3.10,<3.14"

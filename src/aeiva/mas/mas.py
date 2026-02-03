@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from aeiva.agent.agent import Agent
 from aeiva.event.event import Event
+from aeiva.event.event_names import EventNames
 from aeiva.neuron import Signal
 
 DEFAULT_MAIN_AGENT = "main"
@@ -61,41 +62,41 @@ DEFAULT_LINKS = [
         "source": "main",
         "target": "memory",
         "events": [
-            "perception.output",
-            "cognition.thought",
-            "raw_memory.utterance",
-            "raw_memory.user.update",
+            EventNames.PERCEPTION_OUTPUT,
+            EventNames.COGNITION_THOUGHT,
+            EventNames.RAW_MEMORY_UTTERANCE,
+            EventNames.RAW_MEMORY_USER_UPDATE,
         ],
     },
     {
         "source": "main",
         "target": "emotion",
         "events": [
-            "perception.output",
-            "cognition.thought",
-            "action.result",
-            "emotion.query",
-            "emotion.regulate",
-            "emotion.update",
-            "goal.update",
-            "goal.query",
+            EventNames.PERCEPTION_OUTPUT,
+            EventNames.COGNITION_THOUGHT,
+            EventNames.ACTION_RESULT,
+            EventNames.EMOTION_QUERY,
+            EventNames.EMOTION_REGULATE,
+            EventNames.EMOTION_UPDATE,
+            EventNames.GOAL_UPDATE,
+            EventNames.GOAL_QUERY,
         ],
     },
     {
         "source": "memory",
         "target": "main",
         "events": [
-            "summary_memory.result",
-            "raw_memory.result",
-            "raw_memory.error",
+            EventNames.SUMMARY_MEMORY_RESULT,
+            EventNames.RAW_MEMORY_RESULT,
+            EventNames.RAW_MEMORY_ERROR,
         ],
     },
     {
         "source": "emotion",
         "target": "main",
         "events": [
-            "emotion.changed",
-            "goal.changed",
+            EventNames.EMOTION_CHANGED,
+            EventNames.GOAL_CHANGED,
         ],
     },
 ]
@@ -323,7 +324,7 @@ class MultiAgentSystem:
                 self.request_stop()
 
             _on_stop.__name__ = f"mas_stop_from_{name}"
-            agent.event_bus.subscribe("agent.stop", _on_stop)
+            agent.event_bus.subscribe(EventNames.AGENT_STOP, _on_stop)
             self._stop_callbacks.append(_on_stop)
 
 

@@ -11,11 +11,11 @@ Event Flow:
 
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from aeiva.neuron import BaseNeuron, Signal, NeuronConfig
+from aeiva.event.event_names import EventNames
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
@@ -26,12 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_INPUT_EVENTS = [
-    "perception.output",
-    "action.result",
-    "cognition.thought",
-    "emotion.query",
-    "emotion.regulate",
-    "emotion.update",
+    EventNames.PERCEPTION_OUTPUT,
+    EventNames.ACTION_RESULT,
+    EventNames.COGNITION_THOUGHT,
+    EventNames.EMOTION_QUERY,
+    EventNames.EMOTION_REGULATE,
+    EventNames.EMOTION_UPDATE,
 ]
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -80,7 +80,7 @@ class PADState:
 class EmotionNeuronConfig(NeuronConfig):
     """Configuration for EmotionNeuron (PAD-only)."""
     input_events: List[str] = field(default_factory=lambda: DEFAULT_INPUT_EVENTS.copy())
-    output_event: str = "emotion.changed"
+    output_event: str = EventNames.EMOTION_CHANGED
     sensitivity: float = 0.3
     emit_threshold: float = 0.1
     decay_rate: float = 0.1
@@ -100,7 +100,7 @@ class EmotionNeuronConfig(NeuronConfig):
 class EmotionNeuron(BaseNeuron):
     """Single PAD-based emotion neuron with optional discrete label mapping."""
 
-    EMISSIONS = ["emotion.changed"]
+    EMISSIONS = [EventNames.EMOTION_CHANGED]
     CONFIG_CLASS = EmotionNeuronConfig
 
     def __init__(
@@ -110,24 +110,7 @@ class EmotionNeuron(BaseNeuron):
         event_bus: "EventBus" = None,
         **kwargs
     ):
-        cfg = config or {}
-        neuron_config = EmotionNeuronConfig(
-            input_events=cfg.get("input_events", DEFAULT_INPUT_EVENTS.copy()),
-            output_event=cfg.get("output_event", "emotion.changed"),
-            sensitivity=cfg.get("sensitivity", 0.3),
-            emit_threshold=cfg.get("emit_threshold", 0.1),
-            decay_rate=cfg.get("decay_rate", 0.1),
-            default_pleasure=cfg.get("default_pleasure", 0.0),
-            default_arousal=cfg.get("default_arousal", 0.0),
-            default_dominance=cfg.get("default_dominance", 0.0),
-            label_threshold=cfg.get("label_threshold", 0.4),
-            dominance_threshold=cfg.get("dominance_threshold", 0.2),
-            label_map=cfg.get("label_map", _default_label_map()),
-            llm_gateway_config=cfg.get("llm_gateway_config", {}),
-            decision_temperature=cfg.get("decision_temperature", 0.2),
-            decision_max_chars=cfg.get("decision_max_chars", 4000),
-            system_prompt=cfg.get("system_prompt", DEFAULT_SYSTEM_PROMPT),
-        )
+        neuron_config = self.build_config(config or {})
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
 
         self.SUBSCRIPTIONS = self.config.input_events.copy()
@@ -172,11 +155,11 @@ class EmotionNeuron(BaseNeuron):
         """Process incoming signal and update emotional state."""
         source = signal.source
 
-        if "emotion.query" in source:
+        if EventNames.EMOTION_QUERY in source:
             return self.handle_query(signal)
-        if "emotion.regulate" in source:
+        if EventNames.EMOTION_REGULATE in source:
             return await self.handle_regulate(signal)
-        if "emotion.update" in source:
+        if EventNames.EMOTION_UPDATE in source:
             return await self.handle_update(signal)
         if source.startswith("perception"):
             text = self._extract_text(signal.data)
@@ -346,10 +329,6 @@ class EmotionNeuron(BaseNeuron):
 
     def _build_llm_client(self, cfg: Dict[str, Any]) -> LLMClient:
         llm_api_key = cfg.get("llm_api_key")
-        if not llm_api_key:
-            env_var = cfg.get("llm_api_key_env_var")
-            if env_var:
-                llm_api_key = os.getenv(env_var)
         valid_keys = LLMGatewayConfig.__dataclass_fields__.keys()
         params = {k: v for k, v in cfg.items() if k in valid_keys}
         params["llm_api_key"] = llm_api_key

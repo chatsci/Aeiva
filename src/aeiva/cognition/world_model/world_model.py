@@ -25,6 +25,7 @@ import json
 import time
 
 from aeiva.neuron import BaseNeuron, Signal, NeuronConfig
+from aeiva.event.event_names import EventNames
 
 if TYPE_CHECKING:
     from aeiva.event.event_bus import EventBus
@@ -33,11 +34,11 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_INPUT_EVENTS = [
-    "perception.output",
-    "action.result",
-    "world.query",
-    "world.observe",
-    "world.clear",
+    EventNames.PERCEPTION_OUTPUT,
+    EventNames.ACTION_RESULT,
+    EventNames.WORLD_QUERY,
+    EventNames.WORLD_OBSERVE,
+    EventNames.WORLD_CLEAR,
 ]
 
 
@@ -116,7 +117,7 @@ class WorldState:
 class WorldModelNeuronConfig(NeuronConfig):
     """Configuration for WorldModelNeuron."""
     input_events: List[str] = field(default_factory=lambda: DEFAULT_INPUT_EVENTS.copy())
-    output_event: str = "world.updated"
+    output_event: str = EventNames.WORLD_UPDATED
     max_observations: int = 1000
     auto_categorize: bool = True
 
@@ -129,7 +130,7 @@ class WorldModelNeuron(BaseNeuron):
     a stored observation.
     """
 
-    EMISSIONS = ["world.updated", "world.query.response"]
+    EMISSIONS = [EventNames.WORLD_UPDATED, EventNames.WORLD_QUERY_RESPONSE]
     CONFIG_CLASS = WorldModelNeuronConfig
 
     def __init__(
@@ -139,13 +140,7 @@ class WorldModelNeuron(BaseNeuron):
         event_bus: "EventBus" = None,
         **kwargs
     ):
-        cfg = config or {}
-        neuron_config = WorldModelNeuronConfig(
-            input_events=cfg.get("input_events", DEFAULT_INPUT_EVENTS.copy()),
-            output_event=cfg.get("output_event", "world.updated"),
-            max_observations=cfg.get("max_observations", 1000),
-            auto_categorize=cfg.get("auto_categorize", True),
-        )
+        neuron_config = self.build_config(config or {})
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
 
         self.SUBSCRIPTIONS = self.config.input_events.copy()
@@ -163,13 +158,13 @@ class WorldModelNeuron(BaseNeuron):
         """Process incoming signal."""
         source = signal.source
 
-        if "world.query" in source:
+        if EventNames.WORLD_QUERY in source:
             return self.handle_query(signal)
 
-        if "world.clear" in source:
+        if EventNames.WORLD_CLEAR in source:
             return self.handle_clear()
 
-        if "world.observe" in source:
+        if EventNames.WORLD_OBSERVE in source:
             return self.handle_observe(signal)
 
         if not self.is_relevant(signal):

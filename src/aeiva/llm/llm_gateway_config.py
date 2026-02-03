@@ -1,8 +1,5 @@
-import os
-import yaml
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Tuple
-from dotenv import load_dotenv
 
 from aeiva.config.base_config import BaseConfig
 
@@ -84,20 +81,6 @@ class LLMGatewayConfig(BaseConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        # Load API keys from the configuration file if not provided
-        if not self.llm_api_key:
-            self.load_api_key()
-
-    def load_api_key(self):
-        config_path = os.path.join(os.path.dirname(__file__), '../../../configs/llm_api_keys.yaml')
-        try:
-            with open(config_path, 'r') as f:
-                keys = yaml.safe_load(f)
-                self.llm_api_key = keys.get('openai_api_key')
-        except FileNotFoundError:
-            raise FileNotFoundError('API keys file not found.')
-        except Exception as e:
-            raise e
 
     def to_dict(self):
         return {

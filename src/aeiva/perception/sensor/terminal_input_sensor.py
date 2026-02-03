@@ -2,6 +2,9 @@ import asyncio
 import threading
 import logging
 
+from aeiva.event.event_names import EventNames
+from aeiva.neuron import Signal
+
 from aeiva.perception.sensor.sensor import Sensor
 
 logger = logging.getLogger(__name__)
@@ -57,14 +60,14 @@ class TerminalInputSensor(Sensor):
                     logger.info("Exit command received. Stopping TerminalInputSensor.")
                     self._running = False
                     asyncio.run_coroutine_threadsafe(
-                        self.event_bus.emit("agent.stop"),
+                        self.event_bus.emit(EventNames.AGENT_STOP),
                         loop
                     )
                     break
                 if command in {"/emotion", "/emotion-state"}:
                     asyncio.run_coroutine_threadsafe(
                         self.event_bus.emit(
-                            "emotion.query",
+                            EventNames.EMOTION_QUERY,
                             payload={"type": "state", "show": True, "origin": "terminal"},
                         ),
                         loop,
@@ -76,17 +79,34 @@ class TerminalInputSensor(Sensor):
                 
                 # Emit the stimuli as an event
                 asyncio.run_coroutine_threadsafe(
-                    self.event_bus.emit('perception.stimuli', payload=user_input),  # TODO: rename event later
+                    self.event_bus.emit(
+                        EventNames.PERCEPTION_STIMULI,
+                        payload=Signal(source=EventNames.PERCEPTION_TERMINAL, data=user_input),
+                    ),
                     loop
                 )
             except EOFError:
                 # Handle end of input (Ctrl+D)
                 logger.info("EOF received. Stopping TerminalInputSensor.")
                 self._running = False
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self.event_bus.emit(EventNames.AGENT_STOP),
+                        loop
+                    )
+                except Exception:
+                    pass
             except KeyboardInterrupt:
                 # Handle Ctrl+C
                 logger.info("KeyboardInterrupt received. Stopping TerminalInputSensor.")
                 self._running = False
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self.event_bus.emit(EventNames.AGENT_STOP),
+                        loop
+                    )
+                except Exception:
+                    pass
             except Exception as e:
                 logger.error(f"Error in TerminalInputSensor: {e}")
                 self._running = False

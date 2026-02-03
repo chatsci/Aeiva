@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, Generic, List, Optional, Set, TypeVar
 
 from aeiva.neuron import Signal
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,9 @@ class GatewayBase(Generic[RouteT]):
     def register_handlers(self) -> None:
         if not self.events:
             return
-        self.events.subscribe("perception.output", self._handle_perception_output)
-        self.events.subscribe("cognition.thought", self._handle_cognition_event)
-        self.events.subscribe("agent.stop", self._handle_agent_stop)
+        self.events.subscribe(EventNames.PERCEPTION_OUTPUT, self._handle_perception_output)
+        self.events.subscribe(EventNames.COGNITION_THOUGHT, self._handle_cognition_event)
+        self.events.subscribe(EventNames.AGENT_STOP, self._handle_agent_stop)
 
     def request_stop(self) -> None:
         return None
@@ -82,7 +83,7 @@ class GatewayBase(Generic[RouteT]):
         signal: Signal,
         *,
         route: Optional[RouteT] = None,
-        event_name: str = "perception.stimuli",
+        event_name: str = EventNames.PERCEPTION_STIMULI,
         add_pending_route: bool = False,
         await_response: bool = False,
     ) -> Optional[str]:

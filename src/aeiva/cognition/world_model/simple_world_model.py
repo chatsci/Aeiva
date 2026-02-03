@@ -1,7 +1,11 @@
 # File: cognition/simple_world_model.py
 
-from aeiva.cognition.world_model.base_world_model import WorldModel
+import logging
 from typing import Any, List
+
+from aeiva.cognition.world_model.base_world_model import WorldModel
+
+logger = logging.getLogger(__name__)
 
 
 class SimpleWorldModel(WorldModel):
@@ -14,14 +18,14 @@ class SimpleWorldModel(WorldModel):
         return []
 
     def setup(self) -> None:
-        print("SimpleWorldModel setup complete.")
+        logger.debug("SimpleWorldModel setup complete.")
 
     async def update(self, observation: dict) -> None:
         if not isinstance(observation, dict):
             raise ValueError("Observation must be a dictionary.")
         
         self.state.append(observation)
-        print(f"World model updated with new observation: {observation}")
+        logger.debug("World model updated with new observation: %s", observation)
 
     async def query(self, query: Any) -> List[dict]:
         if isinstance(query, dict) and 'keyword' in query:

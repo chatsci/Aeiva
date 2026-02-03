@@ -18,8 +18,7 @@ from aeiva.command.command_utils import (
     validate_neo4j_home,
     start_neo4j,
     stop_neo4j,
-    handle_exit,
-    build_runtime,
+    build_runtime_async,
 )
 import logging
 
@@ -86,19 +85,59 @@ def run(config, verbose):
     raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
     session_payload = {"session_id": uuid4().hex, "user_id": raw_user_id}
 
+    # Disable agent UI output for terminal mode (use TerminalGateway instead)
+    agent_cfg = config_data.setdefault("agent_config", {})
+    agent_cfg["ui_enabled"] = False
+
+    # Avoid competing terminal readers when terminal gateway is enabled.
+    perception_cfg = config_data.get("perception_config") or {}
+    sensors = perception_cfg.get("sensors")
+    if isinstance(sensors, list):
+        perception_cfg["sensors"] = [
+            sensor for sensor in sensors
+            if (sensor or {}).get("sensor_name") != "percept_terminal_input"
+        ]
+        config_data["perception_config"] = perception_cfg
+
     # Start the Agent or MAS
     try:
-        runtime, agent = build_runtime(config_data)
+        async def _main():
+            runtime, agent = await build_runtime_async(config_data)
 
-        def _handle_sig(signum, frame):
-            logger.info(f"Received signal {signum}. Stopping agent.")
+            from aeiva.interface.terminal_gateway import TerminalGateway
+
+            terminal_cfg = config_data.get("terminal_config") or {}
+            terminal_gateway = TerminalGateway(terminal_cfg, agent.event_bus)
+            await terminal_gateway.setup()
+
+            stop_event = asyncio.Event()
+
+            def _handle_sig(signum, frame):
+                logger.info(f"Received signal {signum}. Stopping terminal gateway.")
+                runtime.request_stop()
+                terminal_gateway.request_stop()
+                stop_event.set()
+
+            # Register signal handlers to ensure clean shutdown
+            signal.signal(signal.SIGINT, _handle_sig)
+            signal.signal(signal.SIGTERM, _handle_sig)
+
+            tasks = [
+                asyncio.create_task(runtime.run(raw_memory_session=session_payload)),
+                asyncio.create_task(terminal_gateway.run()),
+                asyncio.create_task(stop_event.wait()),
+            ]
+
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            stop_event.set()
             runtime.request_stop()
+            terminal_gateway.request_stop()
 
-        # Register signal handlers to ensure clean shutdown
-        signal.signal(signal.SIGINT, _handle_sig)
-        signal.signal(signal.SIGTERM, _handle_sig)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
 
-        asyncio.run(runtime.run(raw_memory_session=session_payload))
+        asyncio.run(_main())
     except KeyboardInterrupt:
         logger.info("Agent execution interrupted by user.")
         click.echo("\nAgent execution interrupted by user.")

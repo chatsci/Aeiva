@@ -29,6 +29,7 @@ from aeiva.action.task import Task
 from aeiva.action.action import Action
 from aeiva.action.status import Status
 from aeiva.tool.tool import Tool
+from aeiva.event.event_names import EventNames
 
 if TYPE_CHECKING:
     from aeiva.event.event_bus import EventBus
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 def default_input_events() -> List[str]:
     """Default input events for action neuron."""
-    return ["action.plan", "action.execute"]
+    return [EventNames.ACTION_PLAN, EventNames.ACTION_EXECUTE]
 
 
 @dataclass
@@ -54,7 +55,7 @@ class ActuatorNeuronConfig(NeuronConfig):
     """
 
     input_events: List[str] = field(default_factory=default_input_events)
-    output_event: str = "action.result"
+    output_event: str = EventNames.ACTION_RESULT
     tools: List[str] = field(default_factory=list)
     parallel_execution: bool = False
 
@@ -74,7 +75,7 @@ class ActuatorNeuron(BaseNeuron):
     actions (Skills), managing the full execution lifecycle.
     """
 
-    EMISSIONS = ["action.result", "action.progress", "action.error"]
+    EMISSIONS = [EventNames.ACTION_RESULT, EventNames.ACTION_PROGRESS, EventNames.ACTION_ERROR]
     CONFIG_CLASS = ActuatorNeuronConfig
 
     def __init__(
@@ -116,7 +117,7 @@ class ActuatorNeuron(BaseNeuron):
         return ActuatorNeuronConfig(
             tools=config_dict.get("tools", []),
             input_events=config_dict.get("input_events", default_input_events()),
-            output_event=config_dict.get("output_event", "action.result"),
+            output_event=config_dict.get("output_event", EventNames.ACTION_RESULT),
             parallel_execution=config_dict.get("parallel_execution", False),
         )
 
@@ -226,7 +227,7 @@ class ActuatorNeuron(BaseNeuron):
             """Emit progress event on action completion."""
             if self.events:
                 await self.events.emit(
-                    "action.progress",
+                    EventNames.ACTION_PROGRESS,
                     payload={
                         "skill_id": skill.id,
                         "action_id": action.id,
@@ -241,7 +242,7 @@ class ActuatorNeuron(BaseNeuron):
             logger.error(f"Action '{action.id}' failed: {error}")
             if self.events:
                 await self.events.emit(
-                    "action.error",
+                    EventNames.ACTION_ERROR,
                     payload={
                         "skill_id": skill.id,
                         "action_id": action.id,

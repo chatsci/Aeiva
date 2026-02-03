@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from aeiva.perception.sensor.sensor import Sensor
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class VideoStreamSensor(Sensor):
         super().__init__(name, params, event_bus)
         self.source_type = params.get("source_type", "camera")
         self.video_source: Union[int, str] = params.get("video_source", 0)
-        self.emit_event_name = params.get("emit_event_name", "perception.video_frame")
+        self.emit_event_name = params.get("emit_event_name", EventNames.PERCEPTION_VIDEO_FRAME)
         self.fps = params.get("fps", 30)
         self.resize = params.get("resize", None)
 

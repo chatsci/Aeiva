@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, date
@@ -23,15 +22,16 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from aeiva.neuron import BaseNeuron, NeuronConfig, Signal
 from aeiva.cognition.memory.raw_memory import RawMemoryConfig, RawMemoryJournal
+from aeiva.event.event_names import EventNames
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_INPUT_EVENTS = [
-    "raw_memory.session.start",
-    "raw_memory.session.closed",
-    "raw_memory.summary.request",
+    EventNames.RAW_MEMORY_SESSION_START,
+    EventNames.RAW_MEMORY_SESSION_CLOSED,
+    EventNames.RAW_MEMORY_SUMMARY_REQUEST,
 ]
 DEFAULT_SUMMARY_PERIODS = ["dialogue", "daily", "weekly", "monthly", "yearly"]
 
@@ -70,7 +70,7 @@ class SummaryMemoryNeuron(BaseNeuron):
     2. **process()** — handle raw_memory.session.closed events (best-effort).
     """
 
-    EMISSIONS = ["summary_memory.result"]
+    EMISSIONS = [EventNames.SUMMARY_MEMORY_RESULT]
     CONFIG_CLASS = SummaryMemoryNeuronConfig
 
     def __init__(
@@ -80,12 +80,7 @@ class SummaryMemoryNeuron(BaseNeuron):
         event_bus: Any = None,
         **kwargs,
     ):
-        if config is None:
-            neuron_config = SummaryMemoryNeuronConfig()
-        elif isinstance(config, dict):
-            neuron_config = self._config_from_dict(config)
-        else:
-            neuron_config = config
+        neuron_config = self.build_config(config)
 
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
         self.SUBSCRIPTIONS = self.config.input_events.copy()
@@ -95,8 +90,12 @@ class SummaryMemoryNeuron(BaseNeuron):
         self._enabled = True
         self._last_session_end: Dict[str, datetime] = {}
 
-    @staticmethod
-    def _config_from_dict(data: Dict[str, Any]) -> SummaryMemoryNeuronConfig:
+    @classmethod
+    def build_config(cls, data: Any) -> SummaryMemoryNeuronConfig:
+        if isinstance(data, SummaryMemoryNeuronConfig):
+            return data
+        if not isinstance(data, dict):
+            return SummaryMemoryNeuronConfig()
         raw_cfg = data.get("raw_memory", {}) if isinstance(data.get("raw_memory"), dict) else {}
         raw_cfg = {k: v for k, v in raw_cfg.items() if k in RawMemoryConfig.__dataclass_fields__}
         direct = {k: v for k, v in data.items() if k in RawMemoryConfig.__dataclass_fields__}
@@ -281,11 +280,11 @@ class SummaryMemoryNeuron(BaseNeuron):
             return {"success": False, "error": "LLM disabled"}
 
         try:
-            if signal.source == "raw_memory.session.start":
+            if signal.source == EventNames.RAW_MEMORY_SESSION_START:
                 return await self._handle_session_start(signal)
-            if signal.source == "raw_memory.session.closed":
+            if signal.source == EventNames.RAW_MEMORY_SESSION_CLOSED:
                 return await self._handle_session_closed(signal)
-            if signal.source == "raw_memory.summary.request":
+            if signal.source == EventNames.RAW_MEMORY_SUMMARY_REQUEST:
                 return await self._handle_summary_request(signal)
             return None
         except Exception as exc:
@@ -407,10 +406,6 @@ class SummaryMemoryNeuron(BaseNeuron):
 
     def _build_llm_client(self, cfg: Dict[str, Any]) -> LLMClient:
         llm_api_key = cfg.get("llm_api_key")
-        if not llm_api_key:
-            env_var = cfg.get("llm_api_key_env_var")
-            if env_var:
-                llm_api_key = os.getenv(env_var)
         valid_keys = LLMGatewayConfig.__dataclass_fields__.keys()
         params = {k: v for k, v in cfg.items() if k in valid_keys}
         params["llm_api_key"] = llm_api_key

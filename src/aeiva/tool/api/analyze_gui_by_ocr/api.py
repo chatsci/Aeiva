@@ -1,13 +1,16 @@
 # tools/analyze_gui_by_ocr/api.py
 
 from typing import Dict, Any
+import logging
+import os
+import time
+
 import cv2
 import numpy as np
-import pytesseract
 import pyautogui
-import os
-from dotenv import load_dotenv
-import time
+import pytesseract
+
+logger = logging.getLogger(__name__)
 
 async def analyze_gui_by_ocr(
     target_text: str = None,
@@ -29,9 +32,6 @@ async def analyze_gui_by_ocr(
         Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
     """
     try:
-        # Load environment variables from .env file
-        load_dotenv()
-
         # Take a screenshot
         screenshot = pyautogui.screenshot()
         screenshot_np = np.array(screenshot)
@@ -75,14 +75,11 @@ async def analyze_gui_by_ocr(
                 continue  # Skip if text is None or not a string
 
         # --- Template Matching ---
-        # Set template_path from environment variable if not provided
-        template_path = template_path or os.getenv('GUI_TEMPLATES_IMG_PATH')
-
         # Proceed only if template_path exists
         if template_path and os.path.isdir(template_path):
             # Get list of template images
             all_templates = os.listdir(template_path)
-            print("all_templates: ======", all_templates)
+            logger.debug("Template files: %s", all_templates)
             template_files = [f for f in all_templates if f.lower().endswith(
                 ('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.webp'))]
 
@@ -91,7 +88,7 @@ async def analyze_gui_by_ocr(
                 template_files = [f for f in template_files if os.path.splitext(f)[0] in template_names]
 
             if not template_files:
-                print("No template images found to match.")
+                logger.debug("No template images found to match.")
             else:
                 # For each template image
                 for template_file in template_files:
@@ -115,9 +112,9 @@ async def analyze_gui_by_ocr(
                         }
                         results['template_matches'].append(match)
         else:
-            print("Template path not provided or does not exist.")
+            logger.debug("Template path not provided or does not exist.")
 
-        print("Done with analyzing GUI =======")
+        logger.debug("Finished analyzing GUI by OCR.")
         return {
             "output": results,
             "error": None,

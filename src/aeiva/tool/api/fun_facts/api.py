@@ -2,21 +2,19 @@
 
 from typing import Dict, Any
 import requests
-import os
 
 def fun_facts(rapidapi_key: str = None) -> Dict[str, Any]:
     """
     Fetch fun facts using the RapidAPI service.
 
     Args:
-        rapidapi_key (str, optional): The RapidAPI key. If not provided, it will use the key from the environment variables.
+        rapidapi_key (str, optional): The RapidAPI key.
 
     Returns:
         Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
     """
     try:
-        # Use the provided API key if available, otherwise fall back to the environment variable
-        api_key = rapidapi_key or os.getenv("RAPIDAPI_KEY")
+        api_key = rapidapi_key
         
         if not api_key:
             return {

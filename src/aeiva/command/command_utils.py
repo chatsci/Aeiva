@@ -123,6 +123,59 @@ def handle_exit(signum, frame, logger, neo4j_process):
 _neo4j_stop_called = False
 
 
+def resolve_env_vars(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Resolve *_env_var keys in a config dict by pulling from os.environ.
+
+    Example:
+        {"llm_api_key_env_var": "OPENAI_API_KEY"} -> {"llm_api_key": "..."}
+    """
+    def _resolve_mapping(mapping: Dict[str, Any]) -> None:
+        for key, value in list(mapping.items()):
+            if isinstance(value, dict):
+                _resolve_mapping(value)
+                continue
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        _resolve_mapping(item)
+                continue
+            if not isinstance(value, str):
+                continue
+            if not key.endswith("_env_var"):
+                continue
+            target_key = key[: -len("_env_var")]
+            if mapping.get(target_key):
+                continue
+            env_value = os.getenv(value)
+            if env_value:
+                mapping[target_key] = env_value
+
+    if isinstance(config_dict, dict):
+        _resolve_mapping(config_dict)
+        _load_llm_api_key(config_dict)
+    return config_dict
+
+
+def _load_llm_api_key(config_dict: Dict[str, Any]) -> None:
+    llm_cfg = config_dict.get("llm_gateway_config")
+    if not isinstance(llm_cfg, dict):
+        return
+    if llm_cfg.get("llm_api_key"):
+        return
+    cfg_path = get_package_root() / "configs" / "llm_api_keys.yaml"
+    if not cfg_path.exists():
+        return
+    try:
+        import yaml
+        keys = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return
+    api_key = keys.get("openai_api_key")
+    if api_key:
+        llm_cfg["llm_api_key"] = api_key
+
+
 def build_runtime(config_dict: Dict[str, Any]):
     """
     Build either a single Agent or a MultiAgentSystem based on config.
@@ -131,6 +184,7 @@ def build_runtime(config_dict: Dict[str, Any]):
         (runtime, main_agent)
     """
     from aeiva.agent.agent import Agent
+    resolve_env_vars(config_dict)
     mas_cfg = config_dict.get("mas_config") or {}
     if mas_cfg.get("enabled"):
         from aeiva.mas import MultiAgentSystem
@@ -151,6 +205,7 @@ async def build_runtime_async(config_dict: Dict[str, Any]):
         (runtime, main_agent)
     """
     from aeiva.agent.agent import Agent
+    resolve_env_vars(config_dict)
     mas_cfg = config_dict.get("mas_config") or {}
     if mas_cfg.get("enabled"):
         from aeiva.mas import MultiAgentSystem

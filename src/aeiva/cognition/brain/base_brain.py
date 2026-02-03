@@ -2,6 +2,9 @@
 
 from abc import ABC, abstractmethod
 from typing import Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Brain(ABC):
@@ -77,4 +80,4 @@ class Brain(ABC):
             error (Exception): The exception that was raised.
         """
         # Default error handling: log the error
-        print(f"Brain encountered an error: {error}")
+        logger.error("Brain encountered an error: %s", error)

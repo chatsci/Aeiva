@@ -1,10 +1,14 @@
 # File: cognition/output_orchestrator/simple_output_orchestrator.py
 
+import logging
+from typing import Optional, Any
+
 from aeiva.cognition.output_orchestrator.output_orchestrator import OutputOrchestrator
 from aeiva.cognition.thought import Thought
 from aeiva.action.plan import Plan
 from aeiva.action.task import Task
-from typing import Optional, Any
+
+logger = logging.getLogger(__name__)
 
 class SimpleOutputOrchestrator(OutputOrchestrator):
     """
@@ -14,7 +18,7 @@ class SimpleOutputOrchestrator(OutputOrchestrator):
         self.config = config
 
     def setup(self) -> None:
-        print("SimpleOutputOrchestrator setup complete.")
+        logger.debug("SimpleOutputOrchestrator setup complete.")
 
     def gate(self, thought: Thought) -> bool:
         """

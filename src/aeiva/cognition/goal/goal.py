@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from aeiva.neuron import BaseNeuron, NeuronConfig, Signal
+from aeiva.event.event_names import EventNames
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
@@ -25,10 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_INPUT_EVENTS = [
-    "perception.output",
-    "cognition.thought",
-    "goal.update",
-    "goal.query",
+    EventNames.PERCEPTION_OUTPUT,
+    EventNames.COGNITION_THOUGHT,
+    EventNames.GOAL_UPDATE,
+    EventNames.GOAL_QUERY,
 ]
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -72,7 +72,7 @@ class GoalState:
 @dataclass
 class GoalNeuronConfig(NeuronConfig):
     input_events: List[str] = field(default_factory=lambda: DEFAULT_INPUT_EVENTS.copy())
-    output_event: str = "goal.changed"
+    output_event: str = EventNames.GOAL_CHANGED
     default_tier: str = "short_term"
     base_dir: str = "storage/goal"
     goal_file: str = "Goal.md"
@@ -86,8 +86,8 @@ class GoalNeuron(BaseNeuron):
     """Single goal neuron with hierarchical TODO state."""
 
     EMISSIONS = [
-        "goal.changed",
-        "goal.error",
+        EventNames.GOAL_CHANGED,
+        EventNames.GOAL_ERROR,
     ]
     CONFIG_CLASS = GoalNeuronConfig
 
@@ -98,18 +98,7 @@ class GoalNeuron(BaseNeuron):
         event_bus: Optional[Any] = None,
         **kwargs,
     ):
-        cfg = config or {}
-        neuron_config = GoalNeuronConfig(
-            input_events=cfg.get("input_events", DEFAULT_INPUT_EVENTS.copy()),
-            output_event=cfg.get("output_event", "goal.changed"),
-            default_tier=cfg.get("default_tier", "short_term"),
-            base_dir=cfg.get("base_dir", "storage/goal"),
-            goal_file=cfg.get("goal_file", "Goal.md"),
-            llm_gateway_config=cfg.get("llm_gateway_config", {}),
-            decision_temperature=cfg.get("decision_temperature", 0.2),
-            decision_max_chars=cfg.get("decision_max_chars", 4000),
-            system_prompt=cfg.get("system_prompt", DEFAULT_SYSTEM_PROMPT),
-        )
+        neuron_config = self.build_config(config or {})
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
         self.SUBSCRIPTIONS = self.config.input_events.copy()
         self.state = GoalState()
@@ -151,9 +140,9 @@ class GoalNeuron(BaseNeuron):
 
     async def process(self, signal: Signal) -> Optional[Dict[str, Any]]:
         source = signal.source
-        if "goal.update" in source:
+        if EventNames.GOAL_UPDATE in source:
             return self.handle_update(signal)
-        if "goal.query" in source:
+        if EventNames.GOAL_QUERY in source:
             return self.handle_query(signal)
         if source.startswith("perception"):
             text = self._extract_text(signal.data)
@@ -335,10 +324,6 @@ class GoalNeuron(BaseNeuron):
 
     def _build_llm_client(self, cfg: Dict[str, Any]) -> LLMClient:
         llm_api_key = cfg.get("llm_api_key")
-        if not llm_api_key:
-            env_var = cfg.get("llm_api_key_env_var")
-            if env_var:
-                llm_api_key = os.getenv(env_var)
         valid_keys = LLMGatewayConfig.__dataclass_fields__.keys()
         params = {k: v for k, v in cfg.items() if k in valid_keys}
         params["llm_api_key"] = llm_api_key

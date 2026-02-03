@@ -2,7 +2,6 @@
 
 import logging
 import json
-import os
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -336,10 +335,6 @@ class MemoryStorage:
             graph_db_conf_dict = self.config_dict.get('graph_db_config', {})
             graph_db_provider_name = graph_db_conf_dict.get('provider_name', 'neo4j')
             graph_db_password = graph_db_conf_dict.get('password')
-            if not graph_db_password:
-                env_var = graph_db_conf_dict.get('password_env_var')
-                if env_var:
-                    graph_db_password = os.getenv(env_var)
             graph_db_config = DatabaseConfigFactory.create(
                 provider_name=graph_db_conf_dict.get('provider_name', 'neo4j'),
                 uri=graph_db_conf_dict.get('uri', 'bolt://localhost:7687'),

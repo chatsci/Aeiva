@@ -3,7 +3,6 @@
 from typing import Dict, Any
 import os
 import unicodedata
-from dotenv import load_dotenv
 
 def search_file_or_folder(
     name: str,
@@ -17,7 +16,7 @@ def search_file_or_folder(
 
     Args:
         name (str): The name of the file or folder to search for.
-        search_path (str, optional): The path to start the search from. Defaults to the path from environment variable 'AI_ACCESSIBLE_PATH' or user's home directory.
+        search_path (str, optional): The path to start the search from. Defaults to the user's home directory.
         search_type (str, optional): Type of search - 'file', 'folder', or 'both'. Defaults to "both".
         case_sensitive (bool, optional): Whether the search is case-sensitive. Defaults to True.
         partial_match (bool, optional): Whether to allow partial name matching. Defaults to False.
@@ -26,10 +25,6 @@ def search_file_or_folder(
         Dict[str, Any]: A dictionary containing 'output', 'error', and 'error_code'.
     """
     try:
-        # Load environment variables
-        load_dotenv()
-        SEARCH_PATH = os.getenv('AI_ACCESSIBLE_PATH')
-
         # If search_path is None, set it to the user's home directory
         if not search_path:
             search_path = os.path.expanduser("~")

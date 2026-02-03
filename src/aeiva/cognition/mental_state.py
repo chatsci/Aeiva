@@ -2,6 +2,9 @@
 
 from abc import ABC, abstractmethod
 from typing import Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class MentalState(ABC):
@@ -93,4 +96,4 @@ class MentalState(ABC):
         Args:
             error (Exception): The exception that was raised.
         """
-        print(f"MentalState encountered an error: {error}")
+        logger.error("MentalState encountered an error: %s", error)

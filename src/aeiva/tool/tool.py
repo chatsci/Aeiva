@@ -3,10 +3,6 @@ import json
 import asyncio
 from typing import Any, Callable
 from importlib import import_module
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
 
 class Tool:
     def __init__(self, api_name: str):

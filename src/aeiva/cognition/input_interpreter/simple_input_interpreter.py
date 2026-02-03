@@ -1,9 +1,13 @@
 # File: cognition/input_interpreter/simple_input_interpreter.py
 
+import logging
+from typing import Optional, Any
+
 from aeiva.cognition.input_interpreter.input_interpreter import InputInterpreter
 from aeiva.perception.stimuli import Stimuli
 from aeiva.cognition.observation import Observation
-from typing import Optional, Any
+
+logger = logging.getLogger(__name__)
 
 class SimpleInputInterpreter(InputInterpreter):
     """
@@ -13,7 +17,7 @@ class SimpleInputInterpreter(InputInterpreter):
         self.config = config
 
     def setup(self) -> None:
-        print("SimpleInputInterpreter setup complete.")
+        logger.debug("SimpleInputInterpreter setup complete.")
 
     def gate(self, stimuli: Stimuli) -> bool:
         """

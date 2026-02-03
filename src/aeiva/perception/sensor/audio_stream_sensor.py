@@ -7,6 +7,7 @@ import numpy as np
 import pyaudio
 
 from aeiva.perception.sensor.sensor import Sensor
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class AudioStreamSensor(Sensor):
         self.sample_rate = params.get("sample_rate", 16000)
         self.channels = params.get("channels", 1)
         self.chunk_size = params.get("chunk_size", 1024)
-        self.emit_event_name = params.get("emit_event_name", "perception.audio_chunk")
+        self.emit_event_name = params.get("emit_event_name", EventNames.PERCEPTION_AUDIO_CHUNK)
 
         # Internal state
         self._thread: Optional[threading.Thread] = None

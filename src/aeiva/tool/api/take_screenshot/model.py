@@ -9,7 +9,7 @@ class TakeScreenshotErrorCode:
     SUCCESS = "SUCCESS"
 
 class TakeScreenshotParams(BaseModel):
-    save_path: Optional[str] = Field(None, description="The path to save the screenshot image. If not provided, saves to 'AI_ACCESSIBLE_PATH' with a timestamped filename.")
+    save_path: Optional[str] = Field(None, description="The path to save the screenshot image. If not provided, saves under storage/screenshots with a timestamped filename.")
 
 class TakeScreenshotResult(BaseModel):
     output: Optional[str] = Field(None, description="A message indicating the result.")

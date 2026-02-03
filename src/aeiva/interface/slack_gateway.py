@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -11,6 +10,7 @@ from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web.async_client import AsyncWebClient
 
 from aeiva.interface.gateway_base import GatewayBase
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -150,14 +150,14 @@ class SlackGateway(GatewayBase[SlackRoute]):
 
         signal = self.build_input_signal(
             text,
-            source="perception.slack",
+            source=EventNames.PERCEPTION_SLACK,
             route=route,
         )
         await self.emit_input(
             signal,
             route=route,
             add_pending_route=True,
-            event_name="perception.stimuli",
+            event_name=EventNames.PERCEPTION_STIMULI,
         )
 
         await self._ensure_home_view(user)
@@ -264,4 +264,6 @@ class SlackGateway(GatewayBase[SlackRoute]):
         if token:
             return token
         env_var = self.config.get(env_key) or default_env
-        return os.getenv(env_var)
+        if env_var:
+            logger.warning("Slack %s not set. Provide it directly in config.", key)
+        return None

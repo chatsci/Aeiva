@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from aeiva.config.base_config import BaseConfig
 from aeiva.neuron import BaseNeuron, NeuronConfig, Signal
+from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
@@ -440,13 +441,13 @@ class RawMemoryJournal:
 
 
 DEFAULT_INPUT_EVENTS = [
-    "perception.output",
-    "cognition.thought",
-    "raw_memory.session.start",
-    "raw_memory.session.end",
-    "raw_memory.utterance",
-    "raw_memory.user.update",
-    "agent.stop",
+    EventNames.PERCEPTION_OUTPUT,
+    EventNames.COGNITION_THOUGHT,
+    EventNames.RAW_MEMORY_SESSION_START,
+    EventNames.RAW_MEMORY_SESSION_END,
+    EventNames.RAW_MEMORY_UTTERANCE,
+    EventNames.RAW_MEMORY_USER_UPDATE,
+    EventNames.AGENT_STOP,
 ]
 
 
@@ -454,7 +455,7 @@ DEFAULT_INPUT_EVENTS = [
 class RawMemoryNeuronConfig(NeuronConfig):
     raw_memory: RawMemoryConfig = field(default_factory=RawMemoryConfig)
     input_events: List[str] = field(default_factory=lambda: DEFAULT_INPUT_EVENTS.copy())
-    output_event: str = "raw_memory.result"
+    output_event: str = EventNames.RAW_MEMORY_RESULT
     auto_start_session: bool = True
     auto_close_on_reply: bool = False
 
@@ -464,7 +465,11 @@ class RawMemoryNeuron(BaseNeuron):
     Raw memory neuron: records dialogue turns into Markdown journal.
     """
 
-    EMISSIONS = ["raw_memory.result", "raw_memory.error", "raw_memory.session.closed"]
+    EMISSIONS = [
+        EventNames.RAW_MEMORY_RESULT,
+        EventNames.RAW_MEMORY_ERROR,
+        EventNames.RAW_MEMORY_SESSION_CLOSED,
+    ]
     CONFIG_CLASS = RawMemoryNeuronConfig
 
     def __init__(
@@ -474,12 +479,7 @@ class RawMemoryNeuron(BaseNeuron):
         event_bus: Any = None,
         **kwargs,
     ):
-        if config is None:
-            neuron_config = RawMemoryNeuronConfig()
-        elif isinstance(config, dict):
-            neuron_config = self._config_from_dict(config)
-        else:
-            neuron_config = config
+        neuron_config = self.build_config(config)
 
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
         self.SUBSCRIPTIONS = self.config.input_events.copy()
@@ -489,8 +489,12 @@ class RawMemoryNeuron(BaseNeuron):
         self._assistant_buffers: Dict[str, List[str]] = {}
         self._events_processed = 0
 
-    @staticmethod
-    def _config_from_dict(data: Dict[str, Any]) -> RawMemoryNeuronConfig:
+    @classmethod
+    def build_config(cls, data: Any) -> RawMemoryNeuronConfig:
+        if isinstance(data, RawMemoryNeuronConfig):
+            return data
+        if not isinstance(data, dict):
+            return RawMemoryNeuronConfig()
         raw_cfg = data.get("raw_memory", {}) if isinstance(data.get("raw_memory"), dict) else {}
         direct = {k: v for k, v in data.items() if k in RawMemoryConfig.__dataclass_fields__}
         raw_cfg = {**direct, **raw_cfg}
@@ -498,7 +502,7 @@ class RawMemoryNeuron(BaseNeuron):
         return RawMemoryNeuronConfig(
             raw_memory=raw_config,
             input_events=data.get("input_events", DEFAULT_INPUT_EVENTS.copy()),
-            output_event=data.get("output_event", "raw_memory.result"),
+            output_event=data.get("output_event", EventNames.RAW_MEMORY_RESULT),
             auto_start_session=data.get("auto_start_session", True),
             auto_close_on_reply=data.get("auto_close_on_reply", False),
         )
@@ -508,17 +512,18 @@ class RawMemoryNeuron(BaseNeuron):
         try:
             source = signal.source
             logger.info("RawMemoryNeuron processing event #%d source=%s", self._events_processed, source)
-            if source == "raw_memory.session.start":
+            if source == EventNames.RAW_MEMORY_SESSION_START:
                 return self._handle_session_start(signal)
-            if source == "raw_memory.session.end":
+            if source == EventNames.RAW_MEMORY_SESSION_END:
                 return await self._handle_session_end(signal)
-            if source == "raw_memory.utterance":
+            if source == EventNames.RAW_MEMORY_UTTERANCE:
                 return self._handle_explicit_utterance(signal)
-            if source == "raw_memory.user.update":
+            if source == EventNames.RAW_MEMORY_USER_UPDATE:
                 return self._handle_user_update(signal)
-            if source == "agent.stop":
+            if source == EventNames.AGENT_STOP:
                 return await self._handle_agent_stop(signal)
-            if source.startswith("perception.") or source == "perception":
+            perception_prefix = EventNames.ALL_PERCEPTION[:-1]
+            if source.startswith(perception_prefix) or source == perception_prefix[:-1]:
                 result = self._handle_perception(signal)
                 logger.info("RawMemoryNeuron recorded perception: %s", result)
                 return result
@@ -579,7 +584,7 @@ class RawMemoryNeuron(BaseNeuron):
                 session_id=session_id,
                 end_time=end_time,
                 summary=None,
-                meta={"trigger": "agent.stop"},
+                meta={"trigger": EventNames.AGENT_STOP},
                 user_updates=None,
             )
             closed += 1
@@ -686,7 +691,7 @@ class RawMemoryNeuron(BaseNeuron):
             payload["utterance_count"] = len(session.utterances)
         if session_text:
             payload["session_text"] = session_text
-        await self.events.emit("raw_memory.session.closed", payload=payload)
+        await self.events.emit(EventNames.RAW_MEMORY_SESSION_CLOSED, payload=payload)
 
     async def _emit_session_started(
         self,
@@ -701,7 +706,7 @@ class RawMemoryNeuron(BaseNeuron):
             "session_id": session_id,
             "start_time": start_time,
         }
-        await self.events.emit("raw_memory.session.start", payload=payload)
+        await self.events.emit(EventNames.RAW_MEMORY_SESSION_START, payload=payload)
 
     def _schedule_session_start(
         self,
@@ -866,7 +871,7 @@ class RawMemoryNeuron(BaseNeuron):
         if not self.events:
             return
         await self.events.emit(
-            "raw_memory.error",
+            EventNames.RAW_MEMORY_ERROR,
             payload={
                 "error": error,
                 "source": original_signal.source,
