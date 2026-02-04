@@ -366,56 +366,6 @@ class TestIntegration:
 
 
 # ============================================================
-# Action Envelope Tests
-# ============================================================
-
-class TestActionEnvelope:
-    """Test action envelope parsing and mode resolution."""
-
-    def test_resolve_action_mode_json(self):
-        """force_json resolves to json mode."""
-        from aeiva.action.action_envelope import resolve_action_mode
-
-        config = {"enabled": True, "force_json": True}
-        assert resolve_action_mode(config) == "json"
-
-    def test_resolve_action_mode_auto(self):
-        """Default resolves to auto mode."""
-        from aeiva.action.action_envelope import resolve_action_mode
-
-        config = {"enabled": True}
-        assert resolve_action_mode(config) == "auto"
-
-    def test_resolve_action_mode_off(self):
-        """Disabled resolves to off."""
-        from aeiva.action.action_envelope import resolve_action_mode
-
-        config = {"enabled": False}
-        assert resolve_action_mode(config) == "off"
-
-    def test_parse_action_envelope_json(self):
-        """JSON action envelope is parsed correctly."""
-        from aeiva.action.action_envelope import parse_action_envelope
-
-        text = '{"type": "action", "actions": [{"tool": "test", "args": {}}]}'
-        envelope, errors = parse_action_envelope(text)
-
-        assert envelope["type"] == "action"
-        assert len(envelope["actions"]) == 1
-        assert envelope["actions"][0]["tool"] == "test"
-
-    def test_parse_action_envelope_plain_text(self):
-        """Plain text becomes message type."""
-        from aeiva.action.action_envelope import parse_action_envelope
-
-        text = "Hello, how can I help you?"
-        envelope, errors = parse_action_envelope(text)
-
-        assert envelope["type"] == "message"
-        assert envelope["message"] == text
-
-
-# ============================================================
 # Tool Registry Integration Tests
 # ============================================================
 

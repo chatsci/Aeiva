@@ -64,6 +64,12 @@ class LLMClient:
     def uses_responses_api(self) -> bool:
         return self.adapter.uses_responses_api()
 
+    async def call_tool(self, tool_name: str, params: Dict[str, Any]) -> Any:
+        return await self.engine.registry.execute(tool_name, **params)
+
+    def call_tool_sync(self, tool_name: str, params: Dict[str, Any]) -> Any:
+        return self.engine.registry.execute_sync(tool_name, **params)
+
     # ---------------------------------------------------------------------
     # Public API (preferred)
     # ---------------------------------------------------------------------
