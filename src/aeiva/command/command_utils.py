@@ -185,6 +185,11 @@ def build_runtime(config_dict: Dict[str, Any]):
     """
     from aeiva.agent.agent import Agent
     resolve_env_vars(config_dict)
+    from aeiva.host.host_router import configure_host_router
+    from aeiva.tool.registry import set_tool_router
+    router = configure_host_router(config_dict)
+    if router:
+        set_tool_router(router)
     mas_cfg = config_dict.get("mas_config") or {}
     if mas_cfg.get("enabled"):
         from aeiva.mas import MultiAgentSystem
@@ -206,6 +211,11 @@ async def build_runtime_async(config_dict: Dict[str, Any]):
     """
     from aeiva.agent.agent import Agent
     resolve_env_vars(config_dict)
+    from aeiva.host.host_router import configure_host_router
+    from aeiva.tool.registry import set_tool_router
+    router = configure_host_router(config_dict)
+    if router:
+        set_tool_router(router)
     mas_cfg = config_dict.get("mas_config") or {}
     if mas_cfg.get("enabled"):
         from aeiva.mas import MultiAgentSystem

@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
@@ -77,6 +79,70 @@ def _try_stop_neo4j(logger, neo4j_process):
         logger.warning("Neo4j stop failed: %s", exc)
 
 
+def _try_start_host(logger, config_dict, log_dir: Path):
+    host_cfg = config_dict.get("host_config") or {}
+    if not host_cfg.get("enabled"):
+        return None
+    if not host_cfg.get("auto_start"):
+        return None
+
+    daemon_cfg = host_cfg.get("daemon") or {}
+    host = daemon_cfg.get("host") or "127.0.0.1"
+    port = int(daemon_cfg.get("port") or 7090)
+    allow_tools = daemon_cfg.get("allowed_tools") or daemon_cfg.get("allow_tools")
+    if isinstance(allow_tools, str):
+        allow_tools = [item.strip() for item in allow_tools.split(",") if item.strip()]
+    if not isinstance(allow_tools, list):
+        allow_tools = None
+
+    log_path = daemon_cfg.get("log_file")
+    if log_path:
+        log_path = Path(os.path.expanduser(str(log_path)))
+    else:
+        log_path = log_dir / "aeiva-host.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [sys.executable, "-m", "aeiva.host.host_cli", "--host", host, "--port", str(port)]
+    if allow_tools:
+        cmd.extend(["--allow", ",".join(allow_tools)])
+
+    try:
+        log_handle = open(log_path, "a", encoding="utf-8")
+        process = subprocess.Popen(
+            cmd,
+            stdout=log_handle,
+            stderr=log_handle,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        logger.info("Host daemon started (pid=%s, log=%s).", process.pid, log_path)
+        return process
+    except Exception as exc:
+        logger.warning("Failed to start host daemon: %s", exc)
+        return None
+
+
+def _try_stop_host(logger, host_process):
+    if host_process is None:
+        return
+    try:
+        if host_process.poll() is None:
+            host_process.terminate()
+            host_process.wait(timeout=10)
+            logger.info("Host daemon stopped.")
+        else:
+            logger.warning("Host daemon already stopped.")
+    except subprocess.TimeoutExpired:
+        logger.warning("Host daemon did not terminate in time; killing.")
+        try:
+            host_process.kill()
+            host_process.wait(timeout=5)
+        except Exception as exc:
+            logger.warning("Failed to kill host daemon: %s", exc)
+    except Exception as exc:
+        logger.warning("Host daemon stop failed: %s", exc)
+
+
 @click.command(name="aeiva-gateway")
 @click.option("--config", "-c", default=str(DEFAULT_CONFIG_PATH),
               help="Path to the configuration file (YAML or JSON).",
@@ -126,6 +192,7 @@ def run(config, verbose):
     realtime_mode = (config_dict.get("realtime_config") or {}).get("mode", "turn_based")
 
     neo4j_process = _try_start_neo4j(logger)
+    host_process = _try_start_host(logger, config_dict, LOGS_DIR)
 
     gateways: List[Any] = []
     runtime_tasks: List[asyncio.Task] = []
@@ -329,6 +396,7 @@ def run(config, verbose):
         asyncio.run(_main())
     finally:
         _try_stop_neo4j(logger, neo4j_process)
+        _try_stop_host(logger, host_process)
         logger.info("Gateway shutdown complete.")
 
 

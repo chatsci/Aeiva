@@ -110,6 +110,7 @@ aeiva-chat-whatsapp = "aeiva.command.aeiva_chat_whatsapp:run"
 aeiva-gateway = "aeiva.command.aeiva_gateway:run"
 aeiva-server = "aeiva.command.aeiva_server:run"
 maid-chat = "aeiva.command.maid_chat:run"
+aeiva-host = "aeiva.host.host_cli:run"
 
 [build-system]
 requires = ["hatchling"]

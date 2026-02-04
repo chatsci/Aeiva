@@ -159,6 +159,14 @@ class ToolRegistry:
         if not tool:
             raise KeyError(f"Tool not found: {name}")
 
+        if _tool_router is not None:
+            try:
+                routed = await _tool_router.execute(name, kwargs)
+                if routed is not None:
+                    return routed
+            except Exception:
+                raise
+
         return await tool.execute(**kwargs)
 
     def execute_sync(self, name: str, **kwargs) -> Any:
@@ -175,6 +183,14 @@ class ToolRegistry:
         tool = self._tools.get(name)
         if not tool:
             raise KeyError(f"Tool not found: {name}")
+
+        if _tool_router is not None:
+            try:
+                routed = _tool_router.execute_sync(name, kwargs)
+                if routed is not None:
+                    return routed
+            except Exception:
+                raise
 
         return tool.execute_sync(**kwargs)
 
@@ -205,6 +221,13 @@ class ToolRegistry:
 
 # Global registry instance
 _global_registry: Optional[ToolRegistry] = None
+_tool_router: Optional[Any] = None
+
+
+def set_tool_router(router: Any) -> None:
+    """Attach a tool router for remote host execution."""
+    global _tool_router
+    _tool_router = router
 
 
 def get_registry() -> ToolRegistry:
