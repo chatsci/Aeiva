@@ -61,6 +61,9 @@ class LLMClient:
             litellm.api_key = self.config.llm_api_key
             litellm.openai_key = self.config.llm_api_key
 
+    def uses_responses_api(self) -> bool:
+        return self.adapter.uses_responses_api()
+
     # ---------------------------------------------------------------------
     # Public API (preferred)
     # ---------------------------------------------------------------------
