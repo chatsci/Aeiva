@@ -1,28 +1,29 @@
 import json
 import pytest
 
+from aeiva.llm.adapters.base import AdapterResponse
 from aeiva.llm.llm_client import LLMClient
+from aeiva.llm.tool_loop import ToolLoopEngine
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
 
-class FakeHandler:
+class FakeAdapter:
     def __init__(self):
         self.calls = 0
 
-    def build_params(self, messages, tools, **kwargs):
+    def build_params(self, messages, tools=None, **kwargs):
         return {"messages": messages, "tools": tools}
 
-    async def execute(self, params, stream=False):
+    async def execute(self, params, stream: bool = False):
         return {"ok": True}
 
     def execute_sync(self, params):
         return {"ok": True}
 
     def parse_response(self, response):
-        # First call: request tool
         if self.calls == 0:
             self.calls += 1
-            return None, [
+            tool_calls = [
                 {
                     "id": "call_1",
                     "type": "function",
@@ -31,71 +32,18 @@ class FakeHandler:
                         "arguments": json.dumps({"operation": "list", "path": "/tmp"}),
                     },
                 }
-            ], ""
-        # Second call: final content
-        return None, [], "Final answer"
+            ]
+            return AdapterResponse("", tool_calls, "resp_1", {}, response)
+
+        return AdapterResponse("Final answer", [], "resp_2", {}, response)
+
+    def parse_stream_delta(self, chunk, **kwargs):
+        return None, None
 
 
 @pytest.mark.asyncio
-async def test_native_tool_loop_chat(monkeypatch):
-    cfg = LLMGatewayConfig(llm_model_name="gpt-4o", llm_api_key="test")
-    client = LLMClient(cfg)
-
-    handler = FakeHandler()
-    monkeypatch.setattr(client, "_get_handler", lambda: handler)
-
-    calls = []
-
-    async def fake_call_tool(name, params):
-        calls.append((name, params))
-        return {"ok": True}
-
-    monkeypatch.setattr(client, "call_tool", fake_call_tool)
-
-    messages = [{"role": "user", "content": "hi"}]
-    result = await client.agenerate(messages, tools=[{"type": "function", "function": {"name": "filesystem"}}])
-
-    assert result == "Final answer"
-    assert calls == [("filesystem", {"operation": "list", "path": "/tmp"})]
-    # Ensure tool result appended to messages
-    assert any(m.get("role") == "tool" for m in messages)
-
-
-@pytest.mark.asyncio
-async def test_native_tool_loop_responses(monkeypatch):
-    cfg = LLMGatewayConfig(
-        llm_model_name="gpt-5.2",
-        llm_api_key="test",
-        llm_api_mode="responses",
-    )
-    client = LLMClient(cfg)
-
-    handler = FakeHandler()
-    monkeypatch.setattr(client, "_get_handler", lambda: handler)
-
-    calls = []
-
-    async def fake_call_tool(name, params):
-        calls.append((name, params))
-        return {"ok": True}
-
-    monkeypatch.setattr(client, "call_tool", fake_call_tool)
-
-    messages = [{"role": "user", "content": "hi"}]
-    result = await client.agenerate(messages, tools=[{"type": "function", "function": {"name": "filesystem"}}])
-
-    assert result == "Final answer"
-    assert calls == [("filesystem", {"operation": "list", "path": "/tmp"})]
-    assert any(m.get("role") == "tool" for m in messages)
-
-
-@pytest.mark.asyncio
-async def test_tool_calls_route_through_registry(monkeypatch):
-    cfg = LLMGatewayConfig(llm_model_name="gpt-4o", llm_api_key="test")
-    client = LLMClient(cfg)
-
-    handler = FakeHandler()
-    monkeypatch.setattr(client, "_get_handler", lambda: handler)
+async def test_tool_loop_engine_executes_tools():
+    adapter = FakeAdapter()
 
     class DummyRegistry:
         def __init__(self):
@@ -105,8 +53,110 @@ async def test_tool_calls_route_through_registry(monkeypatch):
             self.called.append((name, kwargs))
             return {"ok": True}
 
+        def execute_sync(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
     registry = DummyRegistry()
-    monkeypatch.setattr("aeiva.llm.llm_client.get_registry", lambda: registry)
+    engine = ToolLoopEngine(adapter=adapter, registry=registry, max_tool_loops=5)
+    messages = [{"role": "user", "content": "hi"}]
+
+    result = await engine.arun(messages, tools=[{"type": "function", "function": {"name": "filesystem"}}])
+    assert result.text == "Final answer"
+    assert registry.called == [("filesystem", {"operation": "list", "path": "/tmp"})]
+
+
+@pytest.mark.asyncio
+async def test_native_tool_loop_chat():
+    cfg = LLMGatewayConfig(llm_model_name="gpt-4o", llm_api_key="test")
+    client = LLMClient(cfg)
+
+    adapter = FakeAdapter()
+    client.adapter = adapter
+    client.engine.adapter = adapter
+
+    class DummyRegistry:
+        def __init__(self):
+            self.called = []
+
+        async def execute(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
+        def execute_sync(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
+    registry = DummyRegistry()
+    client.engine.registry = registry
+
+    messages = [{"role": "user", "content": "hi"}]
+    result = await client.agenerate(messages, tools=[{"type": "function", "function": {"name": "filesystem"}}])
+
+    assert result == "Final answer"
+    assert registry.called == [("filesystem", {"operation": "list", "path": "/tmp"})]
+    assert any(m.get("role") == "tool" for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_native_tool_loop_responses():
+    cfg = LLMGatewayConfig(
+        llm_model_name="gpt-5.2",
+        llm_api_key="test",
+        llm_api_mode="responses",
+    )
+    client = LLMClient(cfg)
+
+    adapter = FakeAdapter()
+    client.adapter = adapter
+    client.engine.adapter = adapter
+
+    class DummyRegistry:
+        def __init__(self):
+            self.called = []
+
+        async def execute(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
+        def execute_sync(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
+    registry = DummyRegistry()
+    client.engine.registry = registry
+
+    messages = [{"role": "user", "content": "hi"}]
+    result = await client.agenerate(messages, tools=[{"type": "function", "function": {"name": "filesystem"}}])
+
+    assert result == "Final answer"
+    assert registry.called == [("filesystem", {"operation": "list", "path": "/tmp"})]
+    assert any(m.get("role") == "tool" for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_route_through_registry():
+    cfg = LLMGatewayConfig(llm_model_name="gpt-4o", llm_api_key="test")
+    client = LLMClient(cfg)
+
+    adapter = FakeAdapter()
+    client.adapter = adapter
+    client.engine.adapter = adapter
+
+    class DummyRegistry:
+        def __init__(self):
+            self.called = []
+
+        async def execute(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
+        def execute_sync(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
+    registry = DummyRegistry()
+    client.engine.registry = registry
 
     messages = [{"role": "user", "content": "hi"}]
     result = await client.agenerate(messages, tools=[{"type": "function", "function": {"name": "filesystem"}}])
