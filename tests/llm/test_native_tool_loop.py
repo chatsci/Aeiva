@@ -87,3 +87,29 @@ async def test_native_tool_loop_responses(monkeypatch):
     assert result == "Final answer"
     assert calls == [("filesystem", {"operation": "list", "path": "/tmp"})]
     assert any(m.get("role") == "tool" for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_route_through_registry(monkeypatch):
+    cfg = LLMGatewayConfig(llm_model_name="gpt-4o", llm_api_key="test")
+    client = LLMClient(cfg)
+
+    handler = FakeHandler()
+    monkeypatch.setattr(client, "_get_handler", lambda: handler)
+
+    class DummyRegistry:
+        def __init__(self):
+            self.called = []
+
+        async def execute(self, name, **kwargs):
+            self.called.append((name, kwargs))
+            return {"ok": True}
+
+    registry = DummyRegistry()
+    monkeypatch.setattr("aeiva.llm.llm_client.get_registry", lambda: registry)
+
+    messages = [{"role": "user", "content": "hi"}]
+    result = await client.agenerate(messages, tools=[{"type": "function", "function": {"name": "filesystem"}}])
+
+    assert result == "Final answer"
+    assert registry.called == [("filesystem", {"operation": "list", "path": "/tmp"})]
