@@ -30,7 +30,7 @@ from aeiva.action.action import Action
 from aeiva.action.status import Status
 from aeiva.tool.registry import get_registry, ToolRegistry
 from aeiva.event.event_names import EventNames
-from aeiva.action.action_envelope import actions_to_plan
+from aeiva.action.plan_utils import actions_to_plan
 
 if TYPE_CHECKING:
     from aeiva.event.event_bus import EventBus
