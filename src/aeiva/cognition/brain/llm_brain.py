@@ -3,14 +3,8 @@
 import asyncio
 from typing import Any, List, Dict, AsyncGenerator, Optional
 import logging
-from litellm import supports_response_schema
 from aeiva.cognition.brain.base_brain import Brain
 from aeiva.llm.llm_client import LLMClient
-from aeiva.action.action_envelope import (
-    ACTION_SYSTEM_PROMPT,
-    ACTION_SYSTEM_PROMPT_AUTO,
-    resolve_action_mode,
-)
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
 logger = logging.getLogger(__name__)
@@ -55,11 +49,6 @@ class LLMBrain(Brain):
         and ensuring that all necessary resources are in place.
         """
         llm_conf_dict = self.config_dict.get('llm_gateway_config', {})
-        action_cfg = self.config_dict.get("action_config") or {}
-        action_mode = resolve_action_mode(action_cfg)
-        self.action_mode = action_mode
-        self._apply_action_mode(llm_conf_dict, action_mode)
-
         llm_api_key = llm_conf_dict.get('llm_api_key')
         self.config = LLMGatewayConfig(
             llm_api_key=llm_api_key,
@@ -75,7 +64,7 @@ class LLMBrain(Brain):
         )
         self.llm_client = LLMClient(self.config)
 
-        system_prompt = self._build_system_prompt(llm_conf_dict, action_cfg, action_mode)
+        system_prompt = self._build_system_prompt(llm_conf_dict)
         if system_prompt is not None:  # TODO: only add system prompt for llms that support it.
             self.state["conversation"].append({"role": "system", "content": system_prompt})
         
@@ -113,7 +102,7 @@ class LLMBrain(Brain):
                 if stream:
                     async for delta in self.llm_client(
                         messages,
-                        tools=None,
+                        tools=tools,
                         stream=stream,
                         use_async=True,
                     ):
@@ -122,7 +111,7 @@ class LLMBrain(Brain):
                 else:
                     response = await self.llm_client(
                         messages,
-                        tools=None,
+                        tools=tools,
                         stream=False,
                         use_async=True,
                     )
@@ -132,7 +121,7 @@ class LLMBrain(Brain):
                 response = await asyncio.to_thread(
                     self.llm_client.generate,
                     messages,
-                    None,
+                    tools,
                     stream=False,
                 )
                 response_parts.append(response)
@@ -146,7 +135,7 @@ class LLMBrain(Brain):
                     response = await asyncio.to_thread(
                         self.llm_client.generate,
                         self.state["conversation"],
-                        tools=None,
+                        tools=tools,
                         stream=False,
                     )
                     self.state["cognitive_state"] = response
@@ -172,83 +161,6 @@ class LLMBrain(Brain):
         """Build minimal message list for LLM calls."""
         return self.state["conversation"]
 
-    def _apply_action_mode(self, llm_conf_dict: Dict[str, Any], action_mode: str) -> None:
-        """Apply action mode settings to LLM config without mutating prompts."""
-        if action_mode != "json":
-            return
-
-        model_name = llm_conf_dict.get("llm_model_name", "gpt-4o")
-        llm_api_mode = (llm_conf_dict.get("llm_api_mode") or "auto").lower()
-        use_responses_api = llm_api_mode == "responses" or (
-            llm_api_mode == "auto" and (model_name.startswith("gpt-5") or "codex" in model_name)
-        )
-        custom_provider = llm_conf_dict.get("llm_custom_provider")
-        additional_params = llm_conf_dict.get("llm_additional_params") or {}
-        if use_responses_api:
-            additional_params.setdefault("text", {"format": {"type": "json_object"}})
-        elif supports_response_schema(model_name, custom_provider):
-            additional_params.setdefault("response_format", {"type": "json_object"})
-        llm_conf_dict["llm_additional_params"] = additional_params
-
-    def _build_system_prompt(
-        self,
-        llm_conf_dict: Dict[str, Any],
-        action_cfg: Dict[str, Any],
-        action_mode: str,
-    ) -> Optional[str]:
-        system_prompt = llm_conf_dict.get('llm_system_prompt')
-        if action_mode == "off":
-            return system_prompt
-
-        default_prompt = ACTION_SYSTEM_PROMPT if action_mode == "json" else ACTION_SYSTEM_PROMPT_AUTO
-        action_prompt = action_cfg.get("action_system_prompt") or default_prompt
-        tool_list = action_cfg.get("tools") or []
-        if isinstance(tool_list, list) and tool_list:
-            tools_text = self._format_tool_schemas(tool_list)
-            action_prompt = f"{action_prompt}\n\nAvailable tools:\n{tools_text}"
-
-        if system_prompt:
-            return f"{system_prompt.rstrip()}\n\n{action_prompt}"
-        return action_prompt
-
-    def _format_tool_schemas(self, tool_names: List[str]) -> str:
-        """
-        Format tool schemas for the system prompt.
-
-        Args:
-            tool_names: List of tool names to include
-
-        Returns:
-            Formatted string with tool name, description, and parameters
-        """
-        from aeiva.tool.registry import get_registry
-        registry = get_registry()
-
-        def type_to_str(t) -> str:
-            """Convert Python type to readable string."""
-            if hasattr(t, "__name__"):
-                return t.__name__
-            return str(t).replace("typing.", "")
-
-        lines = []
-        for name in tool_names:
-            tool = registry.get(name)
-            if not tool:
-                lines.append(f"- {name}: (not found)")
-                continue
-
-            # Format parameters
-            params_text = []
-            for param in tool.parameters:
-                req_marker = "(required)" if param.required else "(optional)"
-                default_text = f", default={param.default!r}" if param.default is not None else ""
-                type_str = type_to_str(param.type)
-                params_text.append(
-                    f"    - {param.name}: {type_str} {req_marker}{default_text}"
-                    + (f" - {param.description}" if param.description else "")
-                )
-
-            params_section = "\n".join(params_text) if params_text else "    (no parameters)"
-            lines.append(f"- {name}: {tool.description}\n  Parameters:\n{params_section}")
-
-        return "\n\n".join(lines)
+    def _build_system_prompt(self, llm_conf_dict: Dict[str, Any]) -> Optional[str]:
+        """Return the base system prompt without action JSON instructions."""
+        return llm_conf_dict.get('llm_system_prompt')
