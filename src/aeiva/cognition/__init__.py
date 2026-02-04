@@ -30,14 +30,6 @@ Example usage:
 # Main cognition neuron
 from aeiva.cognition.cognition import Cognition, CognitionConfig, CognitionState
 
-# Response processing components
-from aeiva.cognition.response_classifier import (
-    ResponseClassifier,
-    ResponseType,
-    ClassificationResult,
-)
-from aeiva.cognition.stream_buffer import StreamBuffer, FlushDecision
-
 # Re-export submodules for convenience
 from aeiva.cognition import brain
 from aeiva.cognition import emotion
@@ -48,13 +40,6 @@ __all__ = [
     "Cognition",
     "CognitionConfig",
     "CognitionState",
-
-    # Response processing
-    "ResponseClassifier",
-    "ResponseType",
-    "ClassificationResult",
-    "StreamBuffer",
-    "FlushDecision",
 
     # Submodules
     "brain",
