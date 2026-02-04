@@ -26,13 +26,17 @@ class LLMGatewayConfig(BaseConfig):
         default=None,
         metadata={"help": "The version of the LLM API to use."}
     )
+    llm_custom_provider: Optional[str] = field(
+        default=None,
+        metadata={"help": "Override provider routing for litellm (e.g., 'openai')."}
+    )
     llm_embedding_model: Optional[str] = field(
         default=None,
         metadata={"help": "The embedding model to use for tasks requiring embeddings."}
     )
     llm_timeout: Optional[int] = field(
-        default=30,
-        metadata={"help": "The timeout in seconds for API requests."}
+        default=120,
+        metadata={"help": "The timeout in seconds for API requests. Default increased for complex prompts."}
     )
     llm_max_input_tokens: Optional[int] = field(
         default=4096,
@@ -65,6 +69,10 @@ class LLMGatewayConfig(BaseConfig):
     llm_use_async: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to use asynchronous API calls."}
+    )
+    llm_api_mode: Optional[str] = field(
+        default="auto",
+        metadata={"help": "API mode: auto|chat|responses."}
     )
     llm_stream: Optional[bool] = field(
         default=False,

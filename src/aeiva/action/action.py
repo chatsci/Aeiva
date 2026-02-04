@@ -25,7 +25,7 @@ from aeiva.action.step import Step, generate_step_id
 from aeiva.action.status import Status
 
 if TYPE_CHECKING:
-    from aeiva.tool.tool import Tool
+    from aeiva.tool.decorator import ToolMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -59,19 +59,19 @@ class Action(Step):
         result = await action.execute(tool=my_search_tool)
     """
 
-    tool: Optional["Tool"] = field(default=None, repr=False)
+    tool: Optional["ToolMetadata"] = field(default=None, repr=False)
 
     async def execute(
         self,
         params: Optional[Dict[str, Any]] = None,
-        tool: Optional["Tool"] = None
+        tool: Optional["ToolMetadata"] = None
     ) -> Any:
         """
-        Execute the action using its Tool.
+        Execute the action using the tool registry or bound tool.
 
         Args:
             params: Override params (uses self.params if not provided)
-            tool: Override tool (uses self.tool or resolves by name)
+            tool: Override tool metadata (uses self.tool or resolves by name)
 
         Returns:
             Result from tool execution
@@ -80,17 +80,7 @@ class Action(Step):
             ValueError: If no tool available
             RuntimeError: If execution fails
         """
-        # Resolve tool
-        execution_tool = tool or self.tool
-        if execution_tool is None:
-            # Try to resolve tool by name
-            execution_tool = self._resolve_tool()
-
-        if execution_tool is None:
-            raise ValueError(
-                f"Action '{self.id}' has no tool for execution. "
-                f"Provide a tool or ensure tool '{self.name}' is available."
-            )
+        from aeiva.tool.registry import get_registry
 
         # Resolve params
         execution_params = params if params is not None else self.params
@@ -100,7 +90,20 @@ class Action(Step):
         logger.debug(f"Executing action '{self.id}' with tool '{self.name}'")
 
         try:
-            result = await execution_tool.execute(execution_params)
+            # Try registry first (new system)
+            registry = get_registry()
+            if self.name in registry:
+                result = await registry.execute(self.name, **execution_params)
+            elif tool or self.tool:
+                # Use bound tool metadata
+                execution_tool = tool or self.tool
+                result = await execution_tool.execute(**execution_params)
+            else:
+                raise ValueError(
+                    f"Action '{self.id}' has no tool for execution. "
+                    f"Tool '{self.name}' not found in registry."
+                )
+
             self.succeed(result)
             logger.debug(f"Action '{self.id}' succeeded")
             return result
@@ -110,22 +113,7 @@ class Action(Step):
             logger.error(f"Action '{self.id}' failed: {e}")
             raise RuntimeError(f"Action '{self.id}' failed: {e}") from e
 
-    def _resolve_tool(self) -> Optional["Tool"]:
-        """
-        Attempt to resolve tool by name.
-
-        Override this method to implement custom tool resolution logic.
-
-        Returns:
-            Tool instance or None if not found
-        """
-        try:
-            from aeiva.tool.tool import Tool
-            return Tool(self.name)
-        except Exception:
-            return None
-
-    def bind_tool(self, tool: "Tool") -> "Action":
+    def bind_tool(self, tool: "ToolMetadata") -> "Action":
         """
         Bind a tool to this action.
 

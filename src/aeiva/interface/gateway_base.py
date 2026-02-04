@@ -242,7 +242,8 @@ class GatewayBase(Generic[RouteT]):
         payload: Any,
     ) -> Optional[RouteT]:
         if trace_key:
-            route = await self._get_route(trace_key, pop=True)
+            pop_route = not bool(data.get("route_keep"))
+            route = await self._get_route(trace_key, pop=pop_route)
             if route is not None:
                 return route
 

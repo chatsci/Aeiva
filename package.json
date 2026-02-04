@@ -1,0 +1,28 @@
+{
+  "name": "aeiva",
+  "version": "1.0.0",
+  "description": "<p align=\"center\" width=\"100%\"> <img src=\"https://i.ibb.co/P4zQHDk/aeiva-1024.png\" alt=\"AEIVA\" style=\"width: 50%; min-width: 300px; display: block; margin: auto; background-color: transparent;\"> </p>",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chatsci/Aeiva.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/chatsci/Aeiva/issues"
+  },
+  "homepage": "https://github.com/chatsci/Aeiva#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.1",
+    "@types/node": "^25.2.0"
+  }
+}

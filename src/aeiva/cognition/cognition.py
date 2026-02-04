@@ -34,6 +34,7 @@ import json
 
 from aeiva.neuron import BaseNeuron, Signal, NeuronConfig
 from aeiva.event.event_names import EventNames
+from aeiva.action.action_envelope import parse_action_envelope, resolve_action_mode
 
 if TYPE_CHECKING:
     from aeiva.cognition.brain.base_brain import Brain
@@ -46,6 +47,7 @@ DEFAULT_INPUT_EVENTS = [
     EventNames.PERCEPTION_OUTPUT,
     EventNames.COGNITION_THINK,
     EventNames.COGNITION_QUERY,
+    EventNames.ACTION_RESULT,
 ]
 
 
@@ -63,6 +65,7 @@ class CognitionState:
     conversation_history: List[Dict[str, str]] = field(default_factory=list)
     last_thought: Optional[str] = None
     thinking: bool = False
+    last_hint_trace_id: Optional[str] = None
 
     def add_turn(self, role: str, content: str) -> None:
         """Add a conversation turn."""
@@ -82,6 +85,7 @@ class CognitionState:
             "conversation_history": self.conversation_history.copy(),
             "last_thought": self.last_thought,
             "thinking": self.thinking,
+            "last_hint_trace_id": self.last_hint_trace_id,
         }
 
 
@@ -105,7 +109,9 @@ class Cognition(BaseNeuron):
         brain: "Brain" = None,
         **kwargs
     ):
-        neuron_config = self.build_config(config or {})
+        self.config_dict = config or {}
+        self.action_config = self.config_dict.get("action_config") or {}
+        neuron_config = self.build_config(self.config_dict)
         super().__init__(name=name, config=neuron_config, event_bus=event_bus, **kwargs)
 
         self.SUBSCRIPTIONS = self.config.input_events.copy()
@@ -125,6 +131,9 @@ class Cognition(BaseNeuron):
 
         if EventNames.COGNITION_QUERY in source:
             return await self.handle_query(signal)
+
+        if EventNames.ACTION_RESULT in source:
+            return await self.handle_action_result(signal)
 
         if source.startswith(EventNames.ALL_PERCEPTION[:-1]) or EventNames.COGNITION_THINK in source:
             return await self.handle_think(signal)
@@ -150,9 +159,22 @@ class Cognition(BaseNeuron):
         self.working.last_output = output
 
         if self.events:
-            event_name = self.config.output_event or EventNames.COGNITION_THOUGHT
-            emit_args = self.signal_to_event_args(event_name, signal)
-            await self.events.emit(**emit_args)
+            actions = output.get("actions") if isinstance(output, dict) else None
+            message_text = output.get("thought") if isinstance(output, dict) else None
+
+            if message_text or not actions:
+                event_name = self.config.output_event or EventNames.COGNITION_THOUGHT
+                emit_args = self.signal_to_event_args(event_name, signal)
+                await self.events.emit(**emit_args)
+
+            if actions:
+                action_context = output.get("action_context", {}) if isinstance(output, dict) else {}
+                proposal = output.get("action_proposal", {}) if isinstance(output, dict) else {}
+                await self._emit_action_plan(
+                    actions,
+                    action_context=action_context,
+                    proposal=proposal,
+                )
 
     async def handle_think(self, signal: Signal) -> Optional[Dict[str, Any]]:
         """Handle a think request - the core cognitive processing."""
@@ -178,6 +200,10 @@ class Cognition(BaseNeuron):
                     stream = bool(meta["llm_stream"])
                 if "llm_use_async" in meta:
                     use_async = bool(meta["llm_use_async"])
+            action_mode = resolve_action_mode(self.action_config)
+            force_json = action_mode == "json" or bool(self.action_config.get("force_json", False))
+            if force_json and not self.action_config.get("stream_json", False):
+                stream = False
 
             origin_trace_id = signal.parent_id or signal.trace_id
             if stream and self.brain is not None:
@@ -188,14 +214,39 @@ class Cognition(BaseNeuron):
                     history_content,
                     origin_trace_id,
                     meta,
+                    suppress_json_stream=action_mode != "off",
                 )
             else:
-                thought = await self.think(input_content)
+                thought = await self.think(
+                    input_content,
+                    stream=stream,
+                    use_async=use_async,
+                )
+
+            envelope, parse_errors = parse_action_envelope(thought)
+            message_text = envelope.get("message") or ""
+            actions = envelope.get("actions") or []
+
+            action_context = self._build_action_context(
+                origin_trace_id=origin_trace_id,
+                user_input=history_content,
+                meta=meta,
+                action_hops=0,
+            )
+            actions = self._limit_actions(actions, action_context, parse_errors)
+
+            if actions and not message_text and not stream:
+                await self._emit_hint(
+                    self.action_config.get("hint_text") or "Thinking...",
+                    signal.source,
+                    origin_trace_id=origin_trace_id,
+                    meta=meta,
+                )
 
             # Store text-only version in history (avoid bloating with base64 images)
             self.state.add_turn("user", history_content)
-            self.state.add_turn("assistant", thought)
-            self.state.last_thought = thought
+            self.state.add_turn("assistant", message_text or thought)
+            self.state.last_thought = message_text or thought
 
             max_turns = self.config.max_history * 2
             if len(self.state.conversation_history) > max_turns:
@@ -208,8 +259,12 @@ class Cognition(BaseNeuron):
                 return None
 
             return {
-                "thought": thought,
-                "full_thought": thought,
+                "thought": message_text,
+                "full_thought": message_text,
+                "raw_output": thought,
+                "action_proposal": envelope,
+                "actions": actions,
+                "action_context": action_context,
                 "input": history_content,
                 "source": signal.source,
                 "origin_trace_id": origin_trace_id,
@@ -217,6 +272,7 @@ class Cognition(BaseNeuron):
                 "history_length": len(self.state.conversation_history),
                 "streaming": False,
                 "final": True,
+                "parse_errors": parse_errors,
             }
 
         finally:
@@ -230,37 +286,103 @@ class Cognition(BaseNeuron):
         user_input: Optional[str],
         origin_trace_id: Optional[str],
         meta: Optional[dict],
+        *,
+        suppress_json_stream: bool,
     ) -> str:
         """Stream thought chunks as cognition.thought events."""
         response_parts = []
+        stream_allowed: Optional[bool] = None
+        buffer: List[str] = []
         if self.brain is None:
             return ""
 
         messages = [{"role": "user", "content": input_content}]
-        async for chunk in self.brain.think(messages, stream=True, use_async=use_async):
-            if not isinstance(chunk, str):
-                continue
-            response_parts.append(chunk)
-            await self._emit_thought_chunk(
-                chunk,
+        try:
+            async for chunk in self.brain.think(messages, stream=True, use_async=use_async):
+                if not isinstance(chunk, str):
+                    continue
+                response_parts.append(chunk)
+                if not suppress_json_stream:
+                    await self._emit_thought_chunk(
+                        chunk,
+                        source,
+                        final=False,
+                        full_thought=None,
+                        user_input=None,
+                        origin_trace_id=origin_trace_id,
+                        meta=meta,
+                    )
+                    continue
+
+                if stream_allowed is False:
+                    continue
+
+                buffer.append(chunk)
+                preview = "".join(buffer)
+                stripped = preview.lstrip()
+                if not stripped:
+                    continue
+
+                if stripped.startswith("{"):
+                    stream_allowed = False
+                    buffer.clear()
+                    continue
+
+                stream_allowed = True
+                await self._emit_thought_chunk(
+                    preview,
+                    source,
+                    final=False,
+                    full_thought=None,
+                    user_input=None,
+                    origin_trace_id=origin_trace_id,
+                    meta=meta,
+                )
+                buffer.clear()
+        except Exception as exc:
+            logger.warning("Streaming failed, falling back to non-stream: %s", exc)
+            return await self.think(
+                input_content,
+                stream=False,
+                use_async=use_async,
+            )
+
+        full_thought = "".join(response_parts)
+        envelope, parse_errors = parse_action_envelope(full_thought)
+        message_text = envelope.get("message") or ""
+        actions = envelope.get("actions") or []
+        action_context = self._build_action_context(
+            origin_trace_id=origin_trace_id,
+            user_input=user_input,
+            meta=meta,
+            action_hops=0,
+        )
+        actions = self._limit_actions(actions, action_context, parse_errors)
+
+        if actions and not message_text:
+            await self._emit_hint(
+                self.action_config.get("hint_text") or "Thinking...",
                 source,
-                final=False,
-                full_thought=None,
-                user_input=None,
                 origin_trace_id=origin_trace_id,
                 meta=meta,
             )
 
-        full_thought = "".join(response_parts)
-        await self._emit_thought_chunk(
-            "",
-            source,
-            final=True,
-            full_thought=full_thought,
-            user_input=user_input,
-            origin_trace_id=origin_trace_id,
-            meta=meta,
-        )
+        if actions:
+            await self._emit_action_plan(
+                actions,
+                action_context=action_context,
+                proposal=envelope,
+            )
+        if message_text or not actions:
+            await self._emit_thought_chunk(
+                "",
+                source,
+                final=True,
+                full_thought=message_text,
+                user_input=user_input,
+                origin_trace_id=origin_trace_id,
+                meta=meta,
+            )
         return full_thought
 
     async def _emit_thought_chunk(
@@ -292,6 +414,100 @@ class Cognition(BaseNeuron):
             EventNames.COGNITION_THOUGHT,
             payload=payload,
         )
+
+    async def _emit_hint(
+        self,
+        text: str,
+        source: str,
+        *,
+        origin_trace_id: Optional[str],
+        meta: Optional[dict],
+    ) -> None:
+        if not self.events or not text:
+            return
+        if origin_trace_id and origin_trace_id == self.state.last_hint_trace_id:
+            return
+        if origin_trace_id:
+            self.state.last_hint_trace_id = origin_trace_id
+        payload = {
+            "thought": text,
+            "source": source,
+            "streaming": False,
+            "final": True,
+            "full_thought": text,
+            "route_keep": True,
+        }
+        if origin_trace_id is not None:
+            payload["origin_trace_id"] = origin_trace_id
+        if isinstance(meta, dict) and meta:
+            payload["meta"] = meta
+        await self.events.emit(
+            EventNames.COGNITION_THOUGHT,
+            payload=payload,
+        )
+
+    def _build_action_context(
+        self,
+        *,
+        origin_trace_id: Optional[str],
+        user_input: Optional[str],
+        meta: Optional[dict],
+        action_hops: int,
+    ) -> Dict[str, Any]:
+        context: Dict[str, Any] = {
+            "origin_trace_id": origin_trace_id,
+            "user_input": user_input,
+            "action_hops": action_hops,
+        }
+        if isinstance(meta, dict) and meta:
+            context["meta"] = meta
+        return context
+
+    def _extract_action_context(self, data: Any) -> Dict[str, Any]:
+        if isinstance(data, dict):
+            context = data.get("context") or {}
+            if not context and any(k in data for k in ("origin_trace_id", "user_input", "action_hops")):
+                context = {
+                    "origin_trace_id": data.get("origin_trace_id"),
+                    "user_input": data.get("user_input"),
+                    "action_hops": data.get("action_hops", 0),
+                }
+            if isinstance(context, dict):
+                return context
+        return {}
+
+    def _limit_actions(
+        self,
+        actions: List[Dict[str, Any]],
+        action_context: Dict[str, Any],
+        parse_errors: List[str],
+    ) -> List[Dict[str, Any]]:
+        if not self.action_config.get("enabled", True):
+            return []
+        max_hops = int(self.action_config.get("max_action_hops", 3))
+        hops = int(action_context.get("action_hops", 0))
+        if actions and hops >= max_hops:
+            parse_errors.append("action_hops_exceeded")
+            return []
+        return actions
+
+    async def _emit_action_plan(
+        self,
+        actions: List[Dict[str, Any]],
+        *,
+        action_context: Dict[str, Any],
+        proposal: Dict[str, Any],
+    ) -> None:
+        if not self.events or not actions:
+            return
+        payload = {
+            "actions": actions,
+            "context": action_context,
+            "proposal": proposal,
+        }
+        origin = action_context.get("origin_trace_id")
+        signal = Signal(source=self.name, data=payload, parent_id=origin)
+        await self.events.emit(EventNames.ACTION_PLAN, payload=signal)
 
     def extract_content(self, signal: Signal) -> Optional[Union[str, list]]:
         """Extract content from a signal.
@@ -381,7 +597,13 @@ class Cognition(BaseNeuron):
             })
         return blocks
 
-    async def think(self, input_content: Union[str, list]) -> str:
+    async def think(
+        self,
+        input_content: Union[str, list],
+        *,
+        stream: Optional[bool] = None,
+        use_async: Optional[bool] = None,
+    ) -> str:
         """Produce a thought using the Brain.
 
         Args:
@@ -390,15 +612,18 @@ class Cognition(BaseNeuron):
         """
         if self.brain is not None:
             try:
-                stream = False
-                use_async = False
-                if hasattr(self.brain, "config") and self.brain.config:
-                    stream = getattr(self.brain.config, "llm_stream", False)
-                    use_async = getattr(self.brain.config, "llm_use_async", False)
+                if stream is None:
+                    stream = False
+                    if hasattr(self.brain, "config") and self.brain.config:
+                        stream = getattr(self.brain.config, "llm_stream", False)
+                if use_async is None:
+                    use_async = False
+                    if hasattr(self.brain, "config") and self.brain.config:
+                        use_async = getattr(self.brain.config, "llm_use_async", False)
 
                 messages = [{"role": "user", "content": input_content}]
                 response_parts = []
-                async for chunk in self.brain.think(messages, stream=stream, use_async=use_async):
+                async for chunk in self.brain.think(messages, stream=bool(stream), use_async=bool(use_async)):
                     if isinstance(chunk, str):
                         response_parts.append(chunk)
                 return "".join(response_parts) if response_parts else ""
@@ -443,17 +668,77 @@ class Cognition(BaseNeuron):
                 "message": f"Unknown query type: {query_type}",
             }
 
-    async def send(self, output: Any, parent: Signal = None) -> None:
-        """Send cognition event."""
-        if output is None:
-            return
+    async def handle_action_result(self, signal: Signal) -> Optional[Dict[str, Any]]:
+        """Handle action results and generate a follow-up response."""
+        if not isinstance(signal.data, dict):
+            return None
 
-        signal = parent.child(self.name, output) if parent else Signal(source=self.name, data=output)
-        self.working.last_output = output
+        data = signal.data
+        context = self._extract_action_context(data)
+        origin_trace_id = context.get("origin_trace_id") or signal.parent_id
+        user_input = context.get("user_input")
+        action_hops = int(context.get("action_hops", 0)) + 1
 
-        if self.events:
-            emit_args = self.signal_to_event_args(self.config.output_event, signal)
-            await self.events.emit(**emit_args)
+        action_results = data.get("action_results") or data.get("result") or data
+        prompt = self._format_action_result_prompt(user_input, action_results)
+
+        thought = await self.think(prompt)
+        envelope, parse_errors = parse_action_envelope(thought)
+        message_text = envelope.get("message") or ""
+        actions = envelope.get("actions") or []
+
+        action_context = self._build_action_context(
+            origin_trace_id=origin_trace_id,
+            user_input=user_input,
+            meta=context.get("meta"),
+            action_hops=action_hops,
+        )
+        actions = self._limit_actions(actions, action_context, parse_errors)
+
+        if not message_text:
+            message_text = self._fallback_action_result_text(action_results)
+
+        self.state.add_turn("user", prompt)
+        self.state.add_turn("assistant", message_text or thought)
+        self.state.last_thought = message_text or thought
+
+        return {
+            "thought": message_text,
+            "full_thought": message_text,
+            "raw_output": thought,
+            "action_proposal": envelope,
+            "actions": actions,
+            "action_context": action_context,
+            "origin_trace_id": origin_trace_id,
+            "source": signal.source,
+            "streaming": False,
+            "final": True,
+            "parse_errors": parse_errors,
+        }
+
+    @staticmethod
+    def _format_action_result_prompt(user_input: Optional[str], action_results: Any) -> str:
+        """Format action results into a prompt for follow-up reasoning."""
+        user_block = user_input or ""
+        try:
+            result_block = json.dumps(action_results, ensure_ascii=False, indent=2)
+        except Exception:
+            result_block = str(action_results)
+        return (
+            "You executed the following actions for the user. "
+            "Summarize the results and provide the best response.\n\n"
+            f"User request:\n{user_block}\n\n"
+            f"Action results:\n{result_block}\n"
+        )
+
+    @staticmethod
+    def _fallback_action_result_text(action_results: Any) -> str:
+        """Fallback message when LLM returns no message."""
+        try:
+            result_block = json.dumps(action_results, ensure_ascii=False, indent=2)
+        except Exception:
+            result_block = str(action_results)
+        return f"Action completed.\n{result_block}"
 
     def health_check(self) -> dict:
         """Return health status."""
@@ -475,4 +760,5 @@ class Cognition(BaseNeuron):
             conversation_history=parsed.get("conversation_history", []),
             last_thought=parsed.get("last_thought"),
             thinking=False,
+            last_hint_trace_id=parsed.get("last_hint_trace_id"),
         )

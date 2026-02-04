@@ -388,14 +388,6 @@ class Agent:
                 else:
                     await self.handle_terminal_response_text(response_text)
 
-        if self.action:
-            @self.event_bus.on(EventNames.ACTION_PLAN)
-            async def handle_plan(event: Event):
-                """Handle action plans by routing to ActuatorNeuron."""
-                plan = event.payload
-                result = await self.action.execute_plan(plan)
-                logger.info(f"Plan execution result: {result.get('success', False)}")
-
         @self.event_bus.on(EventNames.EMOTION_CHANGED)
         async def handle_emotion_changed(event: Event):
             """Handle emotion updates."""

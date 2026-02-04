@@ -143,6 +143,7 @@ class BaseNeuron:
         self.running = False
         self.accepting = True
         self.subscribed_callbacks: List[Callable] = []
+        self._setup_done = False
 
         # Circuit breaker state
         self._consecutive_errors = 0
@@ -238,8 +239,8 @@ class BaseNeuron:
         # Create input queue
         self.input_queue = Queue(maxsize=self.config.queue_size)
 
-        # Subscribe to events using callback pattern
-        if self.events:
+        # Subscribe to events using callback pattern (skip if already subscribed)
+        if self.events and not self.subscribed_callbacks:
             patterns = self.SUBSCRIPTIONS or [f"{self.name}.*"]
             for pattern in patterns:
                 callback = self.create_event_callback(pattern)
@@ -249,6 +250,7 @@ class BaseNeuron:
             self._log_info("Subscribed to events", patterns=patterns)
 
         self._log_info("Setup complete")
+        self._setup_done = True
 
     def create_event_callback(self, pattern: str) -> Callable:
         """
@@ -843,7 +845,8 @@ class BaseNeuron:
             - NeuronError: Logged with context
             - Exception: Logged, triggers circuit breaker
         """
-        await self.setup()
+        if not self._setup_done:
+            await self.setup()
         self.running = True
 
         try:

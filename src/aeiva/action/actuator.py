@@ -28,8 +28,9 @@ from aeiva.action.skill import Skill
 from aeiva.action.task import Task
 from aeiva.action.action import Action
 from aeiva.action.status import Status
-from aeiva.tool.tool import Tool
+from aeiva.tool.registry import get_registry, ToolRegistry
 from aeiva.event.event_names import EventNames
+from aeiva.action.action_envelope import actions_to_plan
 
 if TYPE_CHECKING:
     from aeiva.event.event_bus import EventBus
@@ -99,9 +100,9 @@ class ActuatorNeuron(BaseNeuron):
         # Set subscriptions from config
         self.SUBSCRIPTIONS = self.config.input_events.copy()
 
-        # Tool management
-        self.tools: List[Dict] = []
-        self.tool_map: Dict[str, Tool] = {}
+        # Tool management via registry
+        self._registry: ToolRegistry = get_registry()
+        self.tools: List[Dict] = []  # Schemas for LLM
         self.tool_names: List[str] = config.get("tools", []) if config else []
 
         # Execution state
@@ -128,21 +129,33 @@ class ActuatorNeuron(BaseNeuron):
         logger.info(f"{self.name} setup complete with {len(self.tools)} tools")
 
     def load_tools(self) -> None:
-        """Load tool schemas from configured tool names."""
-        for tool_name in self.tool_names:
-            try:
-                tool_schema = Tool.load_tool_schema(tool_name)
-                self.tools.append(tool_schema)
-                self.tool_map[tool_name] = Tool(tool_name)
-                logger.debug(f"Loaded tool: {tool_name}")
-            except Exception as e:
-                logger.warning(f"Failed to load tool '{tool_name}': {e}")
+        """Load tool schemas from configured tool names or discover all available."""
+        if not self.tool_names:
+            # Use all tools from registry
+            self.tools = self._registry.get_schemas()
+            self.tool_names = self._registry.tool_names
+        else:
+            # Load only specified tools
+            missing: List[str] = []
+            valid: List[str] = []
+            for tool_name in self.tool_names:
+                if tool_name in self._registry:
+                    schema = self._registry.get_schema(tool_name)
+                    if schema:
+                        self.tools.append(schema)
+                        valid.append(tool_name)
+                        logger.debug(f"Loaded tool: {tool_name}")
+                else:
+                    missing.append(tool_name)
+            self.tool_names = valid
+            if missing:
+                logger.warning("Tools not found in registry: %s", ", ".join(missing))
 
         self.identity.data["tools_loaded"] = len(self.tools)
 
-    def get_tool(self, name: str) -> Optional[Tool]:
-        """Get a tool by name."""
-        return self.tool_map.get(name)
+    def get_tool(self, name: str):
+        """Get a tool by name from registry."""
+        return self._registry.get(name)
 
     async def process(self, signal: Signal) -> Optional[Dict[str, Any]]:
         """
@@ -165,13 +178,22 @@ class ActuatorNeuron(BaseNeuron):
         logger.debug(f"{self.name} processing from {source}: {type(data)}")
 
         try:
+            context = data.get("context") if isinstance(data, dict) else None
             if isinstance(data, Plan):
                 result = await self.execute_plan(data)
             elif isinstance(data, Skill):
                 result = await self.execute_skill(data)
             elif isinstance(data, dict):
                 # Handle dict-based action requests
-                if "plan" in data:
+                if "actions" in data:
+                    plan = actions_to_plan(
+                        data.get("actions") or [],
+                        name=data.get("name", "ActionPlan"),
+                        description=data.get("description", ""),
+                        metadata=data.get("metadata") or {},
+                    )
+                    result = await self.execute_plan(plan)
+                elif "plan" in data:
                     plan = self._dict_to_plan(data["plan"])
                     result = await self.execute_plan(plan)
                 elif "action" in data:
@@ -182,6 +204,8 @@ class ActuatorNeuron(BaseNeuron):
                 result = {"error": f"Unsupported data type: {type(data)}"}
 
             self.identity.data["executions_completed"] += 1
+            if context:
+                result["context"] = context
             return result
 
         except Exception as e:
@@ -199,6 +223,12 @@ class ActuatorNeuron(BaseNeuron):
             Execution result
         """
         logger.info(f"Executing plan: {plan.name} ({plan.id})")
+        if not self._is_plan_allowed(plan):
+            return {
+                "success": False,
+                "error": "Plan contains tools not in allowlist.",
+                "plan_id": plan.id,
+            }
 
         # Convert plan to skill
         skill = self.plan_to_skill(plan)
@@ -215,12 +245,18 @@ class ActuatorNeuron(BaseNeuron):
             Execution result with status and action results
         """
         logger.info(f"Executing skill: {skill.name} ({skill.id})")
+        if not self._is_skill_allowed(skill):
+            return {
+                "success": False,
+                "error": "Skill contains tools not in allowlist.",
+                "skill_id": skill.id,
+            }
         self.current_skill = skill
 
-        # Bind tools to actions
+        # Mark actions to use registry execution
         for action in skill.actions:
-            if action.name in self.tool_map:
-                action.bind_tool(self.tool_map[action.name])
+            if action.name in self._registry:
+                action.metadata["use_registry"] = True
 
         # Execute with callbacks
         async def on_action_complete(action: Action):
@@ -302,27 +338,33 @@ class ActuatorNeuron(BaseNeuron):
         Returns:
             Action result
         """
-        action = Action(
-            name=action_data.get("name", "unknown"),
-            params=action_data.get("params", {}),
-            description=action_data.get("description", ""),
-        )
+        name = action_data.get("name", "unknown")
+        params = action_data.get("params", {})
 
-        # Bind tool if available
-        if action.name in self.tool_map:
-            action.bind_tool(self.tool_map[action.name])
+        if not self._is_allowed(name):
+            return {
+                "success": False,
+                "action_name": name,
+                "error": "Tool not allowed by actuator configuration.",
+            }
+        if name not in self._registry:
+            return {
+                "success": False,
+                "action_name": name,
+                "error": f"Tool '{name}' not found in registry",
+            }
 
         try:
-            result = await action.execute()
+            result = await self._registry.execute(name, **params)
             return {
                 "success": True,
-                "action_id": action.id,
+                "action_name": name,
                 "result": result,
             }
         except Exception as e:
             return {
                 "success": False,
-                "action_id": action.id,
+                "action_name": name,
                 "error": str(e),
             }
 
@@ -395,15 +437,36 @@ class ActuatorNeuron(BaseNeuron):
             metadata=plan_dict.get("metadata", {}),
         )
 
+    def _is_allowed(self, tool_name: str) -> bool:
+        if not self.tool_names:
+            return True
+        return tool_name in self.tool_names
+
+    def _is_plan_allowed(self, plan: Plan) -> bool:
+        if not self.tool_names:
+            return True
+        for task in plan.flatten():
+            if not self._is_allowed(task.name):
+                return False
+        return True
+
+    def _is_skill_allowed(self, skill: Skill) -> bool:
+        if not self.tool_names:
+            return True
+        for step in skill.actions:
+            if not self._is_allowed(step.name):
+                return False
+        return True
+
     async def send(self, output: Any, parent: Signal = None) -> None:
         """Send execution result to downstream handlers."""
         if output is None:
             return
 
         if parent:
-            signal = parent.child(parent.source, output)
+            signal = parent.child(EventNames.ACTION_RESULT, output)
         else:
-            signal = Signal(source=self.name, data=output)
+            signal = Signal(source=EventNames.ACTION_RESULT, data=output)
 
         self.working.last_output = output
 
@@ -416,7 +479,8 @@ class ActuatorNeuron(BaseNeuron):
         health = super().health_check()
         health.update({
             "tools_loaded": len(self.tools),
-            "tools_available": list(self.tool_map.keys()),
+            "tools_available": self.tool_names,
+            "registry_tools": len(self._registry),
             "executions_completed": self.identity.data.get("executions_completed", 0),
             "current_skill": self.current_skill.id if self.current_skill else None,
         })

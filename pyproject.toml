@@ -9,31 +9,36 @@ license = "Apache-2.0"
 dependencies = [
     "chromadb==0.5.20",
     "click==8.1.7",
-    "fastapi==0.115.5",
-    "gradio>=5.7.1,<6",
-    "importlib-metadata==8.5.0",
-    "litellm==1.52.15",
+    "litellm>=1.60.0,<2",
     "neo4j==5.26.0",
     "networkx==3.4.1",
     "numpy==2.1.3",
     "psycopg2-binary==2.9.10",
     "pydantic==2.10.1",
     "pymilvus==2.4.9",
-    "python-dotenv==1.0.1",
     "pyyaml==6.0.2",
     "qdrant-client==1.12.1",
     "requests==2.32.3",
-    "soundfile>=0.13.1,<1.0",
-    "uvicorn==0.32.1",
 ]
 
 [project.optional-dependencies]
+ui = [
+    "gradio>=5.7.1,<6",
+    "python-dotenv==1.0.1",
+    "soundfile>=0.13.1,<1.0",
+]
 realtime = [
     "fastrtc[vad,stt,tts]",
+    "gradio>=5.7.1,<6",
     "gradio-webrtc==0.0.30",
+    "python-dotenv==1.0.1",
+    "soundfile>=0.13.1,<1.0",
 ]
 realtime-openai = [
+    "gradio>=5.7.1,<6",
     "gradio-webrtc==0.0.30",
+    "python-dotenv==1.0.1",
+    "soundfile>=0.13.1,<1.0",
     "websockets>=12,<14",
 ]
 realtime-gemini = [
@@ -41,6 +46,10 @@ realtime-gemini = [
 ]
 realtime-hf = [
     "huggingface-hub>=0.27,<2.0",
+]
+server = [
+    "fastapi==0.115.5",
+    "uvicorn==0.32.1",
 ]
 slack = [
     "slack-sdk>=3.23.0",

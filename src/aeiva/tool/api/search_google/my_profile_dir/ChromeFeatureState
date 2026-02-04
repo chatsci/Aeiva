@@ -1,6 +1,0 @@
-{
-   "disable-features": "AcceptCHFrame,AutoExpandDetailsElement,AvoidUnnecessaryBeforeUnloadCheckSync,CertificateTransparencyComponentUpdater,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,ImprovedCookieControls,LazyFrameLoading,LensOverlay,MediaRouter,PaintHolding,PlzDedicatedWorker,ThirdPartyStoragePartitioning,Translate",
-   "enable-features": "UkmSamplingRate\u003CUkmSamplingRate",
-   "force-fieldtrial-params": "UkmSamplingRate.Sampled_NoSeed_Other:_default_sampling/1",
-   "force-fieldtrials": "UkmSamplingRate/Sampled_NoSeed_Other"
-}
