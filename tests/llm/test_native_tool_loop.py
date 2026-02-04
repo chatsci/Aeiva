@@ -4,6 +4,7 @@ import pytest
 from aeiva.llm.adapters.base import AdapterResponse
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.tool_loop import ToolLoopEngine
+from aeiva.cognition.brain.llm_brain import LLMBrain
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
 
@@ -163,3 +164,35 @@ async def test_tool_calls_route_through_registry():
 
     assert result == "Final answer"
     assert registry.called == [("filesystem", {"operation": "list", "path": "/tmp"})]
+
+
+@pytest.mark.asyncio
+async def test_llmbrain_uses_arun():
+    class DummyClient:
+        def __init__(self):
+            self.called = 0
+
+        async def arun(self, messages, tools=None, stream=False):
+            self.called += 1
+            class Result:
+                text = "ok"
+            return Result()
+
+        async def astream(self, messages, tools=None, stream=True):
+            yield "ok"
+
+        def run(self, messages, tools=None, stream=False):
+            class Result:
+                text = "ok"
+            return Result()
+
+    brain = LLMBrain({"llm_gateway_config": {"llm_api_key": "test"}})
+    brain.state = brain.init_state()
+    brain.llm_client = DummyClient()
+
+    chunks = []
+    async for chunk in brain.think([{"role": "user", "content": "hi"}], use_async=True, stream=False):
+        chunks.append(chunk)
+
+    assert chunks == ["ok"]
+    assert brain.llm_client.called == 1

@@ -100,46 +100,44 @@ class LLMBrain(Brain):
 
             if use_async:
                 if stream:
-                    async for delta in self.llm_client(
+                    async for delta in self.llm_client.astream(
                         messages,
                         tools=tools,
                         stream=stream,
-                        use_async=True,
                     ):
                         response_parts.append(delta)
                         yield delta
                 else:
-                    response = await self.llm_client(
+                    result = await self.llm_client.arun(
                         messages,
                         tools=tools,
                         stream=False,
-                        use_async=True,
                     )
-                    response_parts.append(response)
-                    yield response
+                    response_parts.append(result.text)
+                    yield result.text
             else:
-                response = await asyncio.to_thread(
-                    self.llm_client.generate,
+                result = await asyncio.to_thread(
+                    self.llm_client.run,
                     messages,
                     tools,
                     stream=False,
                 )
-                response_parts.append(response)
-                yield response
+                response_parts.append(result.text)
+                yield result.text
 
             self.state["cognitive_state"] = "".join(response_parts)
 
         except Exception as e:
             if use_async and not stream:
                 try:
-                    response = await asyncio.to_thread(
-                        self.llm_client.generate,
+                    result = await asyncio.to_thread(
+                        self.llm_client.run,
                         self.state["conversation"],
                         tools=tools,
                         stream=False,
                     )
-                    self.state["cognitive_state"] = response
-                    yield response
+                    self.state["cognitive_state"] = result.text
+                    yield result.text
                     return
                 except Exception:
                     pass
