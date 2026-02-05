@@ -1,9 +1,10 @@
-import json
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional
+from uuid import uuid4
 
-from aeiva.llm.adapters.base import LLMAdapter
+from aeiva.llm.backend import LLMBackend, LLMResponse
 from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
+from aeiva.llm.tool_types import ToolCall, ToolCallDelta
 from aeiva.tool.registry import get_registry
 
 
@@ -27,12 +28,12 @@ class ToolLoopStreamResult:
 class ToolLoopEngine:
     def __init__(
         self,
-        adapter: LLMAdapter,
+        backend: LLMBackend,
         metrics: Optional[LLMUsageMetrics] = None,
         max_tool_loops: int = 10,
         registry=None,
     ) -> None:
-        self.adapter = adapter
+        self.backend = backend
         self.metrics = metrics
         self.max_tool_loops = max_tool_loops
         self.registry = registry or get_registry()
@@ -40,9 +41,9 @@ class ToolLoopEngine:
 
     def run(self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs) -> ToolLoopResult:
         for _ in range(self.max_tool_loops):
-            params = self.adapter.build_params(messages, tools, **kwargs)
-            response = self.adapter.execute_sync(params)
-            parsed = self.adapter.parse_response(response)
+            params = self.backend.build_params(messages, tools, **kwargs)
+            response = self.backend.execute_sync(params)
+            parsed = self.backend.parse_response(response)
 
             if parsed.tool_calls:
                 self._execute_tool_calls_sync(messages, parsed.tool_calls, tools)
@@ -57,9 +58,9 @@ class ToolLoopEngine:
 
     async def arun(self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs) -> ToolLoopResult:
         for _ in range(self.max_tool_loops):
-            params = self.adapter.build_params(messages, tools, **kwargs)
-            response = await self.adapter.execute(params, stream=False)
-            parsed = self.adapter.parse_response(response)
+            params = self.backend.build_params(messages, tools, **kwargs)
+            response = await self.backend.execute(params, stream=False)
+            parsed = self.backend.parse_response(response)
 
             if parsed.tool_calls:
                 await self._execute_tool_calls_async(messages, parsed.tool_calls, tools)
@@ -96,48 +97,66 @@ class ToolLoopEngine:
         tools: Optional[List[Dict[str, Any]]],
         **kwargs,
     ) -> ToolLoopStreamResult:
-        params = self.adapter.build_params(messages, tools, **kwargs)
-        response_stream = await self.adapter.execute(params, stream=True)
+        params = self.backend.build_params(messages, tools, **kwargs)
+        response_stream = await self.backend.execute(params, stream=True)
 
-        tool_calls: List[Dict[str, Any]] = []
+        tool_calls: List[ToolCall] = []
         chunks: List[str] = []
+        deferred_chunks: List[str] = []
         completed_response = None
+        last_chunk: Any = None
+        uses_responses = getattr(self.backend, "uses_responses_api", None)
+        ignore_delta_content = bool(tools) and bool(uses_responses() if callable(uses_responses) else False)
 
         async for chunk in response_stream:
+            last_chunk = chunk
             response_type = getattr(chunk, "type", None)
             if response_type and str(response_type).endswith("response.completed"):
                 completed_response = getattr(chunk, "response", None)
 
-            delta_content, delta_tool_calls = self.adapter.parse_stream_delta(
+            delta_content, delta_tool_calls = self.backend.parse_stream_delta(
                 chunk, response_type=response_type, has_accumulated=bool(chunks)
             )
 
             if delta_content:
-                chunks.append(delta_content)
+                if ignore_delta_content:
+                    deferred_chunks.append(delta_content)
+                else:
+                    chunks.append(delta_content)
             if delta_tool_calls:
                 self._accumulate_tool_calls(tool_calls, delta_tool_calls)
 
         full_content = self._merge_chunks(chunks)
+        deferred_content = self._merge_chunks(deferred_chunks)
 
-        if tool_calls:
-            await self._execute_tool_calls_async(messages, tool_calls, tools)
+        if completed_response is None and last_chunk is not None:
+            if isinstance(last_chunk, dict) and (last_chunk.get("output") or last_chunk.get("output_text")):
+                completed_response = last_chunk
+            elif hasattr(last_chunk, "output") or hasattr(last_chunk, "output_text"):
+                completed_response = last_chunk
+
+        parsed: Optional[LLMResponse] = None
+        if completed_response is not None:
+            parsed = self.backend.parse_response(completed_response)
+            self._record_usage(parsed)
+            self._update_last_response_id(parsed)
+            if not full_content:
+                full_content = parsed.text
+        if not full_content and deferred_content:
+            full_content = deferred_content
+
+        final_tool_calls = parsed.tool_calls if parsed and parsed.tool_calls else tool_calls
+        valid_tool_calls = [tc for tc in final_tool_calls if tc.name and tc.name.strip()]
+
+        if valid_tool_calls:
+            await self._execute_tool_calls_async(messages, valid_tool_calls, tools)
             return ToolLoopStreamResult(
                 content="",
                 has_tool_calls=True,
-                usage={},
-                response_id=None,
+                usage=parsed.usage if parsed else {},
+                response_id=parsed.response_id if parsed else None,
                 completed_response=completed_response,
             )
-
-        if not full_content and completed_response:
-            parsed = self.adapter.parse_response(completed_response)
-            full_content = parsed.text
-            self._record_usage(parsed)
-            self._update_last_response_id(parsed)
-        elif completed_response:
-            parsed = self.adapter.parse_response(completed_response)
-            self._record_usage(parsed)
-            self._update_last_response_id(parsed)
 
         messages.append({"role": "assistant", "content": full_content})
         return ToolLoopStreamResult(
@@ -163,47 +182,53 @@ class ToolLoopEngine:
         return result
 
     def _accumulate_tool_calls(
-        self, tool_calls: List[Dict[str, Any]], deltas: List[Any]
+        self, tool_calls: List[ToolCall], deltas: List[ToolCallDelta]
     ) -> None:
-        for chunk in deltas:
-            index = getattr(chunk, "index", None) or len(tool_calls)
-            while len(tool_calls) <= index:
-                tool_calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-
-            tc = tool_calls[index]
-            if chunk_id := getattr(chunk, "id", None):
-                tc["id"] += chunk_id
-            if func := getattr(chunk, "function", None):
-                if name := getattr(func, "name", None):
-                    tc["function"]["name"] += name
-                if args := getattr(func, "arguments", None):
-                    tc["function"]["arguments"] += args
+        for delta in deltas:
+            if isinstance(delta, ToolCallDelta):
+                delta.apply_to(tool_calls)
 
     def _execute_tool_calls_sync(
         self,
         messages: List[Any],
-        tool_calls: List[Any],
+        tool_calls: List[ToolCall],
         available_tools: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
-        messages.append({"role": "assistant", "tool_calls": tool_calls})
+        # Filter out tool calls with missing name
+        valid_calls = [tc for tc in tool_calls if tc.name and tc.name.strip()]
+        if not valid_calls:
+            return
+        self._ensure_tool_call_ids(valid_calls)
+
+        messages.append({"role": "assistant", "tool_calls": [tc.as_chat_tool_call() for tc in valid_calls]})
         available_names = self._available_tool_names(available_tools)
 
-        for tool_call in tool_calls:
-            name, args, call_id = self._parse_tool_call(tool_call)
+        for tool_call in valid_calls:
+            name = tool_call.name
+            args = tool_call.arguments_dict()
+            call_id = tool_call.id
             result = self._run_tool_sync(name, args, available_names)
             messages.append({"tool_call_id": call_id, "role": "tool", "name": name, "content": str(result)})
 
     async def _execute_tool_calls_async(
         self,
         messages: List[Any],
-        tool_calls: List[Any],
+        tool_calls: List[ToolCall],
         available_tools: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
-        messages.append({"role": "assistant", "tool_calls": tool_calls})
+        # Filter out tool calls with missing name or empty arguments
+        valid_calls = [tc for tc in tool_calls if tc.name and tc.name.strip()]
+        if not valid_calls:
+            return
+        self._ensure_tool_call_ids(valid_calls)
+
+        messages.append({"role": "assistant", "tool_calls": [tc.as_chat_tool_call() for tc in valid_calls]})
         available_names = self._available_tool_names(available_tools)
 
-        for tool_call in tool_calls:
-            name, args, call_id = self._parse_tool_call(tool_call)
+        for tool_call in valid_calls:
+            name = tool_call.name
+            args = tool_call.arguments_dict()
+            call_id = tool_call.id
             result = await self._run_tool_async(name, args, available_names)
             messages.append({"tool_call_id": call_id, "role": "tool", "name": name, "content": str(result)})
 
@@ -212,34 +237,30 @@ class ToolLoopEngine:
             return None
         return {t["function"]["name"] for t in available_tools if "function" in t}
 
-    def _parse_tool_call(self, tool_call: Any) -> Tuple[str, Dict[str, Any], str]:
-        if isinstance(tool_call, dict):
-            func = tool_call.get("function") or {}
-            name = func.get("name", "")
-            args_str = func.get("arguments", "{}")
-            call_id = tool_call.get("id", "")
-        else:
-            func = getattr(tool_call, "function", None)
-            name = getattr(func, "name", "") if func else ""
-            args_str = getattr(func, "arguments", "{}") if func else "{}"
-            call_id = getattr(tool_call, "id", "")
-
-        try:
-            args = json.loads(args_str) if isinstance(args_str, str) else (args_str or {})
-        except json.JSONDecodeError:
-            args = {}
-
-        return name, args, call_id
-
     def _run_tool_sync(self, name: str, args: Dict[str, Any], available_names: Optional[set]) -> Any:
         if available_names and name not in available_names:
             return f"Unknown tool: {name}"
-        return self.registry.execute_sync(name, **args)
+        if not name:
+            return "Invalid tool call: missing tool name"
+        try:
+            return self.registry.execute_sync(name, **args)
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
 
     async def _run_tool_async(self, name: str, args: Dict[str, Any], available_names: Optional[set]) -> Any:
         if available_names and name not in available_names:
             return f"Unknown tool: {name}"
-        return await self.registry.execute(name, **args)
+        if not name:
+            return "Invalid tool call: missing tool name"
+        try:
+            return await self.registry.execute(name, **args)
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    def _ensure_tool_call_ids(self, tool_calls: List[ToolCall]) -> None:
+        for tc in tool_calls:
+            if not tc.id:
+                tc.id = f"call_{uuid4().hex}"
 
     def _record_usage(self, parsed) -> None:
         if not self.metrics:

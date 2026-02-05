@@ -15,7 +15,7 @@ from typing import List, Dict, Any
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from aeiva.llm.llm_client import LLMClient
-from aeiva.llm.adapters.litellm_adapter import MODEL_API_REGISTRY, _detect_api_type
+from aeiva.llm.backend import MODEL_API_REGISTRY, _detect_api_type
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.llm.api_handlers import ChatAPIHandler, ResponsesAPIHandler
 
@@ -243,6 +243,75 @@ class TestResponsesAPIHandler:
 
         assert "input" in params
         assert "instructions" in params
+
+    def test_build_params_with_tools_normalizes(self, make_config):
+        config = make_config("gpt-5-codex")
+        strategy = ResponsesAPIHandler(config)
+        messages = [{"role": "user", "content": "Hello"}]
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "filesystem",
+                    "description": "List files",
+                    "parameters": {"type": "object", "properties": {"path": {"type": "string"}}},
+                },
+            }
+        ]
+
+        params = strategy.build_params(messages, tools=tools)
+
+        assert "tools" in params
+        assert params["tools"][0]["name"] == "filesystem"
+        assert "function" not in params["tools"][0]
+
+    def test_parse_stream_delta_function_call_item(self, make_config):
+        config = make_config("gpt-5-codex")
+        strategy = ResponsesAPIHandler(config)
+
+        chunk = {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "filesystem",
+                "arguments": "{\"operation\":\"list\",\"path\":\"/tmp\"}",
+            },
+        }
+
+        content, deltas = strategy.parse_stream_delta(chunk)
+        assert content is None
+        assert deltas
+        assert deltas[0].name == "filesystem"
+
+    def test_parse_stream_delta_ignores_function_call_arguments_delta(self, make_config):
+        config = make_config("gpt-5-codex")
+        strategy = ResponsesAPIHandler(config)
+
+        chunk = {
+            "type": "response.function_call_arguments.delta",
+            "delta": "{\"operation\":\"list\"}",
+        }
+
+        content, deltas = strategy.parse_stream_delta(chunk)
+        assert content is None
+        assert deltas is None
+
+    def test_parse_stream_delta_function_call_arguments_done(self, make_config):
+        config = make_config("gpt-5-codex")
+        strategy = ResponsesAPIHandler(config)
+
+        chunk = {
+            "type": "response.function_call_arguments.done",
+            "call_id": "call_2",
+            "name": "filesystem",
+            "arguments": "{\"operation\":\"list\",\"path\":\"/tmp\"}",
+        }
+
+        content, deltas = strategy.parse_stream_delta(chunk)
+        assert content is None
+        assert deltas
+        assert deltas[0].name == "filesystem"
 
     def test_normalize_string_input(self, make_config):
         """String input passes through."""

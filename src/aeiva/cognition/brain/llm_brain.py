@@ -59,6 +59,7 @@ class LLMBrain(Brain):
             llm_use_async=llm_conf_dict.get('llm_use_async', False),
             llm_stream=llm_conf_dict.get('llm_stream', False),
             llm_api_mode=llm_conf_dict.get("llm_api_mode", "auto"),
+            llm_tool_choice=llm_conf_dict.get("llm_tool_choice"),
             llm_additional_params=llm_conf_dict.get("llm_additional_params") or {},
             llm_custom_provider=llm_conf_dict.get("llm_custom_provider"),
         )
@@ -75,7 +76,8 @@ class LLMBrain(Brain):
             stimuli: Any,
             tools: List[Dict[str, Any]] = None,
             stream: bool = False,
-            use_async: bool = False
+            use_async: bool = False,
+            tool_choice: Any = None,
             ) -> AsyncGenerator[str, None]:
         """
         Asynchronously process input stimuli to update the cognitive state.
@@ -100,27 +102,33 @@ class LLMBrain(Brain):
 
             if use_async:
                 if stream:
+                    extra = {"tool_choice": tool_choice} if tool_choice is not None else {}
                     async for delta in self.llm_client.astream(
                         messages,
                         tools=tools,
                         stream=stream,
+                        **extra,
                     ):
                         response_parts.append(delta)
                         yield delta
                 else:
+                    extra = {"tool_choice": tool_choice} if tool_choice is not None else {}
                     result = await self.llm_client.arun(
                         messages,
                         tools=tools,
                         stream=False,
+                        **extra,
                     )
                     response_parts.append(result.text)
                     yield result.text
             else:
+                extra = {"tool_choice": tool_choice} if tool_choice is not None else {}
                 result = await asyncio.to_thread(
                     self.llm_client.run,
                     messages,
                     tools,
                     stream=False,
+                    **extra,
                 )
                 response_parts.append(result.text)
                 yield result.text

@@ -1,5 +1,4 @@
-from aeiva.llm.adapters.litellm_adapter import LiteLLMAdapter
-from aeiva.llm.adapters.base import AdapterResponse
+from aeiva.llm.backend import LLMBackend, LLMResponse
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 
 
@@ -22,7 +21,7 @@ class DummyHandler:
 
 def test_adapter_response_contract():
     cfg = LLMGatewayConfig(llm_model_name="gpt-4o", llm_api_key="test")
-    adapter = LiteLLMAdapter(cfg, handler=DummyHandler())
+    adapter = LLMBackend(cfg, handler=DummyHandler())
 
     dummy = {
         "id": "resp_1",
@@ -31,7 +30,7 @@ def test_adapter_response_contract():
     }
     parsed = adapter.parse_response(dummy)
 
-    assert isinstance(parsed, AdapterResponse)
+    assert isinstance(parsed, LLMResponse)
     assert parsed.text == "hi"
     assert parsed.tool_calls == []
     assert parsed.response_id == "resp_1"

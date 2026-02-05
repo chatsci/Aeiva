@@ -1,8 +1,9 @@
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
-from aeiva.llm.adapters.base import AdapterResponse, LLMAdapter
 from aeiva.llm.api_handlers import ChatAPIHandler, ResponsesAPIHandler, LLMHandler
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
+from aeiva.llm.tool_types import ToolCall
 
 MODEL_API_REGISTRY: Dict[str, str] = {
     "codex": "responses",
@@ -27,7 +28,16 @@ def _detect_api_type(model_name: str) -> Optional[str]:
     return None
 
 
-class LiteLLMAdapter(LLMAdapter):
+@dataclass
+class LLMResponse:
+    text: str
+    tool_calls: list[ToolCall]
+    response_id: Optional[str]
+    usage: Dict[str, Any]
+    raw: Any
+
+
+class LLMBackend:
     def __init__(self, config: LLMGatewayConfig, handler: Optional[LLMHandler] = None):
         self.config = config
         self._handler = handler
@@ -63,11 +73,11 @@ class LiteLLMAdapter(LLMAdapter):
     def execute_sync(self, params):
         return self._get_handler().execute_sync(params)
 
-    def parse_response(self, response) -> AdapterResponse:
+    def parse_response(self, response) -> LLMResponse:
         _, tool_calls, content = self._get_handler().parse_response(response)
         usage = self._extract_usage(response)
         response_id = self._extract_response_id(response)
-        return AdapterResponse(
+        return LLMResponse(
             text=content or "",
             tool_calls=tool_calls or [],
             response_id=response_id,

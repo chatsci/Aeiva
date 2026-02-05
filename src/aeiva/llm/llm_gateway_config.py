@@ -78,6 +78,10 @@ class LLMGatewayConfig(BaseConfig):
         default=False,
         metadata={"help": "Whether to enable streaming responses from the LLM."}
     )
+    llm_tool_choice: Optional[Any] = field(
+        default=None,
+        metadata={"help": "Tool choice policy: auto|none|required|{type:function,...} or tool name."}
+    )
     llm_logging_level: Optional[str] = field(
         default='INFO',
         metadata={"help": "Logging level for the LLM module (e.g., 'DEBUG', 'INFO')."}

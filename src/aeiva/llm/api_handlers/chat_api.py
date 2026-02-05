@@ -15,6 +15,7 @@ from litellm import (
 
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.llm.api_handlers.base import BaseHandler
+from aeiva.llm.tool_types import ToolCall, ToolCallDelta
 
 
 class ChatAPIHandler(BaseHandler):
@@ -27,6 +28,60 @@ class ChatAPIHandler(BaseHandler):
     def __init__(self, config: LLMGatewayConfig):
         super().__init__(config)
 
+    def _resolve_tool_choice(
+        self,
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Any,
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Any], Optional[str]]:
+        if tool_choice is None:
+            return tools, None, None
+
+        if isinstance(tool_choice, str):
+            lowered = tool_choice.lower()
+            if lowered in {"auto", "none", "required"}:
+                tool_choice = lowered
+            else:
+                tool_choice = {"type": "function", "function": {"name": tool_choice}}
+
+        if tool_choice == "none":
+            return [], "none", None
+
+        if tool_choice == "required":
+            if not tools:
+                raise ValueError("tool_choice=required but no tools were provided")
+            return tools, "required", "You must call one of the available tools before responding."
+
+        if isinstance(tool_choice, dict) and tool_choice.get("type") == "function":
+            target = (tool_choice.get("function") or {}).get("name")
+            if not target:
+                raise ValueError("tool_choice.function.name is required")
+            matched = [t for t in (tools or []) if (t.get("function") or {}).get("name") == target]
+            if not matched:
+                raise ValueError(f"tool_choice requested unknown tool: {target}")
+            return matched, tool_choice, f"You must call the {target} tool before responding."
+
+        return tools, tool_choice, None
+
+    def _inject_system_prompt(
+        self,
+        messages: List[Dict[str, Any]],
+        extra_prompt: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        if not extra_prompt:
+            return messages
+
+        new_messages = [dict(m) for m in messages]
+        if new_messages and new_messages[0].get("role") == "system":
+            content = new_messages[0].get("content") or ""
+            if isinstance(content, str):
+                new_messages[0]["content"] = f"{content}\n\n{extra_prompt}".strip()
+            else:
+                new_messages[0]["content"] = content
+                new_messages.insert(0, {"role": "system", "content": extra_prompt})
+        else:
+            new_messages.insert(0, {"role": "system", "content": extra_prompt})
+        return new_messages
+
     def build_params(
         self,
         messages: List[Dict[str, Any]],
@@ -36,9 +91,16 @@ class ChatAPIHandler(BaseHandler):
         """Build chat/completions API parameters."""
         model_name = (self.config.llm_model_name or "").lower()
 
+        tool_choice = kwargs.pop("tool_choice", None)
+        if tool_choice is None:
+            tool_choice = getattr(self.config, "llm_tool_choice", None)
+
+        resolved_tools, resolved_choice, extra_prompt = self._resolve_tool_choice(tools, tool_choice)
+        resolved_messages = self._inject_system_prompt(messages, extra_prompt)
+
         params = {
             "model": self.config.llm_model_name,
-            "messages": messages,
+            "messages": resolved_messages,
             "temperature": self.config.llm_temperature,
             "top_p": self.config.llm_top_p,
             "max_tokens": self.config.llm_max_output_tokens,
@@ -55,9 +117,10 @@ class ChatAPIHandler(BaseHandler):
         params = self._filter_supported_params(params)
 
         # Add tools if model supports function calling
-        if tools and supports_function_calling(self.config.llm_model_name):
-            params["tools"] = tools
-            params["tool_choice"] = "auto"
+        if resolved_tools and supports_function_calling(self.config.llm_model_name):
+            params["tools"] = resolved_tools
+            if resolved_choice is not None:
+                params["tool_choice"] = resolved_choice
 
         return params
 
@@ -104,10 +167,10 @@ class ChatAPIHandler(BaseHandler):
     def parse_response(
         self,
         response: Any,
-    ) -> Tuple[Optional[Any], List[Any], str]:
+    ) -> Tuple[Optional[Any], List[ToolCall], str]:
         """Parse chat/completions API response."""
         message = None
-        tool_calls: List[Any] = []
+        tool_calls: List[ToolCall] = []
         content = ""
 
         # Handle object response
@@ -119,7 +182,7 @@ class ChatAPIHandler(BaseHandler):
                     message = choices[0].delta
             if message is not None:
                 content = getattr(message, "content", None) or ""
-                tool_calls = getattr(message, "tool_calls", None) or []
+                tool_calls = self._normalize_tool_calls(getattr(message, "tool_calls", None))
                 return message, tool_calls, content
 
         # Handle dict response
@@ -128,7 +191,7 @@ class ChatAPIHandler(BaseHandler):
             if choices:
                 msg = choices[0].get("message") or choices[0].get("delta") or {}
                 content = msg.get("content") or ""
-                tool_calls = msg.get("tool_calls") or []
+                tool_calls = self._normalize_tool_calls(msg.get("tool_calls"))
                 return msg, tool_calls, content
 
         # Handle string response
@@ -141,7 +204,7 @@ class ChatAPIHandler(BaseHandler):
         self,
         chunk: Any,
         **kwargs,
-    ) -> Tuple[Optional[str], Optional[List[Any]]]:
+    ) -> Tuple[Optional[str], Optional[List[ToolCallDelta]]]:
         """Parse streaming chunk from chat/completions API."""
         # Handle object with choices
         if hasattr(chunk, "choices"):
@@ -150,20 +213,47 @@ class ChatAPIHandler(BaseHandler):
                 delta = choices[0].delta
                 delta_content = getattr(delta, "content", None)
                 delta_tool_calls = getattr(delta, "tool_calls", None)
-                return delta_content, delta_tool_calls
+                if not delta_tool_calls and hasattr(choices[0], "message"):
+                    message = getattr(choices[0], "message", None)
+                    delta_tool_calls = getattr(message, "tool_calls", None) if message else None
+                return delta_content, self._normalize_tool_call_deltas(delta_tool_calls)
 
         # Handle dict response
         if isinstance(chunk, dict):
             choices = chunk.get("choices") or []
             if choices:
                 delta = choices[0].get("delta") or {}
-                return delta.get("content"), delta.get("tool_calls")
+                tool_calls = delta.get("tool_calls")
+                if not tool_calls:
+                    message = choices[0].get("message") or {}
+                    tool_calls = message.get("tool_calls")
+                return delta.get("content"), self._normalize_tool_call_deltas(tool_calls)
 
         # Handle string
         if isinstance(chunk, str):
             return chunk, None
 
         return None, None
+
+    def _normalize_tool_calls(self, tool_calls: Any) -> List[ToolCall]:
+        if not tool_calls:
+            return []
+        calls: List[ToolCall] = []
+        for item in tool_calls:
+            call = ToolCall.from_any(item)
+            if call:
+                calls.append(call)
+        return calls
+
+    def _normalize_tool_call_deltas(self, tool_calls: Any) -> Optional[List[ToolCallDelta]]:
+        if not tool_calls:
+            return None
+        deltas: List[ToolCallDelta] = []
+        for item in tool_calls:
+            delta = ToolCallDelta.from_any(item)
+            if delta:
+                deltas.append(delta)
+        return deltas or None
 
     async def execute(
         self,

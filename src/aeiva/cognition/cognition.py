@@ -27,6 +27,7 @@ Event Flow:
     cognition.query   ─┘
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
@@ -118,6 +119,7 @@ class Cognition(BaseNeuron):
         self.brain = brain
         self.thoughts_produced = 0
         self.skipped = 0
+        self._think_lock = asyncio.Lock()
 
     async def setup(self) -> None:
         """Initialize the cognition neuron."""
@@ -165,7 +167,16 @@ class Cognition(BaseNeuron):
                 await self.events.emit(**emit_args)
 
     async def handle_think(self, signal: Signal) -> Optional[Dict[str, Any]]:
-        """Handle a think request - the core cognitive processing."""
+        """Handle a think request - the core cognitive processing.
+
+        Uses a lock to prevent concurrent brain.think() calls from corrupting
+        the shared conversation history during tool call loops.
+        """
+        async with self._think_lock:
+            return await self._handle_think_locked(signal)
+
+    async def _handle_think_locked(self, signal: Signal) -> Optional[Dict[str, Any]]:
+        """Actual think logic, called under self._think_lock."""
         self.state.thinking = True
 
         try:
@@ -188,6 +199,11 @@ class Cognition(BaseNeuron):
                     stream = bool(meta["llm_stream"])
                 if "llm_use_async" in meta:
                     use_async = bool(meta["llm_use_async"])
+            tool_choice = None
+            if isinstance(meta, dict) and "tool_choice" in meta:
+                tool_choice = meta["tool_choice"]
+            elif hasattr(self.brain, "config") and self.brain.config:
+                tool_choice = getattr(self.brain.config, "llm_tool_choice", None)
             origin_trace_id = signal.parent_id or signal.trace_id
             tools = self._get_tool_schemas()
 
@@ -200,6 +216,7 @@ class Cognition(BaseNeuron):
                     user_input=history_content,
                     origin_trace_id=origin_trace_id,
                     meta=meta,
+                    tool_choice=tool_choice,
                 )
             else:
                 thought = await self._think_native(
@@ -207,6 +224,7 @@ class Cognition(BaseNeuron):
                     tools=tools,
                     stream=False,
                     use_async=use_async,
+                    tool_choice=tool_choice,
                 )
 
             # Store text-only version in history
@@ -264,6 +282,7 @@ class Cognition(BaseNeuron):
         tools: List[Dict[str, Any]],
         stream: bool,
         use_async: bool,
+        tool_choice: Any = None,
     ) -> str:
         """Non-streaming think with native tools."""
         if self.brain is None:
@@ -276,6 +295,7 @@ class Cognition(BaseNeuron):
             tools=tools,
             stream=stream,
             use_async=use_async,
+            tool_choice=tool_choice,
         ):
             response_parts.append(chunk)
 
@@ -291,6 +311,7 @@ class Cognition(BaseNeuron):
         user_input: Optional[str],
         origin_trace_id: Optional[str],
         meta: Optional[dict],
+        tool_choice: Any = None,
     ) -> str:
         """Stream thought chunks as cognition.thought events (native tools)."""
         if self.brain is None:
@@ -304,6 +325,7 @@ class Cognition(BaseNeuron):
                 tools=tools,
                 stream=True,
                 use_async=use_async,
+                tool_choice=tool_choice,
             ):
                 if not isinstance(chunk, str):
                     continue

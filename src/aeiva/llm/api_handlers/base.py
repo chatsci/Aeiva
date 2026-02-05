@@ -7,6 +7,7 @@ Defines the interface that all API handlers must implement.
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
+from aeiva.llm.tool_types import ToolCall, ToolCallDelta
 
 
 class LLMHandler(Protocol):
@@ -30,7 +31,7 @@ class LLMHandler(Protocol):
     def parse_response(
         self,
         response: Any,
-    ) -> Tuple[Optional[Any], List[Any], str]:
+    ) -> Tuple[Optional[Any], List[ToolCall], str]:
         """
         Parse API response.
 
@@ -43,7 +44,7 @@ class LLMHandler(Protocol):
         self,
         chunk: Any,
         **kwargs,
-    ) -> Tuple[Optional[str], Optional[List[Any]]]:
+    ) -> Tuple[Optional[str], Optional[List[ToolCallDelta]]]:
         """
         Parse streaming chunk.
 

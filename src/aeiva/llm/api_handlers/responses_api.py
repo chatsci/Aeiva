@@ -15,6 +15,7 @@ from litellm import (
 
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.llm.api_handlers.base import BaseHandler
+from aeiva.llm.tool_types import ToolCall, ToolCallDelta
 
 
 class ResponsesAPIHandler(BaseHandler):
@@ -27,6 +28,41 @@ class ResponsesAPIHandler(BaseHandler):
     def __init__(self, config: LLMGatewayConfig):
         super().__init__(config)
         self._allowed_params = self._get_allowed_params()
+
+    def _resolve_tool_choice(
+        self,
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Any,
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Any], Optional[str]]:
+        if tool_choice is None:
+            return tools, None, None
+
+        if isinstance(tool_choice, str):
+            lowered = tool_choice.lower()
+            if lowered in {"auto", "none", "required"}:
+                tool_choice = lowered
+            else:
+                tool_choice = {"type": "function", "function": {"name": tool_choice}}
+
+        if tool_choice == "none":
+            return [], "none", None
+
+        if tool_choice == "required":
+            if not tools:
+                raise ValueError("tool_choice=required but no tools were provided")
+            return tools, "required", "You must call one of the available tools before responding."
+
+        if isinstance(tool_choice, dict) and tool_choice.get("type") == "function":
+            target = (tool_choice.get("function") or {}).get("name")
+            if not target:
+                raise ValueError("tool_choice.function.name is required")
+            matched = [t for t in (tools or []) if t.get("name") == target]
+            if not matched:
+                raise ValueError(f"tool_choice requested unknown tool: {target}")
+            return matched, tool_choice, f"You must call the {target} tool before responding."
+
+        return tools, tool_choice, None
+
 
     def _get_allowed_params(self) -> Optional[set]:
         """Get allowed parameters for responses API."""
@@ -45,6 +81,10 @@ class ResponsesAPIHandler(BaseHandler):
         input_payload, instructions = self._normalize_input(messages)
         model_name = self._normalize_model_name(self.config.llm_model_name)
 
+        tool_choice = kwargs.pop("tool_choice", None)
+        if tool_choice is None:
+            tool_choice = getattr(self.config, "llm_tool_choice", None)
+
         params = {
             "model": model_name,
             "input": input_payload,
@@ -59,18 +99,51 @@ class ResponsesAPIHandler(BaseHandler):
             params.pop("temperature", None)
             params.pop("top_p", None)
 
-        if instructions:
-            params["instructions"] = instructions
-
         self._add_auth_params(params)
         self._add_additional_params(params, **kwargs)
 
-        if tools:
-            params["tools"] = tools
-            params["tool_choice"] = "auto"
+        normalized_tools = self._normalize_tools(tools) if tools else None
+        normalized_tools, resolved_choice, extra_prompt = self._resolve_tool_choice(
+            normalized_tools, tool_choice
+        )
+
+        if extra_prompt:
+            if instructions:
+                instructions = f"{instructions}\n\n{extra_prompt}"
+            else:
+                instructions = extra_prompt
+
+        if normalized_tools:
+            params["tools"] = normalized_tools
+            if resolved_choice is not None:
+                params["tool_choice"] = resolved_choice
+
+        if instructions:
+            params["instructions"] = instructions
 
         self._ensure_json_trigger(params)
         return self._filter_params(params)
+
+    def _normalize_tools(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Normalize tool schemas to Responses API format."""
+        normalized: List[Dict[str, Any]] = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            if "function" in tool:
+                func = tool.get("function") or {}
+                item = {
+                    "type": tool.get("type", "function"),
+                    "name": func.get("name"),
+                    "description": func.get("description"),
+                    "parameters": func.get("parameters"),
+                }
+            else:
+                item = dict(tool)
+            if not item.get("name"):
+                continue
+            normalized.append(item)
+        return normalized
 
     def _should_drop_sampling_params(self, model_name: str) -> bool:
         """Check if model doesn't support temperature/top_p."""
@@ -147,7 +220,11 @@ class ResponsesAPIHandler(BaseHandler):
 
                 # Convert each tool_call to function_call format
                 for tc in tool_calls:
-                    if isinstance(tc, dict):
+                    if isinstance(tc, ToolCall):
+                        call_id = tc.id or ""
+                        name = tc.name or ""
+                        arguments = tc.arguments or "{}"
+                    elif isinstance(tc, dict):
                         func = tc.get("function") or {}
                         call_id = tc.get("id") or ""
                         name = func.get("name") or ""
@@ -321,7 +398,7 @@ class ResponsesAPIHandler(BaseHandler):
     def parse_response(
         self,
         response: Any,
-    ) -> Tuple[Optional[Any], List[Any], str]:
+    ) -> Tuple[Optional[Any], List[ToolCall], str]:
         """Parse responses API response.
 
         Returns:
@@ -373,15 +450,16 @@ class ResponsesAPIHandler(BaseHandler):
         return None, tool_calls, ""
 
     def _extract_function_calls(self, output: Any) -> List[Dict[str, Any]]:
-        """Extract function_call items from output and convert to Chat API format.
+        """Extract tool call items from output and convert to Chat API format.
 
         Responses API format:
             {"type": "function_call", "call_id": "...", "name": "...", "arguments": "..."}
+            {"type": "tool_call", "call_id": "...", "name": "...", "arguments": "..."}
 
         Chat API format (returned):
             {"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}
         """
-        tool_calls: List[Dict[str, Any]] = []
+        tool_calls: List[ToolCall] = []
 
         if not output:
             return tool_calls
@@ -408,21 +486,22 @@ class ResponsesAPIHandler(BaseHandler):
             if not isinstance(item, dict):
                 continue
 
-            if item.get("type") == "function_call":
+            item_type = item.get("type")
+            if item_type in {"function_call", "tool_call", "custom_tool_call"} or (
+                item_type is None and item.get("name") and item.get("arguments") is not None
+            ):
                 call_id = item.get("call_id") or item.get("id") or ""
                 name = item.get("name") or ""
                 arguments = item.get("arguments") or "{}"
 
                 if name:  # Only add if we have a function name
                     # Convert to Chat API format for compatibility with _parse_tool_call
-                    tool_calls.append({
-                        "id": call_id,
-                        "type": "function",
-                        "function": {
-                            "name": name,
-                            "arguments": arguments if isinstance(arguments, str) else json.dumps(arguments),
-                        }
-                    })
+                    tool_call = ToolCall(
+                        id=str(call_id),
+                        name=str(name),
+                        arguments=arguments if isinstance(arguments, str) else json.dumps(arguments),
+                    )
+                    tool_calls.append(tool_call)
 
         return tool_calls
 
@@ -463,7 +542,7 @@ class ResponsesAPIHandler(BaseHandler):
         response_type: Optional[str] = None,
         has_accumulated: bool = False,
         **kwargs,
-    ) -> Tuple[Optional[str], Optional[List[Any]]]:
+    ) -> Tuple[Optional[str], Optional[List[ToolCallDelta]]]:
         """Parse streaming chunk from responses API."""
         # Get response type
         if response_type is None:
@@ -471,7 +550,60 @@ class ResponsesAPIHandler(BaseHandler):
             if response_type is None and isinstance(chunk, dict):
                 response_type = chunk.get("type", "")
 
+        if hasattr(response_type, "value"):
+            response_type = getattr(response_type, "value")
         response_type = str(response_type) if response_type else ""
+
+        def _get_output_index(payload: Any) -> Optional[int]:
+            if isinstance(payload, dict):
+                idx = payload.get("output_index")
+            else:
+                idx = getattr(payload, "output_index", None)
+            return int(idx) if idx is not None else None
+
+        # Handle function-call argument streaming (prefer the .done event)
+        if response_type.startswith("response.function_call_arguments."):
+            if response_type.endswith(".done"):
+                payload = chunk if isinstance(chunk, dict) else getattr(chunk, "__dict__", {})
+                call_id = payload.get("call_id") or payload.get("id")
+                name = payload.get("name")
+                arguments = payload.get("arguments")
+                delta = ToolCallDelta.from_any({
+                    "id": call_id,
+                    "name": name,
+                    "arguments": arguments,
+                    "index": _get_output_index(payload) or 0,
+                })
+                return None, [delta] if delta else None
+            # Ignore partial argument deltas to avoid incomplete JSON
+            return None, None
+
+        # Ignore custom tool input streaming for now (handled via completed response)
+        if response_type.startswith("response.custom_tool_call_input."):
+            return None, None
+
+        # Handle output item events (tool calls)
+        if response_type.endswith("output_item.added") or response_type.endswith("output_item.delta"):
+            item = None
+            if isinstance(chunk, dict):
+                item = chunk.get("item") or chunk.get("delta")
+            else:
+                item = getattr(chunk, "item", None) or getattr(chunk, "delta", None)
+
+            if item:
+                if not isinstance(item, dict) and hasattr(item, "model_dump"):
+                    item = item.model_dump()
+
+                if isinstance(item, dict) and item.get("type") == "function_call":
+                    delta = ToolCallDelta.from_any({
+                        "id": item.get("call_id") or item.get("id"),
+                        "name": item.get("name"),
+                        "arguments": item.get("arguments"),
+                        "index": _get_output_index(chunk) or 0,
+                    })
+                    return None, [delta] if delta else None
+
+            return None, None
 
         # Handle .done events
         if response_type.endswith(".done"):
@@ -486,9 +618,21 @@ class ResponsesAPIHandler(BaseHandler):
 
         # Handle .delta events
         if response_type.endswith(".delta"):
+            delta = None
             if isinstance(chunk, dict):
-                return chunk.get("delta"), None
-            return getattr(chunk, "delta", None), None
+                delta = chunk.get("delta")
+            else:
+                delta = getattr(chunk, "delta", None)
+
+            if isinstance(delta, dict):
+                if delta.get("type") in {"function_call", "tool_call"}:
+                    tool_delta = ToolCallDelta.from_any(delta)
+                    return None, [tool_delta] if tool_delta else None
+                if any(key in delta for key in ("name", "arguments", "call_id", "id")):
+                    tool_delta = ToolCallDelta.from_any(delta)
+                    return None, [tool_delta] if tool_delta else None
+
+            return delta, None
 
         # Handle text attribute
         if isinstance(chunk, dict):

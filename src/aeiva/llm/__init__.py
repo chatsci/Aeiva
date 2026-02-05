@@ -1,9 +1,11 @@
 from aeiva.llm.llm_client import LLMClient
-from aeiva.llm.adapters.base import AdapterResponse
-from aeiva.llm.adapters.litellm_adapter import LiteLLMAdapter
+from aeiva.llm.backend import LLMBackend, LLMResponse
+from aeiva.llm.tool_types import ToolCall, ToolCallDelta
 
 __all__ = [
     "LLMClient",
-    "LiteLLMAdapter",
-    "AdapterResponse",
+    "LLMBackend",
+    "LLMResponse",
+    "ToolCall",
+    "ToolCallDelta",
 ]

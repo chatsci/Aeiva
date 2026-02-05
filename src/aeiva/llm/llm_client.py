@@ -1,7 +1,7 @@
 """
 LLM Client - Unified interface for language model interactions.
 
-Thin facade over the ToolLoopEngine and LiteLLM adapter.
+Thin facade over the ToolLoopEngine and the selected API backend.
 """
 
 import logging
@@ -9,7 +9,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import litellm
 
-from aeiva.llm.adapters.litellm_adapter import LiteLLMAdapter
+from aeiva.llm.backend import LLMBackend
 from aeiva.llm.fault_tolerance import retry_async, retry_sync
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.llm.llm_gateway_exceptions import LLMGatewayError, llm_gateway_exception
@@ -39,9 +39,9 @@ class LLMClient:
         litellm.drop_params = True
         self._configure_litellm()
 
-        self.adapter = LiteLLMAdapter(self.config)
+        self.backend = LLMBackend(self.config)
         self.engine = ToolLoopEngine(
-            adapter=self.adapter,
+            backend=self.backend,
             metrics=self.metrics,
             max_tool_loops=self.max_tool_loops,
         )
@@ -62,7 +62,7 @@ class LLMClient:
             litellm.openai_key = self.config.llm_api_key
 
     def uses_responses_api(self) -> bool:
-        return self.adapter.uses_responses_api()
+        return self.backend.uses_responses_api()
 
     async def call_tool(self, tool_name: str, params: Dict[str, Any]) -> Any:
         return await self.engine.registry.execute(tool_name, **params)
