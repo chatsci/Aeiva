@@ -311,8 +311,13 @@ class MemoryStorage:
         Args:
             config (Any): Configuration settings for MemoryStorage.
         """
-        self.config_dict = config
+        self.config_dict = config or {}
         self.config = None
+        self.vector_db = None
+        self.graph_db = None
+        self.relational_db = None
+        self.memory_unit_repo = None
+        self.memory_event_repo = None
         self.setup()
 
     def setup(self) -> None:
@@ -320,44 +325,16 @@ class MemoryStorage:
         Set up the MemoryStorage's components based on the provided configuration.
         """
         try:
-            # Initialize Vector Database Configuration
-            vector_db_conf_dict = self.config_dict.get('vector_db_config', {})
-            vector_db_provider_name = vector_db_conf_dict.get('provider_name', 'milvus')
-            vector_db_config = DatabaseConfigFactory.create(
-                provider_name=vector_db_conf_dict.get('provider_name', 'milvus'),
-                uri=vector_db_conf_dict.get('uri', 'storage/milvus_demo.db'),
-                collection_name=vector_db_conf_dict.get('collection_name', 'test_collection'),
-                embedding_model_dims=vector_db_conf_dict.get('embedding_model_dims', 1536),  # 'text-embedding-ada-002': 1536,
-                metric_type=vector_db_conf_dict.get('metric_type', 'COSINE')
-            )
-
-            # Initialize Graph Database Configuration
-            graph_db_conf_dict = self.config_dict.get('graph_db_config', {})
-            graph_db_provider_name = graph_db_conf_dict.get('provider_name', 'neo4j')
-            graph_db_password = graph_db_conf_dict.get('password')
-            graph_db_config = DatabaseConfigFactory.create(
-                provider_name=graph_db_conf_dict.get('provider_name', 'neo4j'),
-                uri=graph_db_conf_dict.get('uri', 'bolt://localhost:7687'),
-                user=graph_db_conf_dict.get('user', 'neo4j'),
-                password=graph_db_password,
-                database=graph_db_conf_dict.get('database', 'neo4j'),
-                encrypted=graph_db_conf_dict.get('encrypted', False)
-            )
-
-            # Initialize Relational Database Configuration
-            relational_db_conf_dict = self.config_dict.get('relational_db_config', {})
-            relational_db_provider_name = relational_db_conf_dict.get('provider_name', 'sqlite')
-            relational_db_config = DatabaseConfigFactory.create(
-                provider_name=relational_db_conf_dict.get('provider_name', 'sqlite'),
-                database=relational_db_conf_dict.get('database', 'storage/test_database.db')
-            )
+            vector_db_provider_name, vector_db_config = self._build_vector_db_config()
+            graph_db_provider_name, graph_db_config = self._build_graph_db_config()
+            relational_db_provider_name, relational_db_config = self._build_relational_db_config()
 
             self.config = StorageConfig(
-                vector_db_provider=self.config_dict.get('vector_db_provider', 'milvus'),
+                vector_db_provider=vector_db_provider_name,
                 vector_db_config=vector_db_config,
-                graph_db_provider=self.config_dict.get('graph_db_provider', 'neo4j'),
+                graph_db_provider=graph_db_provider_name,
                 graph_db_config=graph_db_config,
-                relational_db_provider=self.config_dict.get('relational_db_provider', 'sqlite'),
+                relational_db_provider=relational_db_provider_name,
                 relational_db_config=relational_db_config,
             )
 
@@ -396,23 +373,68 @@ class MemoryStorage:
 
     def close(self) -> None:
         """Close all configured database connections (best-effort)."""
-        try:
-            if self.vector_db and hasattr(self.vector_db, "close"):
-                self.vector_db.close()
-        except Exception as e:
-            logger.warning(f"Error closing vector DB: {e}")
+        for name, db in (
+            ("vector", self.vector_db),
+            ("graph", self.graph_db),
+            ("relational", self.relational_db),
+        ):
+            if not db:
+                continue
+            try:
+                db.close()
+            except Exception as e:
+                logger.warning(f"Error closing {name} DB: {e}")
 
-        try:
-            if self.graph_db and hasattr(self.graph_db, "close"):
-                self.graph_db.close()
-        except Exception as e:
-            logger.warning(f"Error closing graph DB: {e}")
+    def _build_vector_db_config(self) -> tuple[str, Any]:
+        vector_db_conf_dict = self.config_dict.get("vector_db_config", {})
+        provider_name = vector_db_conf_dict.get(
+            "provider_name",
+            self.config_dict.get("vector_db_provider", "chroma"),
+        )
+        kwargs = {
+            "path": vector_db_conf_dict.get(
+                "path", vector_db_conf_dict.get("uri", "storage/chroma")
+            ),
+            "collection_name": vector_db_conf_dict.get(
+                "collection_name", "memory_collection"
+            ),
+            "embedding_model_dims": vector_db_conf_dict.get(
+                "embedding_model_dims", 1536
+            ),
+            "metric_type": vector_db_conf_dict.get("metric_type", "COSINE"),
+            "host": vector_db_conf_dict.get("host"),
+            "port": vector_db_conf_dict.get("port"),
+            "client": vector_db_conf_dict.get("client"),
+        }
+        config = DatabaseConfigFactory.create(provider_name=provider_name, **kwargs)
+        return provider_name, config
 
-        try:
-            if self.relational_db and hasattr(self.relational_db, "close"):
-                self.relational_db.close()
-        except Exception as e:
-            logger.warning(f"Error closing relational DB: {e}")
+    def _build_graph_db_config(self) -> tuple[str, Any]:
+        graph_db_conf_dict = self.config_dict.get("graph_db_config", {})
+        provider_name = graph_db_conf_dict.get(
+            "provider_name",
+            self.config_dict.get("graph_db_provider", "kuzu"),
+        )
+        kwargs = {
+            "database": graph_db_conf_dict.get(
+                "database", graph_db_conf_dict.get("database_path", "storage/kuzu.db")
+            ),
+            "read_only": graph_db_conf_dict.get("read_only", False),
+        }
+        config = DatabaseConfigFactory.create(provider_name=provider_name, **kwargs)
+        return provider_name, config
+
+    def _build_relational_db_config(self) -> tuple[str, Any]:
+        relational_db_conf_dict = self.config_dict.get("relational_db_config", {})
+        provider_name = relational_db_conf_dict.get(
+            "provider_name",
+            self.config_dict.get("relational_db_provider", "sqlite"),
+        )
+        kwargs = {
+            "database": relational_db_conf_dict.get("database", "storage/aeiva.db"),
+        }
+        config = DatabaseConfigFactory.create(provider_name=provider_name, **kwargs)
+        return provider_name, config
 
     def handle_error(self, error: Exception) -> None:
         """

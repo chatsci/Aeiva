@@ -17,46 +17,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 
-from aeiva.util.path_utils import get_project_root_dir
-from aeiva.common.logger import setup_logging
 from aeiva.command.command_utils import (
     get_package_root,
-    get_log_dir,
     build_runtime,
+    setup_command_logger,
 )
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.util.file_utils import from_json_or_yaml
 from aeiva.interface.gateway_base import GatewayBase
 from aeiva.event.event_names import EventNames
-
-
-def _try_start_neo4j(logger):
-    """Start Neo4j if NEO4J_HOME is set; return process or None."""
-    neo4j_home = os.getenv("NEO4J_HOME")
-    if not neo4j_home:
-        logger.info("NEO4J_HOME not set — skipping Neo4j startup.")
-        return None
-    try:
-        from aeiva.command.command_utils import validate_neo4j_home, start_neo4j
-        validate_neo4j_home(logger, neo4j_home)
-        return start_neo4j(logger, neo4j_home)
-    except SystemExit:
-        logger.warning("Neo4j validation failed — continuing without Neo4j.")
-        return None
-    except Exception as exc:
-        logger.warning("Neo4j start failed (%s) — continuing without Neo4j.", exc)
-        return None
-
-
-def _try_stop_neo4j(logger, neo4j_process):
-    if neo4j_process is None:
-        return
-    try:
-        from aeiva.command.command_utils import stop_neo4j
-        stop_neo4j(logger, neo4j_process)
-    except Exception as exc:
-        logger.warning("Neo4j stop failed: %s", exc)
-
 
 class MaidChatGateway(GatewayBase[None]):
     def requires_route(self) -> bool:
@@ -224,13 +193,9 @@ def run(config, host, port, verbose):
     Starts the Aeiva Agent Server and launches the Unity application.
     """
     # Setup logging
-    project_root = get_project_root_dir()
-    logger_config_path = project_root / "configs" / "logger_config.yaml"
-    logger_file_path = get_log_dir() / 'maid-chat.log'
-    logger = setup_logging(
-        config_file_path=logger_config_path,
-        log_file_path=logger_file_path,
-        verbose=verbose
+    logger = setup_command_logger(
+        log_filename="maid-chat.log",
+        verbose=verbose,
     )
     
     # Load configuration
@@ -250,9 +215,6 @@ def run(config, host, port, verbose):
     raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
     session_id = uuid4().hex
     
-    # Optionally start Neo4j
-    neo4j_process = _try_start_neo4j(logger)
-    
     # Initialize the Agent or MAS
     try:
         runtime, agent = build_runtime(config_dict)
@@ -260,7 +222,6 @@ def run(config, host, port, verbose):
     except Exception as e:
         logger.error(f"Failed to initialize Agent: {e}")
         click.echo(f"Error: Failed to initialize Agent: {e}")
-        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
     # Read MAID_HOME environment variable
@@ -268,20 +229,17 @@ def run(config, host, port, verbose):
     if not maid_home:
         logger.error("MAID_HOME environment variable is not set.")
         click.echo("Error: MAID_HOME environment variable is not set.")
-        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
     maid_home_path = Path(maid_home)
     if not maid_home_path.exists():
         logger.error(f"Unity application not found at MAID_HOME: {maid_home}")
         click.echo(f"Error: Unity application not found at MAID_HOME: {maid_home}")
-        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
     # Start the Unity application
     unity_process = start_unity_app(str(maid_home_path), logger)
     if unity_process is None:
-        _try_stop_neo4j(logger, neo4j_process)
         sys.exit(1)
     
     registry = GatewayRegistry(config_dict)
@@ -309,6 +267,5 @@ def run(config, host, port, verbose):
         logger.error(f"Server encountered an error: {e}")
         sys.exit(1)
     finally:
-        _try_stop_neo4j(logger, neo4j_process)
         stop_unity_app(unity_process, logger)
         logger.info("Server has been stopped.")

@@ -19,6 +19,7 @@ Usage:
 
 import importlib
 import logging
+from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -26,6 +27,9 @@ from .capability import Capability
 from .decorator import ToolMetadata
 
 logger = logging.getLogger(__name__)
+
+_tool_router_context: ContextVar[Optional[Any]] = ContextVar("aeiva_tool_router", default=None)
+_tool_executor_context: ContextVar[Optional[Any]] = ContextVar("aeiva_tool_executor", default=None)
 
 
 class ToolRegistry:
@@ -155,17 +159,35 @@ class ToolRegistry:
         Raises:
             KeyError: If tool not found
         """
+        executor = _resolve_tool_executor()
+        if executor is not None:
+            execute_tool = getattr(executor, "execute_tool", None)
+            if callable(execute_tool):
+                return await execute_tool(name, kwargs, registry=self)
+            logger.warning(
+                "Ignoring invalid tool executor %r: missing execute_tool(...)",
+                type(executor).__name__,
+            )
+        return await self.execute_direct(name, **kwargs)
+
+    async def execute_direct(self, name: str, **kwargs) -> Any:
+        """Execute a tool directly, bypassing any tool executor wrapper."""
         tool = self._tools.get(name)
         if not tool:
             raise KeyError(f"Tool not found: {name}")
 
-        if _tool_router is not None:
-            try:
-                routed = await _tool_router.execute(name, kwargs)
+        router = _resolve_tool_router()
+        if router is not None:
+            execute = getattr(router, "execute", None)
+            if callable(execute):
+                routed = await execute(name, kwargs)
                 if routed is not None:
                     return routed
-            except Exception:
-                raise
+            else:
+                logger.warning(
+                    "Ignoring invalid tool router %r: missing execute(...)",
+                    type(router).__name__,
+                )
 
         return await tool.execute(**kwargs)
 
@@ -180,17 +202,35 @@ class ToolRegistry:
         Returns:
             Tool execution result
         """
+        executor = _resolve_tool_executor()
+        if executor is not None:
+            execute_tool_sync = getattr(executor, "execute_tool_sync", None)
+            if callable(execute_tool_sync):
+                return execute_tool_sync(name, kwargs, registry=self)
+            logger.warning(
+                "Ignoring invalid tool executor %r: missing execute_tool_sync(...)",
+                type(executor).__name__,
+            )
+        return self.execute_direct_sync(name, **kwargs)
+
+    def execute_direct_sync(self, name: str, **kwargs) -> Any:
+        """Execute a tool directly (sync), bypassing any tool executor wrapper."""
         tool = self._tools.get(name)
         if not tool:
             raise KeyError(f"Tool not found: {name}")
 
-        if _tool_router is not None:
-            try:
-                routed = _tool_router.execute_sync(name, kwargs)
+        router = _resolve_tool_router()
+        if router is not None:
+            execute_sync = getattr(router, "execute_sync", None)
+            if callable(execute_sync):
+                routed = execute_sync(name, kwargs)
                 if routed is not None:
                     return routed
-            except Exception:
-                raise
+            else:
+                logger.warning(
+                    "Ignoring invalid tool router %r: missing execute_sync(...)",
+                    type(router).__name__,
+                )
 
         return tool.execute_sync(**kwargs)
 
@@ -221,13 +261,91 @@ class ToolRegistry:
 
 # Global registry instance
 _global_registry: Optional[ToolRegistry] = None
-_tool_router: Optional[Any] = None
+_global_tool_router: Optional[Any] = None
+_global_tool_executor: Optional[Any] = None
 
 
-def set_tool_router(router: Any) -> None:
-    """Attach a tool router for remote host execution."""
-    global _tool_router
-    _tool_router = router
+def _resolve_tool_router() -> Optional[Any]:
+    return _tool_router_context.get() or _global_tool_router
+
+
+def _resolve_tool_executor() -> Optional[Any]:
+    return _tool_executor_context.get() or _global_tool_executor
+
+
+def bind_tool_router(router: Optional[Any]) -> Token:
+    """Bind tool router to current context (task/thread-local)."""
+    return _tool_router_context.set(router)
+
+
+def reset_tool_router(token: Token) -> None:
+    """Reset tool router context using token from bind_tool_router()."""
+    _tool_router_context.reset(token)
+
+
+def bind_tool_executor(executor: Optional[Any]) -> Token:
+    """Bind tool executor to current context (task/thread-local)."""
+    return _tool_executor_context.set(executor)
+
+
+def reset_tool_executor(token: Token) -> None:
+    """Reset tool executor context using token from bind_tool_executor()."""
+    _tool_executor_context.reset(token)
+
+
+def set_tool_router(router: Any, *, override: bool = True, scope: str = "global") -> Optional[Token]:
+    """Attach a tool router for remote host execution.
+
+    Args:
+        router: Router instance or None.
+        override: When False, keep existing value in selected scope.
+        scope: "global" or "context".
+
+    Returns:
+        Token when scope="context", else None.
+    """
+    global _global_tool_router
+    scope_key = (scope or "global").strip().lower()
+    if scope_key == "context":
+        current = _tool_router_context.get()
+        if current is not None and not override:
+            return None
+        return _tool_router_context.set(router)
+
+    if _global_tool_router is not None and not override:
+        return None
+    _global_tool_router = router
+    return None
+
+
+def set_tool_executor(
+    executor: Any,
+    *,
+    override: bool = False,
+    scope: str = "global",
+) -> Optional[Token]:
+    """Attach a tool executor (e.g., Actuator) for tool orchestration.
+
+    Args:
+        executor: Executor instance or None.
+        override: When False, keep existing value in selected scope.
+        scope: "global" or "context".
+
+    Returns:
+        Token when scope="context", else None.
+    """
+    global _global_tool_executor
+    scope_key = (scope or "global").strip().lower()
+    if scope_key == "context":
+        current = _tool_executor_context.get()
+        if current is not None and not override:
+            return None
+        return _tool_executor_context.set(executor)
+
+    if _global_tool_executor is not None and not override:
+        return None
+    _global_tool_executor = executor
+    return None
 
 
 def get_registry() -> ToolRegistry:

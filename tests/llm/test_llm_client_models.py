@@ -138,6 +138,7 @@ class TestChatAPIHandler:
     def test_build_params_with_tools(self, make_config):
         """Tools are added when model supports function calling."""
         config = make_config("gpt-4o")
+        config.llm_tool_choice = "auto"
         strategy = ChatAPIHandler(config)
         messages = [{"role": "user", "content": "Hello"}]
         tools = [{"type": "function", "function": {"name": "test", "parameters": {}}}]

@@ -29,7 +29,7 @@ Event Flow:
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 import json
 
@@ -50,6 +50,10 @@ DEFAULT_INPUT_EVENTS = [
     EventNames.ACTION_RESULT,
 ]
 
+ERROR_POLICY_FAIL_FAST = "fail_fast"
+ERROR_POLICY_USER_FALLBACK = "user_fallback"
+DEFAULT_ERROR_FALLBACK_MESSAGE = "I ran into an internal error while thinking. Please try again."
+
 
 @dataclass
 class CognitionConfig(NeuronConfig):
@@ -57,32 +61,20 @@ class CognitionConfig(NeuronConfig):
     input_events: List[str] = field(default_factory=lambda: DEFAULT_INPUT_EVENTS.copy())
     output_event: str = EventNames.COGNITION_THOUGHT
     max_history: int = 20
+    error_policy: str = ERROR_POLICY_FAIL_FAST
+    error_fallback_message: str = DEFAULT_ERROR_FALLBACK_MESSAGE
 
 
 @dataclass
 class CognitionState:
-    """Current cognitive state."""
-    conversation_history: List[Dict[str, str]] = field(default_factory=list)
+    """Current cognitive state (lightweight runtime flags)."""
     last_thought: Optional[str] = None
     thinking: bool = False
     last_hint_trace_id: Optional[str] = None
 
-    def add_turn(self, role: str, content: str) -> None:
-        """Add a conversation turn."""
-        self.conversation_history.append({"role": role, "content": content})
-
-    def get_recent_history(self, n: int = 10) -> List[Dict[str, str]]:
-        """Get recent conversation history."""
-        return self.conversation_history[-n:]
-
-    def clear_history(self) -> None:
-        """Clear conversation history."""
-        self.conversation_history.clear()
-
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
-            "conversation_history": self.conversation_history.copy(),
             "last_thought": self.last_thought,
             "thinking": self.thinking,
             "last_hint_trace_id": self.last_hint_trace_id,
@@ -100,6 +92,34 @@ class Cognition(BaseNeuron):
 
     EMISSIONS = [EventNames.COGNITION_THOUGHT, EventNames.COGNITION_QUERY_RESPONSE]
     CONFIG_CLASS = CognitionConfig
+
+    @staticmethod
+    def _normalize_error_policy(policy: Any) -> str:
+        value = str(policy or "").strip().lower()
+        if value in {"fallback", "user_safe", ERROR_POLICY_USER_FALLBACK}:
+            return ERROR_POLICY_USER_FALLBACK
+        return ERROR_POLICY_FAIL_FAST
+
+    @classmethod
+    def build_config(cls, config: Any) -> CognitionConfig:
+        """Build config from either `cognition_config` block or top-level keys."""
+        if isinstance(config, CognitionConfig):
+            cfg = config
+        elif not isinstance(config, dict):
+            cfg = CognitionConfig()
+        else:
+            allowed = {f.name for f in fields(CognitionConfig)}
+            merged: Dict[str, Any] = {}
+            nested = config.get("cognition_config")
+            if isinstance(nested, dict):
+                merged.update({k: v for k, v in nested.items() if k in allowed})
+            merged.update({k: v for k, v in config.items() if k in allowed})
+            cfg = CognitionConfig(**merged)
+
+        cfg.error_policy = cls._normalize_error_policy(cfg.error_policy)
+        fallback = str(cfg.error_fallback_message or "").strip()
+        cfg.error_fallback_message = fallback or DEFAULT_ERROR_FALLBACK_MESSAGE
+        return cfg
 
     def __init__(
         self,
@@ -227,15 +247,7 @@ class Cognition(BaseNeuron):
                     tool_choice=tool_choice,
                 )
 
-            # Store text-only version in history
-            self.state.add_turn("user", history_content)
-            self.state.add_turn("assistant", thought)
             self.state.last_thought = thought
-
-            max_turns = self.config.max_history * 2
-            if len(self.state.conversation_history) > max_turns:
-                excess = len(self.state.conversation_history) - max_turns
-                self.state.conversation_history = self.state.conversation_history[excess:]
 
             self.thoughts_produced += 1
 
@@ -257,7 +269,7 @@ class Cognition(BaseNeuron):
                 "source": signal.source,
                 "origin_trace_id": origin_trace_id,
                 "meta": meta,
-                "history_length": len(self.state.conversation_history),
+                "history_length": self._conversation_length(),
                 "streaming": False,
                 "final": True,
                 "parse_errors": [],
@@ -276,6 +288,38 @@ class Cognition(BaseNeuron):
             return registry.get_schemas(tool_names)
         return registry.get_schemas()
 
+    def _conversation_history(self) -> List[Dict[str, Any]]:
+        if not self.brain:
+            return []
+        state = getattr(self.brain, "state", None)
+        if not isinstance(state, dict):
+            return []
+        convo = state.get("conversation")
+        return convo if isinstance(convo, list) else []
+
+    def _conversation_length(self) -> int:
+        return len(self._conversation_history())
+
+    def _recent_history(self, n: int = 10) -> List[Dict[str, Any]]:
+        history = self._conversation_history()
+        if n <= 0:
+            return []
+        return history[-n:]
+
+    def _clear_conversation(self) -> None:
+        if not self.brain:
+            return
+        state = getattr(self.brain, "state", None)
+        if not isinstance(state, dict):
+            return
+        convo = state.get("conversation")
+        if not isinstance(convo, list):
+            return
+        preserved = []
+        if convo and isinstance(convo[0], dict) and convo[0].get("role") == "system":
+            preserved.append(convo[0])
+        state["conversation"] = preserved
+
     async def _think_native(
         self,
         input_content: Union[str, list],
@@ -290,14 +334,21 @@ class Cognition(BaseNeuron):
         messages = [{"role": "user", "content": input_content}]
         response_parts: List[str] = []
 
-        async for chunk in self.brain.think(
-            messages,
-            tools=tools,
-            stream=stream,
-            use_async=use_async,
-            tool_choice=tool_choice,
-        ):
-            response_parts.append(chunk)
+        try:
+            async for chunk in self.brain.think(
+                messages,
+                tools=tools,
+                stream=stream,
+                use_async=use_async,
+                tool_choice=tool_choice,
+            ):
+                response_parts.append(chunk)
+        except Exception as exc:
+            if self.config.error_policy == ERROR_POLICY_USER_FALLBACK:
+                logger.warning("Non-streaming think failed; returning fallback: %s", exc)
+                return self.config.error_fallback_message
+            logger.error("Non-streaming think failed; fail-fast enabled: %s", exc)
+            raise
 
         return "".join(response_parts)
 
@@ -553,7 +604,11 @@ class Cognition(BaseNeuron):
                         response_parts.append(chunk)
                 return "".join(response_parts) if response_parts else ""
             except Exception as e:
-                logger.warning(f"Brain error: {e}, returning placeholder")
+                if self.config.error_policy == ERROR_POLICY_USER_FALLBACK:
+                    logger.warning("Brain error; returning fallback: %s", e)
+                    return self.config.error_fallback_message
+                logger.error("Brain error with fail-fast policy: %s", e)
+                raise
 
         preview = input_content if isinstance(input_content, str) else "[multimodal]"
         return f"[Cognition] Received: {preview[:100]}..."
@@ -568,7 +623,7 @@ class Cognition(BaseNeuron):
                 "type": "state",
                 "thinking": self.state.thinking,
                 "last_thought": self.state.last_thought,
-                "history_length": len(self.state.conversation_history),
+                "history_length": self._conversation_length(),
                 "has_brain": self.brain is not None,
             }
 
@@ -576,11 +631,11 @@ class Cognition(BaseNeuron):
             n = data.get("n", 10)
             return {
                 "type": "history",
-                "history": self.state.get_recent_history(n),
+                "history": self._recent_history(n),
             }
 
         elif query_type == "clear":
-            self.state.clear_history()
+            self._clear_conversation()
             self.state.last_thought = None
             return {
                 "type": "clear",
@@ -613,8 +668,6 @@ class Cognition(BaseNeuron):
         if not message_text:
             message_text = self._fallback_action_result_text(action_results)
 
-        self.state.add_turn("user", prompt)
-        self.state.add_turn("assistant", message_text)
         self.state.last_thought = message_text
 
         return {
@@ -663,7 +716,7 @@ class Cognition(BaseNeuron):
         """Return health status."""
         health = super().health_check()
         health["thinking"] = self.state.thinking
-        health["history_length"] = len(self.state.conversation_history)
+        health["history_length"] = self._conversation_length()
         health["thoughts_produced"] = self.thoughts_produced
         health["has_brain"] = self.brain is not None
         return health
@@ -676,7 +729,6 @@ class Cognition(BaseNeuron):
         """Deserialize state."""
         parsed = json.loads(data)
         self.state = CognitionState(
-            conversation_history=parsed.get("conversation_history", []),
             last_thought=parsed.get("last_thought"),
             thinking=False,
             last_hint_trace_id=parsed.get("last_hint_trace_id"),

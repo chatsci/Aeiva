@@ -18,8 +18,12 @@ Usage:
     await neuron.run_forever()
 """
 
+import json
 import logging
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from aeiva.neuron import BaseNeuron, Signal, NeuronConfig
@@ -53,12 +57,20 @@ class ActuatorNeuronConfig(NeuronConfig):
         output_event: Event name for execution results
         tools: List of tool names to load
         parallel_execution: Whether to execute independent actions in parallel
+        log_enabled: Whether to persist execution logs to disk
+        log_dir: Base directory for actuator logs
+        log_file: Default log filename when not using daily logs
+        log_daily: Whether to write one log file per day (YYYY-MM-DD.md)
     """
 
     input_events: List[str] = field(default_factory=default_input_events)
     output_event: str = EventNames.ACTION_RESULT
     tools: List[str] = field(default_factory=list)
     parallel_execution: bool = False
+    log_enabled: bool = True
+    log_dir: str = "storage/actuator"
+    log_file: str = "ActuatorLog.md"
+    log_daily: bool = True
 
 
 class ActuatorNeuron(BaseNeuron):
@@ -120,6 +132,10 @@ class ActuatorNeuron(BaseNeuron):
             input_events=config_dict.get("input_events", default_input_events()),
             output_event=config_dict.get("output_event", EventNames.ACTION_RESULT),
             parallel_execution=config_dict.get("parallel_execution", False),
+            log_enabled=config_dict.get("log_enabled", True),
+            log_dir=config_dict.get("log_dir", "storage/actuator"),
+            log_file=config_dict.get("log_file", "ActuatorLog.md"),
+            log_daily=config_dict.get("log_daily", True),
         )
 
     async def setup(self) -> None:
@@ -156,6 +172,154 @@ class ActuatorNeuron(BaseNeuron):
     def get_tool(self, name: str):
         """Get a tool by name from registry."""
         return self._registry.get(name)
+
+    def _record_execution(
+        self,
+        *,
+        name: str,
+        arguments: Dict[str, Any],
+        started_at: float,
+        ended_at: float,
+        success: bool,
+        error: Optional[str] = None,
+    ) -> None:
+        self.execution_history.append(
+            {
+                "tool": name,
+                "arguments": arguments,
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "duration_ms": round((ended_at - started_at) * 1000, 2),
+                "success": success,
+                "error": error,
+            }
+        )
+        if self.config.log_enabled:
+            try:
+                self._append_execution_log(
+                    tool=name,
+                    arguments=arguments,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    duration_ms=round((ended_at - started_at) * 1000, 2),
+                    success=success,
+                    error=error,
+                )
+            except Exception:
+                logger.exception("Actuator log write failed")
+
+    def _log_path(self, now: Optional[datetime] = None) -> Path:
+        base_dir = Path(self.config.log_dir).expanduser()
+        if self.config.log_daily:
+            stamp = (now or datetime.now()).strftime("%Y-%m-%d")
+            filename = f"{stamp}.md"
+        else:
+            filename = self.config.log_file or "ActuatorLog.md"
+        return base_dir / filename
+
+    def _ensure_log_header(self, path: Path, now: Optional[datetime] = None) -> None:
+        if path.exists():
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        title = "Actuator Log"
+        if self.config.log_daily:
+            date_str = (now or datetime.now()).strftime("%Y-%m-%d")
+            title = f"Actuator Log ({date_str})"
+        header = f"# {title}\n\n"
+        path.write_text(header, encoding="utf-8")
+
+    def _append_execution_log(
+        self,
+        *,
+        tool: str,
+        arguments: Dict[str, Any],
+        started_at: float,
+        ended_at: float,
+        duration_ms: float,
+        success: bool,
+        error: Optional[str],
+    ) -> None:
+        now = datetime.now()
+        path = self._log_path(now)
+        self._ensure_log_header(path, now)
+        args_text = json.dumps(arguments, ensure_ascii=True, separators=(",", ":"))
+        timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+        status = "ok" if success else "error"
+        error_text = f" error={error}" if error else ""
+        line = (
+            f"- [{timestamp}] tool={tool} status={status} duration_ms={duration_ms} "
+            f"args={args_text}{error_text}\n"
+        )
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(line)
+
+    async def execute_tool(
+        self,
+        name: str,
+        arguments: Optional[Dict[str, Any]] = None,
+        *,
+        registry: Optional[ToolRegistry] = None,
+    ) -> Any:
+        """Execute a tool via the registry (Phase 2: passthrough + bookkeeping)."""
+        target_registry = registry or self._registry
+        args = arguments or {}
+        started_at = time.time()
+        try:
+            result = await target_registry.execute_direct(name, **args)
+            ended_at = time.time()
+            self._record_execution(
+                name=name,
+                arguments=args,
+                started_at=started_at,
+                ended_at=ended_at,
+                success=True,
+            )
+            return result
+        except Exception as exc:
+            ended_at = time.time()
+            self._record_execution(
+                name=name,
+                arguments=args,
+                started_at=started_at,
+                ended_at=ended_at,
+                success=False,
+                error=str(exc),
+            )
+            raise
+
+    def execute_tool_sync(
+        self,
+        name: str,
+        arguments: Optional[Dict[str, Any]] = None,
+        *,
+        registry: Optional[ToolRegistry] = None,
+    ) -> Any:
+        """Execute a tool synchronously via the registry (Phase 2 bookkeeping)."""
+        target_registry = registry or self._registry
+        args = arguments or {}
+        started_at = time.time()
+        try:
+            result = target_registry.execute_direct_sync(name, **args)
+            ended_at = time.time()
+            self._record_execution(
+                name=name,
+                arguments=args,
+                started_at=started_at,
+                ended_at=ended_at,
+                success=True,
+            )
+            return result
+        except Exception as exc:
+            ended_at = time.time()
+            self._record_execution(
+                name=name,
+                arguments=args,
+                started_at=started_at,
+                ended_at=ended_at,
+                success=False,
+                error=str(exc),
+            )
+            raise
 
     async def process(self, signal: Signal) -> Optional[Dict[str, Any]]:
         """

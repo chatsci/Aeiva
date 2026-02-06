@@ -3,19 +3,16 @@ Run Aeiva with Slack Socket Mode gateway.
 
 > aeiva-chat-slack --config configs/agent_config.yaml
 """
-import os
 import sys
 import signal
 import asyncio
 from pathlib import Path
 import click
 
-from aeiva.common.logger import setup_logging
 from aeiva.command.command_utils import (
     get_package_root,
-    get_log_dir,
     build_runtime,
-    resolve_env_vars,
+    setup_command_logger,
 )
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.slack_gateway import SlackGateway
@@ -27,38 +24,6 @@ _json_config = PACKAGE_ROOT / "configs" / "agent_config.json"
 _yaml_config = PACKAGE_ROOT / "configs" / "agent_config.yaml"
 DEFAULT_CONFIG_PATH = _json_config if _json_config.exists() else _yaml_config
 
-LOGS_DIR = get_log_dir()
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_LOG_PATH = LOGS_DIR / "aeiva-chat-slack.log"
-
-
-def _try_start_neo4j(logger):
-    """Start Neo4j if NEO4J_HOME is set; return process or None."""
-    neo4j_home = os.getenv("NEO4J_HOME")
-    if not neo4j_home:
-        logger.info("NEO4J_HOME not set — skipping Neo4j startup.")
-        return None
-    try:
-        from aeiva.command.command_utils import validate_neo4j_home, start_neo4j
-        validate_neo4j_home(logger, neo4j_home)
-        return start_neo4j(logger, neo4j_home)
-    except SystemExit:
-        logger.warning("Neo4j validation failed — continuing without Neo4j.")
-        return None
-    except Exception as exc:
-        logger.warning("Neo4j start failed (%s) — continuing without Neo4j.", exc)
-        return None
-
-
-def _try_stop_neo4j(logger, neo4j_process):
-    if neo4j_process is None:
-        return
-    try:
-        from aeiva.command.command_utils import stop_neo4j
-        stop_neo4j(logger, neo4j_process)
-    except Exception as exc:
-        logger.warning("Neo4j stop failed: %s", exc)
-
 
 @click.command()
 @click.option("--config", "-c", default=str(DEFAULT_CONFIG_PATH),
@@ -69,16 +34,8 @@ def run(config, verbose):
     """
     Starts the Aeiva Slack gateway with the provided configuration.
     """
-    project_root = PACKAGE_ROOT
-    logger_config_path = project_root / "configs" / "logger_config.yaml"
-    log_file_path = DEFAULT_LOG_PATH
-    if not os.access(LOGS_DIR, os.W_OK):
-        fallback_dir = project_root / "logs"
-        fallback_dir.mkdir(parents=True, exist_ok=True)
-        log_file_path = fallback_dir / "aeiva-chat-slack.log"
-    logger = setup_logging(
-        config_file_path=logger_config_path,
-        log_file_path=log_file_path,
+    logger = setup_command_logger(
+        log_filename="aeiva-chat-slack.log",
         verbose=verbose,
     )
 
@@ -86,7 +43,6 @@ def run(config, verbose):
     config_path = Path(config)
     try:
         config_dict = from_json_or_yaml(config_path)
-        resolve_env_vars(config_dict)
     except Exception as exc:
         logger.error(f"Failed to parse configuration file: {exc}")
         click.echo(f"Error: Failed to parse configuration file: {exc}")
@@ -102,8 +58,6 @@ def run(config, verbose):
     agent_cfg = config_dict.get("agent_config") or {}
     agent_cfg["ui_enabled"] = False
     config_dict["agent_config"] = agent_cfg
-
-    neo4j_process = _try_start_neo4j(logger)
 
     try:
         runtime, agent = build_runtime(config_dict)
@@ -138,7 +92,6 @@ def run(config, verbose):
         logger.error(f"Error running Slack gateway: {exc}")
         click.echo(f"Error: {exc}")
     finally:
-        _try_stop_neo4j(logger, neo4j_process)
         logger.info("Cleanup completed.")
 
 

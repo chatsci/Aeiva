@@ -5,6 +5,7 @@ import collections
 import logging
 import re
 import time
+from dataclasses import dataclass
 from functools import wraps
 from typing import Callable, Dict, List, Any, Optional, Union
 from aeiva.event.event import Event
@@ -12,6 +13,43 @@ from aeiva.event.event import Event
 # Configure logging
 # logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('event_bus')
+
+
+def _compile_event_pattern(event_pattern: str) -> re.Pattern[str]:
+    """
+    Compile an EventBus subscription pattern with explicit wildcard semantics.
+
+    Rules:
+    - Literal characters are matched literally (including `.`).
+    - `*` matches any character sequence (including dots).
+    - Matching is anchored to the full event name.
+    """
+    if not isinstance(event_pattern, str) or not event_pattern.strip():
+        raise ValueError("event_pattern must be a non-empty string")
+
+    fragments = [re.escape(part) for part in event_pattern.split("*")]
+    regex = ".*".join(fragments)
+    return re.compile(rf"^{regex}$")
+
+
+@dataclass(frozen=True)
+class _EventPatternMatcher:
+    """
+    Wrapper around compiled regex that preserves the original pattern string.
+
+    Keeping `pattern` equal to the user-supplied value preserves the existing
+    debugging/test ergonomics while enforcing strict literal matching semantics.
+    """
+
+    pattern: str
+    _regex: re.Pattern[str]
+
+    @classmethod
+    def from_pattern(cls, event_pattern: str) -> "_EventPatternMatcher":
+        return cls(pattern=event_pattern, _regex=_compile_event_pattern(event_pattern))
+
+    def fullmatch(self, event_name: str):
+        return self._regex.fullmatch(event_name)
 
 class EventCancelled(Exception):
     """Exception to indicate that an event has been cancelled."""
@@ -68,8 +106,9 @@ class EventBus:
             priority (int, optional): Priority of the callback.
             once (bool, optional): If True, unsubscribe after one call.
         """
+        compiled_pattern = _EventPatternMatcher.from_pattern(event_pattern)
         subscriber = {
-            'pattern': re.compile(event_pattern.replace('*', '.*')),
+            'pattern': compiled_pattern,
             'callback': callback,
             'priority': priority,
             'once': once

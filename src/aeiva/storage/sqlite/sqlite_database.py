@@ -51,8 +51,10 @@ class SQLiteDatabase(RelationalDatabase):
         """
         if self.cursor:
             self.cursor.close()
+            self.cursor = None
         if self.connection:
             self.connection.close()
+            self.connection = None
 
     def insert_record(self, table: str, record: Dict[str, Any]) -> Any:
         """

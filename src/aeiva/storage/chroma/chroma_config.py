@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Optional, Any
+from typing import Any, Optional
+
 from aeiva.config.base_config import BaseConfig
 
 
@@ -12,6 +13,14 @@ class ChromaConfig(BaseConfig):
     collection_name: str = field(
         default="mem0",
         metadata={"help": "Name of the collection."}
+    )
+    embedding_model_dims: int = field(
+        default=1536,
+        metadata={"help": "Embedding vector dimension metadata for compatibility."}
+    )
+    metric_type: str = field(
+        default="COSINE",
+        metadata={"help": "Distance metric metadata (e.g., COSINE, L2)."}
     )
     client: Optional[Any] = field(
         default=None,
@@ -34,4 +43,7 @@ class ChromaConfig(BaseConfig):
         super().__post_init__()
         # Validate that either path or host and port are provided
         if not self.path and not (self.host and self.port):
-            raise ValueError("Either 'path' for local storage or both 'host' and 'port' for remote connection must be provided.")
+            raise ValueError(
+                "Either 'path' for local storage or both 'host' and 'port' "
+                "for remote connection must be provided."
+            )

@@ -32,6 +32,8 @@ async def shell(
     Returns:
         Dictionary with stdout, stderr, and return_code.
     """
+    if isinstance(cwd, str) and not cwd.strip():
+        cwd = None
     try:
         process = await asyncio.create_subprocess_shell(
             command,

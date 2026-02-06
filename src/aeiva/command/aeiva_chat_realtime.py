@@ -11,7 +11,6 @@ Requires the 'realtime' extra:
     pip install -e ".[realtime]"
 """
 
-import os
 import sys
 import threading
 import asyncio
@@ -23,9 +22,12 @@ import click
 from dotenv import load_dotenv
 
 from aeiva.util.file_utils import from_json_or_yaml
-from aeiva.util.path_utils import get_project_root_dir
-from aeiva.common.logger import setup_logging
-from aeiva.command.command_utils import get_package_root, get_log_dir, build_runtime
+from aeiva.command.command_utils import (
+    get_package_root,
+    build_runtime,
+    prepare_runtime_config,
+    setup_command_logger,
+)
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.gateway_base import ResponseQueueGateway
 
@@ -34,9 +36,46 @@ logger = logging.getLogger(__name__)
 PACKAGE_ROOT = get_package_root()
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / 'configs' / 'agent_config_realtime.yaml'
 
-LOGS_DIR = get_log_dir()
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_LOG_PATH = LOGS_DIR / 'aeiva-chat-realtime.log'
+
+def _build_safe_reply_on_pause_class(reply_on_pause_cls):
+    """
+    Wrap a ReplyOnPause-compatible class with emit re-entrancy protection.
+
+    FastRTC clones stream handlers via `.copy()` for each connection. The upstream
+    `ReplyOnPause.copy()` returns the base class, which drops subclass safeguards.
+    We override `copy()` here so every cloned handler keeps the lock-guarded
+    `emit()` implementation.
+    """
+
+    class SafeReplyOnPause(reply_on_pause_cls):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._emit_lock = threading.Lock()
+
+        def emit(self):
+            if not self._emit_lock.acquire(blocking=False):
+                return None
+            try:
+                return super().emit()
+            finally:
+                self._emit_lock.release()
+
+        def copy(self):
+            return self.__class__(
+                self.fn,
+                self.startup_fn,
+                self.algo_options,
+                self.model_options,
+                self.can_interrupt,
+                self.expected_layout,
+                self.output_sample_rate,
+                self.output_frame_size,
+                self.input_sample_rate,
+                self.model,
+                self.needs_args,
+            )
+
+    return SafeReplyOnPause
 
 
 def _try_import_fastrtc():
@@ -73,11 +112,8 @@ def run(config, verbose):
     """Starts the Aeiva multimodal real-time chat interface."""
 
     # 1. Setup logging
-    project_root = get_project_root_dir()
-    logger_config_path = project_root / "configs" / "logger_config.yaml"
-    log = setup_logging(
-        config_file_path=logger_config_path,
-        log_file_path=DEFAULT_LOG_PATH,
+    log = setup_command_logger(
+        log_filename="aeiva-chat-realtime.log",
         verbose=verbose,
     )
 
@@ -86,6 +122,7 @@ def run(config, verbose):
 
     log.info(f"Loading configuration from {config}")
     config_dict = from_json_or_yaml(config)
+    prepare_runtime_config(config_dict)
 
     realtime_cfg = config_dict.get("realtime_config", {})
     realtime_mode = realtime_cfg.get("mode", "turn_based")
@@ -136,20 +173,6 @@ def run(config, verbose):
     queue_gateway.register_handlers()
     log.info("Registered response queue gateway handlers.")
 
-    # 6. Optionally start Neo4j (skip if NEO4J_HOME not set)
-    neo4j_home = os.getenv('NEO4J_HOME')
-    neo4j_process = None
-    if neo4j_home:
-        try:
-            from aeiva.command.command_utils import validate_neo4j_home, start_neo4j
-            validate_neo4j_home(log, neo4j_home)
-            neo4j_process = start_neo4j(log, neo4j_home)
-        except SystemExit:
-            log.warning("Neo4j validation failed, continuing without Neo4j.")
-            neo4j_process = None
-    else:
-        log.info("NEO4J_HOME not set. Skipping Neo4j startup (optional for realtime mode).")
-
     demo, _handler = build_turn_based_realtime_ui(
         config_dict=config_dict,
         agent=agent,
@@ -178,10 +201,6 @@ def run(config, verbose):
                 log.error(f"Error in fallback session close: {e}")
 
     log.info("Agent shutdown complete.")
-
-    if neo4j_process:
-        from aeiva.command.command_utils import stop_neo4j
-        stop_neo4j(log, neo4j_process)
 
 
 def build_turn_based_realtime_ui(
@@ -216,18 +235,7 @@ def build_turn_based_realtime_ui(
         route_token=route_token,
     )
 
-    class SafeReplyOnPause(ReplyOnPause):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self._emit_lock = threading.Lock()
-
-        def emit(self):
-            if not self._emit_lock.acquire(blocking=False):
-                return None
-            try:
-                return super().emit()
-            finally:
-                self._emit_lock.release()
+    SafeReplyOnPause = _build_safe_reply_on_pause_class(ReplyOnPause)
 
     with gr.Blocks(title="AEIVA Multimodal Real-Time Chat") as demo:
         gr.HTML(
@@ -322,11 +330,7 @@ def run_live_realtime_ui(config_dict: dict, log: logging.Logger, provider: str) 
     from aeiva.realtime.openai_realtime import OpenAIRealtimeConfig, OpenAIRealtimeHandler
 
     llm_cfg = config_dict.get("llm_gateway_config", {})
-    api_key = llm_cfg.get("llm_api_key")
-    if not api_key:
-        env_var = llm_cfg.get("llm_api_key_env_var")
-        if env_var:
-            api_key = os.getenv(env_var)
+    api_key = (llm_cfg.get("llm_api_key") or "").strip()
     if not api_key:
         click.echo("Error: OpenAI API key is required for live realtime mode.")
         sys.exit(1)

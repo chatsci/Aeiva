@@ -9,8 +9,12 @@ they deserve dedicated tools to save time/tokens:
 
 from .web_search import web_search
 from .calculator import calculator
+from .system_tools import system_which, system_open, system_notify
 
 __all__ = [
     "web_search",
     "calculator",
+    "system_which",
+    "system_open",
+    "system_notify",
 ]

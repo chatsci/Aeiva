@@ -19,7 +19,6 @@ Architecture:
                                          → ActuatorNeuron → Execution
 """
 
-import sys
 import asyncio
 import logging
 import json
@@ -38,6 +37,7 @@ from aeiva.cognition.goal.goal import GoalNeuron
 from aeiva.cognition.world_model.world_model import WorldModelNeuron
 from aeiva.event.event_names import EventNames
 from aeiva.action.actuator import ActuatorNeuron
+from aeiva.tool.registry import bind_tool_executor, reset_tool_executor
 from aeiva.neuron import BaseNeuron, Signal
 from aeiva.event.event_bus import EventBus
 from aeiva.event.event import Event
@@ -214,6 +214,36 @@ class Agent:
         for neuron in self._get_neurons():
             await neuron.setup()
 
+    async def _run_startup_tasks(self) -> None:
+        """Run one-shot startup tasks after neuron setup."""
+        if self.raw_memory_summary:
+            try:
+                result = await self.raw_memory_summary.startup_catchup()
+                logger.info("SummaryMemory startup catchup result: %s", result)
+            except Exception as exc:
+                logger.warning("SummaryMemory startup catchup failed: %s", exc)
+
+    async def _setup_runtime(self) -> None:
+        """Create and initialize runtime neurons and startup tasks."""
+        await self._setup_neurons()
+        await self._run_startup_tasks()
+
+    def _bind_tool_executor_context(self):
+        """Bind action executor for the current async context."""
+        if self.action is None:
+            return None
+        return bind_tool_executor(self.action)
+
+    @staticmethod
+    def _reset_tool_executor_context(token) -> None:
+        """Reset action executor binding from _bind_tool_executor_context()."""
+        if token is None:
+            return
+        try:
+            reset_tool_executor(token)
+        except Exception as exc:
+            logger.warning("Failed to reset tool executor context: %s", exc)
+
     def setup(self) -> None:
         """
         Set up all systems (sync version).
@@ -226,7 +256,7 @@ class Agent:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.run(self._setup_neurons())
+            asyncio.run(self._setup_runtime())
         else:
             raise RuntimeError("Agent.setup() called inside a running event loop; use await setup_async().")
 
@@ -240,7 +270,7 @@ class Agent:
         Use this when already in an async context.
         """
         self._create_neurons()
-        await self._setup_neurons()
+        await self._setup_runtime()
         self._ensure_emotion_log_file()
         logger.info("Agent setup complete")
 
@@ -258,6 +288,7 @@ class Agent:
         self.event_bus.start()
         self.event_bus.loop = asyncio.get_running_loop()
         self._stop_requested = False
+        tool_executor_token = self._bind_tool_executor_context()
 
         # Set up event handlers
         self.setup_event_handlers()
@@ -286,7 +317,10 @@ class Agent:
         except Exception as e:
             logger.error(f"Unexpected error in agent run loop: {e}")
         finally:
-            await self._shutdown(tasks, raw_memory_session)
+            try:
+                await self._shutdown(tasks, raw_memory_session)
+            finally:
+                self._reset_tool_executor_context(tool_executor_token)
 
     async def _shutdown(
         self,
@@ -343,60 +377,27 @@ class Agent:
         if not self.cognition:
             return ""
 
+        tool_executor_token = self._bind_tool_executor_context()
         try:
             response = await self.cognition.think(input_text)
             return response
         except Exception as e:
             logger.error(f"Error in process_input: {e}")
+            policy = getattr(getattr(self.cognition, "config", None), "error_policy", "fail_fast")
+            if str(policy).lower() == "fail_fast":
+                raise
             return ""
+        finally:
+            self._reset_tool_executor_context(tool_executor_token)
 
     def setup_event_handlers(self) -> None:
         """Set up event handlers for cognition output and actions."""
-        ui_enabled = bool((self.config_dict.get("agent_config") or {}).get("ui_enabled", True))
-
-        if ui_enabled:
-            @self.event_bus.on(EventNames.COGNITION_THOUGHT)
-            async def handle_cognition_thought(event: Event):
-                """Handle cognition output and route to appropriate interface."""
-                payload = event.payload
-                streaming = False
-                final = True
-
-                if isinstance(payload, Signal):
-                    data = payload.data
-                    if isinstance(data, dict):
-                        response_text = data.get("thought") or data.get("output") or str(data)
-                        source_event = data.get("source", payload.source)
-                        streaming = bool(data.get("streaming", False))
-                        final = bool(data.get("final", True))
-                    else:
-                        response_text = str(data)
-                        source_event = payload.source
-                elif isinstance(payload, dict):
-                    response_text = payload.get("thought") or payload.get("output") or str(payload)
-                    source_event = payload.get("source", "unknown")
-                    streaming = bool(payload.get("streaming", False))
-                    final = bool(payload.get("final", True))
-                else:
-                    response_text = str(payload)
-                    source_event = "unknown"
-
-                if "gradio" in source_event or "gradio" in str(event.name):
-                    await self.handle_gradio_response_text(response_text, final=final if streaming else True)
-                elif "realtime" in source_event or "realtime" in str(event.name):
-                    await self.handle_realtime_response_text(response_text, final=final if streaming else True)
-                else:
-                    await self.handle_terminal_response_text(response_text)
-
         @self.event_bus.on(EventNames.EMOTION_CHANGED)
         async def handle_emotion_changed(event: Event):
             """Handle emotion updates."""
             payload = event.payload
             if isinstance(payload, Signal):
                 payload = payload.data
-            show_emotion = bool((self.config_dict.get("agent_config") or {}).get("show_emotion", False))
-            if show_emotion or (isinstance(payload, dict) and payload.get("show")):
-                await self.handle_terminal_emotion(payload)
             self._record_emotion(payload, event.name)
 
         @self.event_bus.on(EventNames.GOAL_CHANGED)
@@ -413,33 +414,6 @@ class Agent:
             """Handle agent stop requests."""
             logger.info("Agent stop requested.")
             self.request_stop()
-
-    async def handle_terminal_response_text(self, response_text: str) -> None:
-        """Emit response for terminal mode."""
-        sys.stdout.write("\r\033[K")
-        print("Response: ", end='', flush=True)
-        print(f"{response_text}", end='', flush=True)
-        print("\nYou: ", end='', flush=True)
-
-    async def handle_terminal_emotion(self, payload: Any) -> None:
-        """Emit emotion state to terminal."""
-        if not payload:
-            return
-        label = state = expression = None
-        if isinstance(payload, dict):
-            label = payload.get("label")
-            state = payload.get("state")
-            expression = payload.get("expression")
-        message = "[Emotion]"
-        if label is not None:
-            message += f" label={label}"
-        if state is not None:
-            message += f" state={state}"
-        if expression is not None:
-            message += f" expression={expression}"
-        sys.stdout.write("\r\033[K")
-        print(message, flush=True)
-        print("You: ", end='', flush=True)
 
     def _record_emotion(self, payload: Any, source_event: str) -> None:
         """Record emotion to log file."""
@@ -495,26 +469,6 @@ class Agent:
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             path.write_text("# Agent Emotion Log\n\n", encoding="utf-8")
-
-    async def handle_gradio_response_text(self, response_text: str, final: bool = True) -> None:
-        """Emit response for Gradio mode."""
-        stream = self.config_dict.get("llm_gateway_config", {}).get("llm_stream", False)
-        logger.info(f"Handling Gradio response, stream={stream}")
-
-        if response_text:
-            await self.event_bus.emit(EventNames.RESPONSE_GRADIO, payload=response_text)
-        if stream and final:
-            await self.event_bus.emit(EventNames.RESPONSE_GRADIO, payload="<END_OF_RESPONSE>")
-
-    async def handle_realtime_response_text(self, response_text: str, final: bool = True) -> None:
-        """Emit response for realtime (voice/video) mode."""
-        stream = self.config_dict.get("llm_gateway_config", {}).get("llm_stream", False)
-        logger.info(f"Handling realtime response, stream={stream}")
-
-        if response_text:
-            await self.event_bus.emit(EventNames.RESPONSE_REALTIME, payload=response_text)
-        if stream and final:
-            await self.event_bus.emit(EventNames.RESPONSE_REALTIME, payload="<END_OF_RESPONSE>")
 
     # Legacy properties for backward compatibility
     @property

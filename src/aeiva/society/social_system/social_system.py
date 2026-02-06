@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SocialSystem(ABC):
     """
@@ -94,4 +97,4 @@ class SocialSystem(ABC):
         Args:
             error (Exception): The exception that was raised.
         """
-        print(f"SocialSystem encountered an error: {error}")
+        logger.error("SocialSystem encountered an error: %s", error)

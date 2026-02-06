@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from aeiva.host.host_config import HostConfig, HostEndpointConfig
+from aeiva.host.approval_policy import ApprovalPolicy
 
 
 @dataclass
@@ -28,6 +29,7 @@ class HostRouter:
 
     def __init__(self, config: HostConfig):
         self.config = config
+        self._approval_policy = ApprovalPolicy.from_dict(config.approval_policy)
         self._hosts: Dict[str, HostEndpoint] = {}
         for name, host_cfg in config.hosts.items():
             self._hosts[name] = HostEndpoint(
@@ -63,11 +65,32 @@ class HostRouter:
                 return host
         return None
 
-    async def execute(self, tool: str, args: Dict[str, Any]) -> Any:
+    def _prepare_execution(
+        self, tool: str, args: Dict[str, Any]
+    ) -> tuple[Optional[HostEndpoint], Dict[str, Any], Optional[Dict[str, Any]]]:
         host = self._pick_host(tool)
         if host is None:
+            return None, {}, None
+        args_clean = dict(args or {})
+        approved = bool(args_clean.pop("__approved", False))
+        action_key = self._action_key(tool, args_clean)
+        classification = self._approval_policy.classify(action_key)
+        if classification == "confirm" and not approved:
+            return host, args_clean, {
+                "success": False,
+                "error": "approval_required",
+                "action": action_key,
+                "message": "User confirmation required before executing this action.",
+            }
+        return host, args_clean, None
+
+    async def execute(self, tool: str, args: Dict[str, Any]) -> Any:
+        host, args_clean, block = self._prepare_execution(tool, args)
+        if host is None:
             return None
-        payload = {"tool": tool, "args": args, "id": str(uuid.uuid4())}
+        if block is not None:
+            return block
+        payload = {"tool": tool, "args": args_clean, "id": str(uuid.uuid4())}
         async with httpx.AsyncClient(timeout=host.timeout) as client:
             resp = await client.post(
                 f"{host.url}/invoke",
@@ -81,10 +104,12 @@ class HostRouter:
         raise RuntimeError(data.get("error") or "host execution failed")
 
     def execute_sync(self, tool: str, args: Dict[str, Any]) -> Any:
-        host = self._pick_host(tool)
+        host, args_clean, block = self._prepare_execution(tool, args)
         if host is None:
             return None
-        payload = {"tool": tool, "args": args, "id": str(uuid.uuid4())}
+        if block is not None:
+            return block
+        payload = {"tool": tool, "args": args_clean, "id": str(uuid.uuid4())}
         with httpx.Client(timeout=host.timeout) as client:
             resp = client.post(
                 f"{host.url}/invoke",
@@ -96,6 +121,18 @@ class HostRouter:
         if data.get("ok"):
             return data.get("result")
         raise RuntimeError(data.get("error") or "host execution failed")
+
+    def _action_key(self, tool: str, args: Dict[str, Any]) -> str:
+        if tool == "filesystem":
+            op = args.get("operation") or ""
+            if op:
+                return f"{tool}.{op}"
+        if tool == "shell":
+            cmd = args.get("command") or ""
+            head = cmd.strip().split()[0] if isinstance(cmd, str) and cmd.strip() else ""
+            if head:
+                return f"{tool}:{head}"
+        return tool
 
 
 def configure_host_router(config_dict: Dict[str, Any]) -> Optional[HostRouter]:

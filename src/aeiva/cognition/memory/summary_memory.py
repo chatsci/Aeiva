@@ -56,6 +56,7 @@ class SummaryMemoryNeuronConfig(NeuronConfig):
     llm_gateway_config: Dict[str, Any] = field(default_factory=dict)
     input_events: List[str] = field(default_factory=lambda: DEFAULT_INPUT_EVENTS.copy())
     summary_periods: List[str] = field(default_factory=lambda: DEFAULT_SUMMARY_PERIODS.copy())
+    startup_catchup_enabled: bool = True
     summary_temperature: float = 0.2
     summary_max_chars: int = 8000
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
@@ -105,6 +106,7 @@ class SummaryMemoryNeuron(BaseNeuron):
             llm_gateway_config=data.get("llm_gateway_config", {}),
             input_events=data.get("input_events", DEFAULT_INPUT_EVENTS.copy()),
             summary_periods=data.get("summary_periods", DEFAULT_SUMMARY_PERIODS.copy()),
+            startup_catchup_enabled=bool(data.get("startup_catchup_enabled", True)),
             summary_temperature=data.get("summary_temperature", 0.2),
             summary_max_chars=data.get("summary_max_chars", 8000),
             system_prompt=data.get("system_prompt", DEFAULT_SYSTEM_PROMPT),
@@ -116,7 +118,7 @@ class SummaryMemoryNeuron(BaseNeuron):
             self._llm_client = self._build_llm_client(self.config.llm_gateway_config)
         except Exception as exc:
             logger.warning("SummaryMemoryNeuron disabled (LLM init failed): %s", exc)
-            self._enabled = True
+            self._enabled = False
             self._llm_client = None
 
     # ================================================================
@@ -131,9 +133,13 @@ class SummaryMemoryNeuron(BaseNeuron):
         unsummarized sessions and missing period summaries, then generates
         them via LLM.
         """
+        if not self.config.startup_catchup_enabled:
+            logger.info("SummaryMemoryNeuron startup catchup disabled by config")
+            return {"skipped": True, "reason": "disabled_by_config"}
+
         if not self._enabled:
             logger.info("SummaryMemoryNeuron disabled, skipping startup catchup")
-            return {"skipped": True}
+            return {"skipped": True, "reason": "llm_unavailable"}
 
         user_id = self.config.raw_memory.user_id
         results = {"dialogue_summaries": 0, "period_summaries": 0, "user_updates": 0}
@@ -524,16 +530,37 @@ class SummaryMemoryNeuron(BaseNeuron):
             text = await self._read_file(path)
             block = self._extract_session_block(text, session_id)
             return self._strip_summary_sections(block)
-        paths = self._paths_for_period(user_id, period, timestamp)
+
+        period = period.lower()
+        if period == "daily":
+            paths = self._paths_for_period(user_id, period, timestamp)
+            if not paths:
+                return ""
+            texts = []
+            for path in paths:
+                text = await self._read_file(path)
+                text = self._strip_summary_sections(text)
+                if text.strip():
+                    texts.append(text)
+            return "\n\n".join(texts)
+
+        lower_period = {
+            "weekly": "daily",
+            "monthly": "weekly",
+            "yearly": "monthly",
+        }.get(period)
+        if not lower_period:
+            return ""
+        paths = self._summary_paths_for_period(user_id, period, timestamp)
         if not paths:
             return ""
-        texts = []
+        heading = RawMemoryJournal.summary_heading(lower_period)
+        summaries: List[str] = []
         for path in paths:
             text = await self._read_file(path)
-            text = self._strip_summary_sections(text)
-            if text.strip():
-                texts.append(text)
-        return "\n\n".join(texts)
+            blocks = self._extract_summary_blocks(text, heading)
+            summaries.extend([b for b in blocks if b.strip()])
+        return "\n\n".join(summaries).strip()
 
     async def _summarize_period(
         self, user_id: str, period: str, timestamp: datetime, payload: Dict[str, Any],
@@ -566,6 +593,58 @@ class SummaryMemoryNeuron(BaseNeuron):
             parsed = self._parse_daily_filename(path.name)
             if parsed and self._period_key_from_date(period, parsed) == target_key:
                 paths.append(path)
+        return paths
+
+    def _summary_paths_for_period(self, user_id: str, period: str, timestamp: datetime) -> List[Path]:
+        """Return the lower-level summary file paths used to build the target period."""
+        period = period.lower()
+        if period == "weekly":
+            return self._paths_for_period(user_id, "weekly", timestamp)
+        if period == "monthly":
+            return self._weekly_paths_for_month(user_id, timestamp)
+        if period == "yearly":
+            return self._monthly_paths_for_year(user_id, timestamp)
+        return []
+
+    def _weekly_paths_for_month(self, user_id: str, timestamp: datetime) -> List[Path]:
+        user_dir = self._user_dir(user_id)
+        if not user_dir.exists():
+            return []
+        target = self._local_date(timestamp)
+        target_year = target.year
+        target_month = target.month
+        paths: List[Path] = []
+        for path in sorted(user_dir.glob("??-Week??.md")):
+            match = re.match(r"^(\\d{2})-Week(\\d{2})\\.md$", path.name)
+            if not match:
+                continue
+            year = 2000 + int(match.group(1))
+            week = int(match.group(2))
+            try:
+                week_start = date.fromisocalendar(year, week, 1)
+            except ValueError:
+                continue
+            for offset in range(7):
+                day = week_start + timedelta(days=offset)
+                if day.year == target_year and day.month == target_month:
+                    paths.append(path)
+                    break
+        return paths
+
+    def _monthly_paths_for_year(self, user_id: str, timestamp: datetime) -> List[Path]:
+        user_dir = self._user_dir(user_id)
+        if not user_dir.exists():
+            return []
+        target_year = self._local_date(timestamp).year
+        paths: List[Path] = []
+        for path in sorted(user_dir.glob("??-??.md")):
+            match = re.match(r"^(\\d{2})-(\\d{2})\\.md$", path.name)
+            if not match:
+                continue
+            year = 2000 + int(match.group(1))
+            if year != target_year:
+                continue
+            paths.append(path)
         return paths
 
     # ================================================================
@@ -670,6 +749,31 @@ class SummaryMemoryNeuron(BaseNeuron):
             if not skipping:
                 stripped.append(line)
         return "\n".join(stripped).strip()
+
+    @staticmethod
+    def _extract_summary_blocks(text: str, heading: str) -> List[str]:
+        if not text or not heading:
+            return []
+        lines = text.splitlines()
+        blocks: List[str] = []
+        collecting = False
+        current: List[str] = []
+        for line in lines:
+            if line.startswith(heading):
+                if current:
+                    blocks.append("\n".join(current).strip())
+                    current = []
+                collecting = True
+                continue
+            if collecting and (line.startswith("### ") or line.startswith("## ") or line.startswith("# ")):
+                blocks.append("\n".join(current).strip())
+                current = []
+                collecting = False
+            if collecting:
+                current.append(line)
+        if collecting and current:
+            blocks.append("\n".join(current).strip())
+        return [b for b in blocks if b]
 
     @staticmethod
     def _extract_session_block(text: str, session_id: str) -> str:

@@ -3,17 +3,41 @@ import shutil
 import json
 import yaml
 import logging
+from yaml.loader import SafeLoader
 
 
 logger = logging.getLogger(__name__)
+
+
+class _UniqueKeyLoader(SafeLoader):
+    """YAML loader that rejects duplicate keys in mapping nodes."""
+
+
+def _construct_mapping_no_duplicates(loader: _UniqueKeyLoader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            line_number = key_node.start_mark.line + 1
+            raise ValueError(
+                f"Duplicate key '{key}' found in YAML at line {line_number}."
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_mapping_no_duplicates,
+)
 
 def ensure_dir(file_path):
     dir_path = os.path.dirname(file_path)
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
-        print(f"Directory {dir_path} created")
+        logger.info("Directory created: %s", dir_path)
     else:
-        print(f"Directory {dir_path} already exists")
+        logger.info("Directory already exists: %s", dir_path)
 
     return dir_path
 
@@ -23,13 +47,13 @@ def copy_file_to_dst(input_file, dst_folder):
         os.makedirs(dst_folder, exist_ok=True)
         dst_file = os.path.join(dst_folder, os.path.basename(input_file))
         if os.path.exists(dst_file):
-            print(f"File {dst_file} already exists.")  # do not overwrite
+            logger.warning("File already exists (skipping): %s", dst_file)
             return
 
         shutil.copy(input_file, dst_file)
-        print(f"Copied {input_file} to {dst_folder}.")
+        logger.info("Copied %s to %s.", input_file, dst_folder)
     else:
-        print(f"File {input_file} does not exist.")
+        logger.warning("File does not exist: %s", input_file)
 
 
 def is_video_file(filepath: str) -> bool:
@@ -78,15 +102,21 @@ def from_json_or_yaml(filepath: str) -> dict:
         with open(filepath, 'r', encoding='utf-8') as f:
             if ext == '.json':
                 config = json.load(f)
+                if not isinstance(config, dict):
+                    raise ValueError(f"Configuration root must be an object in '{filepath}'.")
                 logger.info(f"Loaded JSON configuration from {filepath}.")
                 return config
             elif ext in ['.yaml', '.yml']:
-                config = yaml.safe_load(f)
+                config = yaml.load(f, Loader=_UniqueKeyLoader)
+                if config is None:
+                    config = {}
+                if not isinstance(config, dict):
+                    raise ValueError(f"Configuration root must be a mapping in '{filepath}'.")
                 logger.info(f"Loaded YAML configuration from {filepath}.")
                 return config
             else:
                 logger.error(f"Unsupported configuration file format: {ext}")
                 raise ValueError(f"Unsupported configuration file format: {ext}")
-    except (json.JSONDecodeError, yaml.YAMLError) as e:
+    except (json.JSONDecodeError, yaml.YAMLError, ValueError) as e:
         logger.error(f"Error parsing configuration file '{filepath}': {e}")
         raise ValueError(f"Error parsing configuration file '{filepath}': {e}")

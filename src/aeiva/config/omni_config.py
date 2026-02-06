@@ -16,11 +16,14 @@ in the root directory of this source tree.
 
 from dataclasses import dataclass, field
 import argparse
+import logging
 from typing import Union, List, Tuple, Dict, Any, get_origin, get_args
 import json
 import enum
 
 from aeiva.config.base_config import BaseConfig
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class OmniConfig(BaseConfig):
@@ -128,5 +131,5 @@ class OmniConfig(BaseConfig):
                 elif field_type is bool:
                     parser.add_argument(arg_name, action='store_true', help=help_msg)
                 else:
-                    print(f"Warning: unsupported type {field_type} for field '{field_name}'")
+                    logger.warning("Unsupported type %s for field '%s'", field_type, field_name)
         return parser

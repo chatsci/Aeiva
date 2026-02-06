@@ -1,6 +1,10 @@
 # plugin/plugins/plugin_a.py
 
+import logging
+
 from aeiva.plugin.plug import Plugin
+
+logger = logging.getLogger(__name__)
 
 class PluginA(Plugin):
     """
@@ -8,10 +12,10 @@ class PluginA(Plugin):
     """
 
     def activate(self) -> None:
-        print("PluginA activated.")
+        logger.info("PluginA activated.")
 
     def deactivate(self) -> None:
-        print("PluginA deactivated.")
+        logger.info("PluginA deactivated.")
 
     def run(self) -> None:
-        print("PluginA is running.")
+        logger.info("PluginA is running.")

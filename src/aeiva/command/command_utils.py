@@ -3,13 +3,18 @@ Here we put util functions related to database, logging and so on for different 
 """
 
 import os
-import sys
-import subprocess
-import signal
 from pathlib import Path
-import click
 import importlib.resources as importlib_resources
 from typing import Any, Dict
+from aeiva.common.logger import setup_logging
+from aeiva.command.config_validation import validate_runtime_config
+
+_DEFAULT_SECRET_ENV_VARS: Dict[str, str] = {
+    "llm_api_key": "OPENAI_API_KEY",
+    "api_key": "OPENAI_API_KEY",
+    "bot_token": "SLACK_BOT_TOKEN",
+    "app_token": "SLACK_APP_TOKEN",
+}
 
 
 def get_package_root():
@@ -30,97 +35,35 @@ def get_log_dir():
     log_dir.mkdir(parents=True, exist_ok=True)  # Ensure the log directory exists
     return log_dir
 
-def validate_neo4j_home(logger, neo4j_home):
-    """
-    Validates that the NEO4J_HOME path exists and contains the Neo4j executable.
-    """
-    if not os.path.isdir(neo4j_home):
-        logger.error(f"NEO4J_HOME path does not exist or is not a directory: {neo4j_home}")
-        click.echo(f"Error: NEO4J_HOME path does not exist or is not a directory: {neo4j_home}")
-        sys.exit(1)
-    
-    neo4j_executable = os.path.join(neo4j_home, 'bin', 'neo4j')
-    if not os.path.isfile(neo4j_executable) or not os.access(neo4j_executable, os.X_OK):
-        logger.error(f"Neo4j executable not found or not executable at: {neo4j_executable}")
-        click.echo(f"Error: Neo4j executable not found or not executable at: {neo4j_executable}")
-        sys.exit(1)
 
-def start_neo4j(logger, neo4j_home):
+def setup_command_logger(
+    *,
+    log_filename: str,
+    verbose: bool,
+    project_root: Path = None,
+):
     """
-    Starts the Neo4j database as a subprocess.
-    """
-    neo4j_command = [os.path.join(neo4j_home, 'bin', 'neo4j'), 'console']
-    try:
-        neo4j_process = subprocess.Popen(
-            neo4j_command,
-            stdout=subprocess.DEVNULL,  # Suppress stdout
-            stderr=subprocess.DEVNULL,  # Suppress stderr
-            stdin=subprocess.DEVNULL,   # Prevent Neo4j from waiting for input
-            preexec_fn=os.setsid       # Start the process in a new session
-        )
-        logger.info("Neo4j database started successfully.")
-        click.echo("Neo4j database started successfully.")
-        return neo4j_process
-    except FileNotFoundError:
-        logger.error(f"Neo4j executable not found in {neo4j_command}.")
-        click.echo(f"Error: Neo4j executable not found in {neo4j_command}.")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Failed to start Neo4j: {e}")
-        click.echo(f"Error: Failed to start Neo4j: {e}")
-        sys.exit(1)
+    Build a command logger with a writable fallback path.
 
-def stop_neo4j(logger, neo4j_process):
+    Log preference order:
+    1) ~/.aeiva/logs/<log_filename>
+    2) <project_root>/logs/<log_filename> when home log dir is not writable
     """
-    Stops the Neo4j database subprocess gracefully.
-    """
-    global _neo4j_stop_called
-    if _neo4j_stop_called:
-        return
-    _neo4j_stop_called = True
+    if project_root is None:
+        project_root = get_package_root()
 
-    try:
-        # Check if the process is still running
-        if neo4j_process.poll() is None:
-            os.killpg(os.getpgid(neo4j_process.pid), signal.SIGINT)  # Send SIGINT for graceful shutdown
-            logger.info("Sent SIGINT to Neo4j subprocess.")
-            click.echo("Shutting down Neo4j...")
-            neo4j_process.wait(timeout=15)  # Increased timeout to 15 seconds
-            logger.info("Neo4j database stopped successfully.")
-            click.echo("Neo4j database stopped successfully.")
-        else:
-            logger.warning("Neo4j subprocess is already terminated.")
-            click.echo("Warning: Neo4j subprocess is already terminated.")
-    except subprocess.TimeoutExpired:
-        logger.error("Neo4j did not terminate within the timeout period.")
-        click.echo("Error: Neo4j did not terminate within the timeout period.")
-        # Optionally, force kill
-        try:
-            os.killpg(os.getpgid(neo4j_process.pid), signal.SIGKILL)
-            neo4j_process.wait(timeout=5)
-            logger.info("Neo4j database forcefully terminated.")
-            click.echo("Neo4j database forcefully terminated.")
-        except Exception as e:
-            logger.error(f"Failed to forcefully terminate Neo4j: {e}")
-            click.echo(f"Error: Failed to forcefully terminate Neo4j: {e}")
-    except ProcessLookupError:
-        logger.warning("Neo4j subprocess does not exist.")
-        click.echo("Warning: Neo4j subprocess does not exist. It may have already terminated.")
-    except Exception as e:
-        logger.error(f"Error stopping Neo4j: {e}")
-        click.echo(f"Error: Failed to stop Neo4j: {e}")
-
-def handle_exit(signum, frame, logger, neo4j_process):
-    """
-    Handles termination signals to ensure Neo4j is stopped gracefully.
-    """
-    if _neo4j_stop_called:
-        return
-    logger.info(f"Received signal {signum}. Shutting down Neo4j.")
-    click.echo(f"\nReceived signal {signum}. Shutting down Neo4j.")
-    stop_neo4j(logger, neo4j_process)
-    sys.exit(0)
-_neo4j_stop_called = False
+    logger_config_path = project_root / "configs" / "logger_config.yaml"
+    log_dir = get_log_dir()
+    log_file_path = log_dir / log_filename
+    if not os.access(log_dir, os.W_OK):
+        fallback_dir = project_root / "logs"
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = fallback_dir / log_filename
+    return setup_logging(
+        config_file_path=logger_config_path,
+        log_file_path=log_file_path,
+        verbose=verbose,
+    )
 
 
 def resolve_env_vars(config_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -130,6 +73,11 @@ def resolve_env_vars(config_dict: Dict[str, Any]) -> Dict[str, Any]:
     Example:
         {"llm_api_key_env_var": "OPENAI_API_KEY"} -> {"llm_api_key": "..."}
     """
+    def _normalize_secret_value(value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
     def _resolve_mapping(mapping: Dict[str, Any]) -> None:
         for key, value in list(mapping.items()):
             if isinstance(value, dict):
@@ -145,11 +93,22 @@ def resolve_env_vars(config_dict: Dict[str, Any]) -> Dict[str, Any]:
             if not key.endswith("_env_var"):
                 continue
             target_key = key[: -len("_env_var")]
-            if mapping.get(target_key):
+            current_value = _normalize_secret_value(mapping.get(target_key))
+            if current_value:
+                mapping[target_key] = current_value
                 continue
-            env_value = os.getenv(value)
+            env_value = _normalize_secret_value(os.getenv(value))
             if env_value:
                 mapping[target_key] = env_value
+
+        for key, env_name in _DEFAULT_SECRET_ENV_VARS.items():
+            current_value = _normalize_secret_value(mapping.get(key))
+            if current_value:
+                mapping[key] = current_value
+                continue
+            env_value = _normalize_secret_value(os.getenv(env_name))
+            if env_value:
+                mapping[key] = env_value
 
     if isinstance(config_dict, dict):
         _resolve_mapping(config_dict)
@@ -176,6 +135,17 @@ def _load_llm_api_key(config_dict: Dict[str, Any]) -> None:
         llm_cfg["llm_api_key"] = api_key
 
 
+def prepare_runtime_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Resolve env vars, normalize config shape, and validate runtime config.
+
+    The operation mutates and returns `config_dict` for efficient command startup.
+    """
+    resolve_env_vars(config_dict)
+    validate_runtime_config(config_dict)
+    return config_dict
+
+
 def build_runtime(config_dict: Dict[str, Any]):
     """
     Build either a single Agent or a MultiAgentSystem based on config.
@@ -184,7 +154,7 @@ def build_runtime(config_dict: Dict[str, Any]):
         (runtime, main_agent)
     """
     from aeiva.agent.agent import Agent
-    resolve_env_vars(config_dict)
+    prepare_runtime_config(config_dict)
     from aeiva.host.host_router import configure_host_router
     from aeiva.tool.registry import set_tool_router
     router = configure_host_router(config_dict)
@@ -210,7 +180,7 @@ async def build_runtime_async(config_dict: Dict[str, Any]):
         (runtime, main_agent)
     """
     from aeiva.agent.agent import Agent
-    resolve_env_vars(config_dict)
+    prepare_runtime_config(config_dict)
     from aeiva.host.host_router import configure_host_router
     from aeiva.tool.registry import set_tool_router
     router = configure_host_router(config_dict)

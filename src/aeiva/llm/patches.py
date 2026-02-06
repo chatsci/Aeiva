@@ -43,7 +43,7 @@ def patch_litellm_responses_api() -> None:
         if isinstance(self.usage, dict):
             try:
                 object.__setattr__(self, "usage", _coerce_usage(self.usage))
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
                 pass
         return original_model_dump(self, *args, **kwargs)
 

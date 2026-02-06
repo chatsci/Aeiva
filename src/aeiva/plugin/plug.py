@@ -23,9 +23,11 @@ import importlib
 import importlib.util
 import importlib.abc
 import zipfile
+import logging
 from types import ModuleType
 from typing import List, Optional, Dict
 
+logger = logging.getLogger(__name__)
 
 class Plugin(abc.ABC):
     """
@@ -62,21 +64,33 @@ class PluginLoader(importlib.abc.Loader):
         try:
             code = self.plugin_source.get_plugin_code(self.plugin_name)
         except ImportError as e:
-            print(f"PluginLoader: Failed to get code for plugin '{self.plugin_name}': {e}")
+            logger.exception(
+                "PluginLoader: Failed to get code for plugin '%s': %s",
+                self.plugin_name,
+                e,
+            )
             raise
 
         # Compute project_root dynamically based on plug.py's location
         plugin_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.abspath(os.path.join(plugin_dir, '../../../'))
-        print(f"PluginLoader: Adding '{project_root}' to sys.path for plugin '{self.plugin_name}'")
+        logger.debug(
+            "PluginLoader: Adding '%s' to sys.path for plugin '%s'",
+            project_root,
+            self.plugin_name,
+        )
         sys.path.insert(0, project_root)
 
         try:
-            print(f"PluginLoader: Executing plugin '{self.plugin_name}'")
+            logger.info("PluginLoader: Executing plugin '%s'", self.plugin_name)
             exec(code, module.__dict__)
-            print(f"PluginLoader: Plugin '{self.plugin_name}' executed successfully")
+            logger.info("PluginLoader: Plugin '%s' executed successfully", self.plugin_name)
         except Exception as e:
-            print(f"PluginLoader: Error executing plugin '{self.plugin_name}': {e}")
+            logger.exception(
+                "PluginLoader: Error executing plugin '%s': %s",
+                self.plugin_name,
+                e,
+            )
             raise
         finally:
             sys.path.pop(0)
@@ -103,7 +117,7 @@ class PluginFinder(importlib.abc.MetaPathFinder):
         """
         if fullname == self.plugin_source.namespace:
             # Handle the namespace package itself
-            print(f"PluginFinder: Creating namespace package '{fullname}'")
+            logger.debug("PluginFinder: Creating namespace package '%s'", fullname)
             spec = importlib.machinery.ModuleSpec(fullname, loader=None, is_package=True)
             spec.submodule_search_locations = []
             return spec
@@ -112,14 +126,18 @@ class PluginFinder(importlib.abc.MetaPathFinder):
             # Handle submodules (plugins)
             plugin_name = fullname[len(self.plugin_source.namespace) + 1:]
             if plugin_name in self.plugin_source.list_plugins():
-                print(f"PluginFinder: Found plugin '{plugin_name}' for module '{fullname}'")
+                logger.debug(
+                    "PluginFinder: Found plugin '%s' for module '%s'",
+                    plugin_name,
+                    fullname,
+                )
                 loader = PluginLoader(self.plugin_source, plugin_name)
                 spec = importlib.util.spec_from_loader(fullname, loader)
                 spec.submodule_search_locations = []
                 return spec
 
         # If not handling this module, return None
-        print(f"PluginFinder: Not handling module '{fullname}'")
+        logger.debug("PluginFinder: Not handling module '%s'", fullname)
         return None
 
 
@@ -158,16 +176,19 @@ class PluginSource:
         if not self._finder_enabled:
             sys.meta_path.insert(0, self._finder)
             self._finder_enabled = True
-            print(f"PluginSource: Import hook enabled for namespace '{self.namespace}'.")
+            logger.info("PluginSource: Import hook enabled for namespace '%s'.", self.namespace)
 
     def disable(self) -> None:
         """Disable the plugin import mechanism."""
         if self._finder_enabled:
             try:
                 sys.meta_path.remove(self._finder)
-                print(f"PluginSource: Import hook disabled for namespace '{self.namespace}'.")
+                logger.info("PluginSource: Import hook disabled for namespace '%s'.", self.namespace)
             except ValueError:
-                print(f"PluginSource: Import hook for namespace '{self.namespace}' was not found in sys.meta_path.")
+                logger.warning(
+                    "PluginSource: Import hook for namespace '%s' was not found in sys.meta_path.",
+                    self.namespace,
+                )
             self._finder_enabled = False
 
     def list_plugins(self) -> List[str]:
@@ -192,7 +213,10 @@ class PluginSource:
             else:
                 # Assume it's a directory
                 if not os.path.isdir(path):
-                    print(f"PluginSource: Path '{path}' is not a directory or a zip file. Skipping.")
+                    logger.warning(
+                        "PluginSource: Path '%s' is not a directory or a zip file. Skipping.",
+                        path,
+                    )
                     continue
                 for entry in os.listdir(path):
                     plugin_path = os.path.join(path, entry)
@@ -214,14 +238,22 @@ class PluginSource:
                 with zipfile.ZipFile(path, 'r') as z:
                     plugin_main = f"{plugin_name}/plugin.py"
                     if plugin_main in z.namelist():
-                        print(f"PluginSource: Found plugin '{plugin_name}' in zip file '{path}'.")
+                        logger.debug(
+                            "PluginSource: Found plugin '%s' in zip file '%s'.",
+                            plugin_name,
+                            path,
+                        )
                         return z.read(plugin_main).decode('utf-8')
             else:
                 # Assume it's a directory
                 plugin_dir = os.path.join(path, plugin_name)
                 plugin_main = os.path.join(plugin_dir, 'plugin.py')
                 if os.path.isfile(plugin_main):
-                    print(f"PluginSource: Found plugin '{plugin_name}' as module file '{plugin_main}'.")
+                    logger.debug(
+                        "PluginSource: Found plugin '%s' as module file '%s'.",
+                        plugin_name,
+                        plugin_main,
+                    )
                     with open(plugin_main, 'r', encoding='utf-8') as f:
                         return f.read()
         raise ImportError(f"Cannot find plugin '{plugin_name}'.")
@@ -236,17 +268,29 @@ class PluginSource:
         with self._lock:
             full_name = f"{self.namespace}.{plugin_name}"
             if full_name in sys.modules:
-                print(f"PluginSource: Plugin '{plugin_name}' is already loaded as '{full_name}'.")
+                logger.debug(
+                    "PluginSource: Plugin '%s' is already loaded as '%s'.",
+                    plugin_name,
+                    full_name,
+                )
                 return sys.modules[full_name]
             # Enable the finder if not already enabled
             self.enable()
             try:
-                print(f"PluginSource: Loading plugin '{plugin_name}' as '{full_name}'.")
+                logger.info(
+                    "PluginSource: Loading plugin '%s' as '%s'.",
+                    plugin_name,
+                    full_name,
+                )
                 module = importlib.import_module(full_name)
                 self._modules[plugin_name] = module
                 return module
             except ImportError as e:
-                print(f"PluginSource: Cannot import plugin '{plugin_name}': {e}")
+                logger.exception(
+                    "PluginSource: Cannot import plugin '%s': %s",
+                    plugin_name,
+                    e,
+                )
                 raise
 
     def unload_plugin(self, plugin_name: str) -> None:
@@ -261,15 +305,22 @@ class PluginSource:
             if module:
                 if hasattr(module, 'deactivate'):
                     try:
-                        print(f"PluginSource: Deactivating plugin '{plugin_name}'.")
+                        logger.info("PluginSource: Deactivating plugin '%s'.", plugin_name)
                         getattr(module, 'deactivate')()
                     except Exception as e:
-                        print(f"PluginSource: Error during deactivation of plugin '{plugin_name}': {e}")
+                        logger.exception(
+                            "PluginSource: Error during deactivation of plugin '%s': %s",
+                            plugin_name,
+                            e,
+                        )
                 if full_name in sys.modules:
                     del sys.modules[full_name]
-                    print(f"PluginSource: Plugin '{plugin_name}' unloaded and removed from sys.modules.")
+                    logger.info(
+                        "PluginSource: Plugin '%s' unloaded and removed from sys.modules.",
+                        plugin_name,
+                    )
             else:
-                print(f"PluginSource: Plugin '{plugin_name}' is not loaded.")
+                logger.debug("PluginSource: Plugin '%s' is not loaded.", plugin_name)
 
     def load_resource(self, plugin_name: str, resource_name: str) -> bytes:
         """
@@ -284,13 +335,23 @@ class PluginSource:
                 with zipfile.ZipFile(path, 'r') as z:
                     resource_file = f"{plugin_name}/{resource_name}"
                     if resource_file in z.namelist():
-                        print(f"PluginSource: Loading resource '{resource_name}' from plugin '{plugin_name}' in zip '{path}'.")
+                        logger.debug(
+                            "PluginSource: Loading resource '%s' from plugin '%s' in zip '%s'.",
+                            resource_name,
+                            plugin_name,
+                            path,
+                        )
                         return z.read(resource_file)
             else:
                 # Assume it's a directory
                 resource_path = os.path.join(path, plugin_name, resource_name)
                 if os.path.isfile(resource_path):
-                    print(f"PluginSource: Loading resource '{resource_name}' from plugin '{plugin_name}' at '{resource_path}'.")
+                    logger.debug(
+                        "PluginSource: Loading resource '%s' from plugin '%s' at '%s'.",
+                        resource_name,
+                        plugin_name,
+                        resource_path,
+                    )
                     with open(resource_path, 'rb') as f:
                         return f.read()
         raise FileNotFoundError(f"Resource '{resource_name}' not found in plugin '{plugin_name}'.")
@@ -316,7 +377,11 @@ class PluginManager:
             raise ValueError(f"Plugin source '{name}' already exists.")
         source = PluginSource(name, search_path)
         self.plugin_sources[name] = source
-        print(f"PluginManager: Created plugin source '{name}' with search paths {search_path}.")
+        logger.info(
+            "PluginManager: Created plugin source '%s' with search paths %s.",
+            name,
+            search_path,
+        )
         return source
 
     def get_plugin_source(self, name: str) -> Optional[PluginSource]:
@@ -339,6 +404,6 @@ class PluginManager:
             source.disable()
             for plugin_name in list(source._modules.keys()):
                 source.unload_plugin(plugin_name)
-            print(f"PluginManager: Removed plugin source '{name}'.")
+            logger.info("PluginManager: Removed plugin source '%s'.", name)
         else:
-            print(f"PluginManager: Plugin source '{name}' does not exist.")
+            logger.warning("PluginManager: Plugin source '%s' does not exist.", name)

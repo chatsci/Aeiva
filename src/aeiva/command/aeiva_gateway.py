@@ -7,17 +7,23 @@ from __future__ import annotations
 
 import asyncio
 import os
+import secrets
 import signal
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import click
 
-from aeiva.common.logger import setup_logging
-from aeiva.command.command_utils import get_log_dir, get_package_root, build_runtime_async, resolve_env_vars
+from aeiva.command.command_utils import (
+    get_log_dir,
+    get_package_root,
+    build_runtime_async,
+    prepare_runtime_config,
+    setup_command_logger,
+)
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.slack_gateway import SlackGateway
 from aeiva.interface.terminal_gateway import TerminalGateway
@@ -32,7 +38,7 @@ DEFAULT_CONFIG_PATH = _json_config if _json_config.exists() else _yaml_config
 
 LOGS_DIR = get_log_dir()
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_LOG_PATH = LOGS_DIR / "aeiva-gateway.log"
+DEFAULT_HOST_DAEMON_TOKEN_ENV = "AEIVA_HOST_DAEMON_TOKEN"
 
 
 def _suppress_gradio_routes_print() -> None:
@@ -41,6 +47,82 @@ def _suppress_gradio_routes_print() -> None:
         gr_routes.print = lambda *args, **kwargs: None
     except Exception:
         pass
+
+
+def _as_non_empty_str(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _prepare_host_auth_for_autostart(
+    logger: Any,
+    host_cfg: Dict[str, Any],
+    *,
+    target_env: Dict[str, str],
+) -> None:
+    """
+    Ensure daemon and routed host endpoints share a usable auth token.
+
+    For `aeiva-gateway` auto-start mode, we provision an in-memory token when
+    required auth is enabled but no token is configured. The token is injected
+    into the daemon subprocess environment and mirrored to host endpoints in the
+    runtime config so routed tool calls authenticate successfully.
+    """
+    daemon_cfg = host_cfg.get("daemon")
+    if not isinstance(daemon_cfg, dict):
+        daemon_cfg = {}
+        host_cfg["daemon"] = daemon_cfg
+
+    require_auth_raw = daemon_cfg.get("require_auth")
+    require_auth = True if require_auth_raw is None else bool(require_auth_raw)
+    if not require_auth:
+        return
+
+    raw_hosts = host_cfg.get("hosts")
+    host_tokens: set[str] = set()
+    if isinstance(raw_hosts, dict):
+        for host_entry in raw_hosts.values():
+            if not isinstance(host_entry, dict):
+                continue
+            token = _as_non_empty_str(host_entry.get("token"))
+            if token:
+                host_tokens.add(token)
+
+    auth_env_var = (
+        _as_non_empty_str(daemon_cfg.get("auth_token_env_var"))
+        or DEFAULT_HOST_DAEMON_TOKEN_ENV
+    )
+    daemon_token = _as_non_empty_str(daemon_cfg.get("auth_token"))
+    if not daemon_token:
+        daemon_token = _as_non_empty_str(target_env.get(auth_env_var))
+    if not daemon_token and len(host_tokens) == 1:
+        daemon_token = next(iter(host_tokens))
+    if not daemon_token:
+        daemon_token = secrets.token_urlsafe(32)
+        logger.info(
+            "Generated ephemeral host daemon token for this gateway session (%s).",
+            auth_env_var,
+        )
+
+    daemon_cfg["auth_token_env_var"] = auth_env_var
+    daemon_cfg["auth_token"] = daemon_token
+    target_env[auth_env_var] = daemon_token
+
+    if isinstance(raw_hosts, dict):
+        for host_name, host_entry in raw_hosts.items():
+            if not isinstance(host_entry, dict):
+                continue
+            host_token = _as_non_empty_str(host_entry.get("token"))
+            if host_token and host_token != daemon_token:
+                logger.warning(
+                    "Host '%s' token differs from daemon token; routed calls may fail auth.",
+                    host_name,
+                )
+                continue
+            if not host_token:
+                host_entry["token"] = daemon_token
 
 
 @dataclass
@@ -52,39 +134,15 @@ class UvicornHandle:
         self.server.should_exit = True
 
 
-def _try_start_neo4j(logger):
-    neo4j_home = os.getenv("NEO4J_HOME")
-    if not neo4j_home:
-        logger.info("NEO4J_HOME not set — skipping Neo4j startup.")
-        return None
-    try:
-        from aeiva.command.command_utils import validate_neo4j_home, start_neo4j
-        validate_neo4j_home(logger, neo4j_home)
-        return start_neo4j(logger, neo4j_home)
-    except SystemExit:
-        logger.warning("Neo4j validation failed — continuing without Neo4j.")
-        return None
-    except Exception as exc:
-        logger.warning("Neo4j start failed (%s) — continuing without Neo4j.", exc)
-        return None
-
-
-def _try_stop_neo4j(logger, neo4j_process):
-    if neo4j_process is None:
-        return
-    try:
-        from aeiva.command.command_utils import stop_neo4j
-        stop_neo4j(logger, neo4j_process)
-    except Exception as exc:
-        logger.warning("Neo4j stop failed: %s", exc)
-
-
-def _try_start_host(logger, config_dict, log_dir: Path):
+def _try_start_host(logger, config_dict, log_dir: Path, config_path: Optional[Path] = None):
     host_cfg = config_dict.get("host_config") or {}
     if not host_cfg.get("enabled"):
         return None
     if not host_cfg.get("auto_start"):
         return None
+
+    startup_env = os.environ.copy()
+    _prepare_host_auth_for_autostart(logger, host_cfg, target_env=startup_env)
 
     daemon_cfg = host_cfg.get("daemon") or {}
     host = daemon_cfg.get("host") or "127.0.0.1"
@@ -103,6 +161,8 @@ def _try_start_host(logger, config_dict, log_dir: Path):
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [sys.executable, "-m", "aeiva.host.host_cli", "--host", host, "--port", str(port)]
+    if config_path is not None:
+        cmd.extend(["--config", str(config_path)])
     if allow_tools:
         cmd.extend(["--allow", ",".join(allow_tools)])
 
@@ -114,6 +174,7 @@ def _try_start_host(logger, config_dict, log_dir: Path):
             stderr=log_handle,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
+            env=startup_env,
         )
         logger.info("Host daemon started (pid=%s, log=%s).", process.pid, log_path)
         return process
@@ -149,23 +210,15 @@ def _try_stop_host(logger, host_process):
               type=click.Path(exists=True, dir_okay=False))
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging.")
 def run(config, verbose):
-    project_root = PACKAGE_ROOT
-    logger_config_path = project_root / "configs" / "logger_config.yaml"
-    log_file_path = DEFAULT_LOG_PATH
-    if not os.access(LOGS_DIR, os.W_OK):
-        fallback_dir = project_root / "logs"
-        fallback_dir.mkdir(parents=True, exist_ok=True)
-        log_file_path = fallback_dir / "aeiva-gateway.log"
-    logger = setup_logging(
-        config_file_path=logger_config_path,
-        log_file_path=log_file_path,
+    logger = setup_command_logger(
+        log_filename="aeiva-gateway.log",
         verbose=verbose,
     )
 
     click.echo(f"Loading configuration from {config}")
     config_path = Path(config)
     config_dict = from_json_or_yaml(config_path)
-    resolve_env_vars(config_dict)
+    prepare_runtime_config(config_dict)
 
     # Unified gateway shouldn't emit terminal UI output.
     agent_cfg = config_dict.setdefault("agent_config", {})
@@ -191,8 +244,7 @@ def run(config, verbose):
     gradio_cfg = registry.resolve_channel_config("gradio")
     realtime_mode = (config_dict.get("realtime_config") or {}).get("mode", "turn_based")
 
-    neo4j_process = _try_start_neo4j(logger)
-    host_process = _try_start_host(logger, config_dict, LOGS_DIR)
+    host_process = _try_start_host(logger, config_dict, LOGS_DIR, config_path)
 
     gateways: List[Any] = []
     runtime_tasks: List[asyncio.Task] = []
@@ -395,7 +447,6 @@ def run(config, verbose):
     try:
         asyncio.run(_main())
     finally:
-        _try_stop_neo4j(logger, neo4j_process)
         _try_stop_host(logger, host_process)
         logger.info("Gateway shutdown complete.")
 

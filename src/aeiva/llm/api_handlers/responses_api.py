@@ -68,7 +68,7 @@ class ResponsesAPIHandler(BaseHandler):
         """Get allowed parameters for responses API."""
         try:
             return set(inspect.signature(llm_responses).parameters.keys())
-        except Exception:
+        except (TypeError, ValueError):
             return None
 
     def build_params(

@@ -5,6 +5,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from aeiva.interface.gateway_base import GatewayBase
+from aeiva.neuron import Signal
 from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
@@ -35,10 +36,13 @@ class TerminalGateway(GatewayBase[str]):
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._streaming = False
+        self._show_emotion = bool(cfg.get("show_emotion", False))
 
     async def setup(self) -> None:
         self._loop = asyncio.get_running_loop()
         self.register_handlers()
+        if self.events:
+            self.events.subscribe(EventNames.EMOTION_CHANGED, self._handle_emotion_event)
 
     async def run(self) -> None:
         if not self._thread:
@@ -91,6 +95,28 @@ class TerminalGateway(GatewayBase[str]):
 
     async def _handle_agent_stop(self, event: Any) -> None:
         self.request_stop()
+
+    async def _handle_emotion_event(self, event: Any) -> None:
+        payload = event.payload
+        if isinstance(payload, Signal):
+            payload = payload.data
+        if not isinstance(payload, dict):
+            return
+        if not (self._show_emotion or payload.get("show")):
+            return
+        label = payload.get("label")
+        state = payload.get("state")
+        expression = payload.get("expression")
+        message = "[Emotion]"
+        if label is not None:
+            message += f" label={label}"
+        if state is not None:
+            message += f" state={state}"
+        if expression is not None:
+            message += f" expression={expression}"
+        sys.stdout.write("\r\033[K")
+        print(message, flush=True)
+        print(self.prompt, end="", flush=True)
 
     def _input_loop(self) -> None:
         loop = self._loop

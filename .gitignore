@@ -24,7 +24,7 @@ datasets/*/*
 pretrained_models/*
 virtual_worlds/*
 outputs/
-storage/
+/storage/
 resource/
 notes/
 tests/

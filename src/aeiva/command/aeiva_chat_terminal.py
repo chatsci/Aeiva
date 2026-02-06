@@ -2,7 +2,6 @@
 We can run the command like below: (specify your own config file path)
 > aeiva-chat-terminal --config configs/agent_config.yaml
 """
-import os
 import sys
 import signal
 import asyncio
@@ -10,29 +9,17 @@ from pathlib import Path
 from uuid import uuid4
 import click
 from aeiva.util.file_utils import from_json_or_yaml
-from aeiva.util.path_utils import get_project_root_dir
-from aeiva.common.logger import setup_logging
 from aeiva.command.command_utils import (
     get_package_root,
-    get_log_dir,
-    validate_neo4j_home,
-    start_neo4j,
-    stop_neo4j,
     build_runtime_async,
+    setup_command_logger,
 )
-import logging
 
 # Get default agent config file path (prefer JSON if available)
 PACKAGE_ROOT = get_package_root()
 _json_config = PACKAGE_ROOT / 'configs' / 'agent_config.json'
 _yaml_config = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
 DEFAULT_CONFIG_PATH = _json_config if _json_config.exists() else _yaml_config
-
-# Get default log file path
-LOGS_DIR = get_log_dir()
-LOGS_DIR.mkdir(parents=True, exist_ok=True)  # Ensure the log directory exists
-DEFAULT_LOG_PATH = LOGS_DIR / 'aeiva-chat-terminal.log'
-
 
 @click.command()
 @click.option('--config', '-c', default=str(DEFAULT_CONFIG_PATH),
@@ -44,17 +31,9 @@ def run(config, verbose):
     Starts the Aeiva chat terminal with the provided configuration.
     """
     # Setup logging
-    project_root = get_project_root_dir()
-    logger_config_path = project_root / "configs" / "logger_config.yaml"
-    log_file_path = DEFAULT_LOG_PATH
-    if not os.access(LOGS_DIR, os.W_OK):
-        fallback_dir = project_root / "logs"
-        fallback_dir.mkdir(parents=True, exist_ok=True)
-        log_file_path = fallback_dir / "aeiva-chat-terminal.log"
-    logger = setup_logging(
-        config_file_path=logger_config_path,
-        log_file_path=log_file_path,
-        verbose=verbose
+    logger = setup_command_logger(
+        log_filename="aeiva-chat-terminal.log",
+        verbose=verbose,
     )
     
     click.echo(f"Loading configuration from {config}")
@@ -67,19 +46,6 @@ def run(config, verbose):
         logger.error(f"Failed to parse configuration file: {e}")
         click.echo(f"Error: Failed to parse configuration file: {e}")
         sys.exit(1)
-    
-    # Retrieve NEO4J_HOME from environment variables
-    neo4j_home = os.getenv('NEO4J_HOME')
-    if not neo4j_home:
-        logger.error("NEO4J_HOME is not set in the environment.")
-        click.echo("Error: NEO4J_HOME is not set in the environment. Please set it in your shell configuration (e.g., .bashrc or .zshrc).")
-        sys.exit(1)
-    
-    # Validate NEO4J_HOME path
-    validate_neo4j_home(logger, neo4j_home)
-    
-    # Start Neo4j
-    neo4j_process = start_neo4j(logger, neo4j_home)
     
     raw_memory_cfg = config_data.get("raw_memory_config") or {}
     raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
@@ -107,6 +73,8 @@ def run(config, verbose):
             from aeiva.interface.terminal_gateway import TerminalGateway
 
             terminal_cfg = config_data.get("terminal_config") or {}
+            agent_cfg = config_data.get("agent_config") or {}
+            terminal_cfg.setdefault("show_emotion", agent_cfg.get("show_emotion", False))
             terminal_gateway = TerminalGateway(terminal_cfg, agent.event_bus)
             await terminal_gateway.setup()
 
@@ -155,8 +123,6 @@ def run(config, verbose):
         #     logger.error(f"Error during cleanup: {e}")
         #     click.echo("Failed to delete all memory units.")
         
-        # Stop Neo4j
-        stop_neo4j(logger, neo4j_process)
         logger.info("Cleanup completed.")
 
 if __name__ == "__main__":

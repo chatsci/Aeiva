@@ -10,9 +10,11 @@ These tools can do ANYTHING at their respective level:
 from .shell import shell
 from .filesystem import filesystem
 from .browser import browser
+from .exec_approval import exec_approval
 
 __all__ = [
     "shell",
     "filesystem",
     "browser",
+    "exec_approval",
 ]

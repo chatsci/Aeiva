@@ -44,6 +44,16 @@ class ChromaDatabase(VectorDatabase):
             distance_metric='cosine'
         )
 
+    def close(self) -> None:
+        """
+        Release ChromaDB resources.
+
+        Chroma's Python client does not expose an explicit close API, so we drop
+        references to allow prompt cleanup by the runtime/GC.
+        """
+        self.collection = None
+        self.client = None
+
     def create_client(
         self,
         uri: Optional[str] = None,
@@ -216,7 +226,7 @@ class ChromaDatabase(VectorDatabase):
         if collection_name != self.collection_name:
             raise ValueError("Collection name does not match initialized collection name.")
 
-        result = self.collection.get(ids=[vector_id])
+        result = self.collection.get(ids=[vector_id], include=["embeddings", "metadatas"])
         if not result['ids']:
             raise KeyError(f"Vector with ID {vector_id} not found in collection {collection_name}.")
 

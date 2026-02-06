@@ -26,9 +26,11 @@ import click
 from dotenv import load_dotenv
 
 from aeiva.util.file_utils import from_json_or_yaml
-from aeiva.util.path_utils import get_project_root_dir
-from aeiva.common.logger import setup_logging
-from aeiva.command.command_utils import get_package_root, get_log_dir, build_runtime
+from aeiva.command.command_utils import (
+    get_package_root,
+    build_runtime,
+    setup_command_logger,
+)
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.gateway_base import ResponseQueueGateway
 from aeiva.event.event_names import EventNames
@@ -37,38 +39,6 @@ logger = logging.getLogger(__name__)
 
 PACKAGE_ROOT = get_package_root()
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
-
-LOGS_DIR = get_log_dir()
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_LOG_PATH = LOGS_DIR / 'aeiva-chat-gradio.log'
-
-
-def _try_start_neo4j(logger):
-    """Start Neo4j if NEO4J_HOME is set; return process or None."""
-    neo4j_home = os.getenv("NEO4J_HOME")
-    if not neo4j_home:
-        logger.info("NEO4J_HOME not set — skipping Neo4j startup.")
-        return None
-    try:
-        from aeiva.command.command_utils import validate_neo4j_home, start_neo4j
-        validate_neo4j_home(logger, neo4j_home)
-        return start_neo4j(logger, neo4j_home)
-    except SystemExit:
-        logger.warning("Neo4j validation failed — continuing without Neo4j.")
-        return None
-    except Exception as exc:
-        logger.warning("Neo4j start failed (%s) — continuing without Neo4j.", exc)
-        return None
-
-
-def _try_stop_neo4j(logger, neo4j_process):
-    if neo4j_process is None:
-        return
-    try:
-        from aeiva.command.command_utils import stop_neo4j
-        stop_neo4j(logger, neo4j_process)
-    except Exception as exc:
-        logger.warning("Neo4j stop failed: %s", exc)
 
 
 @click.command(name="aeiva-chat-gradio")
@@ -80,11 +50,8 @@ def run(config, verbose):
     """
     Starts the Aeiva chat Gradio interface with the provided configuration.
     """
-    project_root = get_project_root_dir()
-    logger_config_path = project_root / "configs" / "logger_config.yaml"
-    log = setup_logging(
-        config_file_path=logger_config_path,
-        log_file_path=DEFAULT_LOG_PATH,
+    log = setup_command_logger(
+        log_filename="aeiva-chat-gradio.log",
         verbose=verbose,
     )
 
@@ -136,9 +103,6 @@ def run(config, verbose):
     queue_gateway.register_handlers()
     log.info("Registered response queue gateway handlers.")
 
-    # Optionally start Neo4j
-    neo4j_process = _try_start_neo4j(log)
-
     # Build and launch the Gradio UI
     gradio_share = (config_dict.get("gradio_config") or {}).get("share", True)
     demo = build_gradio_chat_ui(
@@ -166,7 +130,6 @@ def run(config, verbose):
                 log.error(f"Error in fallback session close: {e}")
 
     log.info("Agent shutdown complete.")
-    _try_stop_neo4j(log, neo4j_process)
 
 
 def build_gradio_chat_ui(

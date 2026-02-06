@@ -4,7 +4,6 @@ import yaml
 
 from aeiva.llm.llm_client import LLMClient
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
-from aeiva.action.action_envelope import parse_action_envelope
 from aeiva.cognition.brain.llm_brain import LLMBrain
 
 CONFIG_PATH = "configs/agent_config.yaml"
@@ -68,12 +67,10 @@ async def _run_action(model: str, base_config: dict) -> dict:
         if isinstance(chunk, str):
             result_text += chunk
 
-    envelope, parse_errors = parse_action_envelope(result_text)
     return {
         "ok": True,
-        "parse_errors": parse_errors,
-        "envelope_type": envelope.get("type"),
-        "message_len": len(envelope.get("message") or ""),
+        "response_len": len(result_text),
+        "response_preview": result_text[:200],
     }
 
 
@@ -110,9 +107,8 @@ async def main():
         if action and action.get("ok"):
             print(
                 "  Action: OK "
-                f"type={action.get('envelope_type')} "
-                f"parse_errors={action.get('parse_errors')} "
-                f"message_len={action.get('message_len')}"
+                f"len={action.get('response_len')} "
+                f"preview={action.get('response_preview', '')[:80]}"
             )
         else:
             print(f"  Action: ERROR -> {action.get('error') if action else 'unknown'}")

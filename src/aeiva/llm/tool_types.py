@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 
 def _stringify_arguments(arguments: Any) -> str:
@@ -12,7 +12,7 @@ def _stringify_arguments(arguments: Any) -> str:
         return arguments
     try:
         return json.dumps(arguments)
-    except Exception:
+    except (TypeError, ValueError):
         return str(arguments)
 
 
@@ -71,7 +71,7 @@ class ToolCall:
                         parsed = json.loads(snippet)
                         if isinstance(parsed, dict):
                             return parsed
-                    except Exception:
+                    except (json.JSONDecodeError, TypeError, ValueError):
                         pass
             return {}
 
@@ -137,71 +137,3 @@ class ToolCallDelta:
             call.name = _merge_fragment(call.name, self.name)
         if self.arguments:
             call.arguments = _merge_fragment(call.arguments, self.arguments)
-
-
-def infer_tool_call_from_text(text: str, tools: Optional[Sequence[Dict[str, Any]]]) -> Optional[ToolCall]:
-    if not text or not isinstance(text, str):
-        return None
-    stripped = text.strip()
-
-    def _extract_json_object(raw: str) -> Optional[Dict[str, Any]]:
-        if raw.startswith("{") and raw.endswith("}"):
-            try:
-                parsed = json.loads(raw)
-                return parsed if isinstance(parsed, dict) else None
-            except Exception:
-                return None
-
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            return None
-        snippet = raw[start:end + 1]
-        try:
-            parsed = json.loads(snippet)
-            return parsed if isinstance(parsed, dict) else None
-        except Exception:
-            return None
-
-    payload = _extract_json_object(stripped)
-    if payload is None:
-        return None
-
-    if not isinstance(payload, dict):
-        return None
-
-    candidates: List[str] = []
-    keys = set(payload.keys())
-
-    for tool in tools or []:
-        if not isinstance(tool, dict):
-            continue
-        if "function" in tool:
-            func = tool.get("function") or {}
-            name = func.get("name")
-            params = func.get("parameters") or {}
-        else:
-            name = tool.get("name")
-            params = tool.get("parameters") or {}
-
-        if not name or not isinstance(params, dict):
-            continue
-
-        props = params.get("properties") or {}
-        required = params.get("required") or []
-        if not isinstance(props, dict):
-            props = {}
-        if not isinstance(required, list):
-            required = []
-
-        if required and not set(required).issubset(keys):
-            continue
-        if props and not keys.issubset(set(props.keys())):
-            continue
-
-        candidates.append(str(name))
-
-    if len(candidates) != 1:
-        return None
-
-    return ToolCall(id="", name=candidates[0], arguments=json.dumps(payload))

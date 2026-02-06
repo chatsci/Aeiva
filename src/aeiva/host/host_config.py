@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
+from aeiva.host.command_policy import ShellCommandPolicy
 
 @dataclass
 class HostEndpointConfig:
@@ -19,6 +20,8 @@ class HostConfig:
     route: Dict[str, str] = field(default_factory=dict)
     default_host: Optional[str] = None
     timeout: float = 30.0
+    exec_policy: ShellCommandPolicy = field(default_factory=ShellCommandPolicy)
+    approval_policy: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HostConfig":
@@ -28,6 +31,8 @@ class HostConfig:
         timeout = float(data.get("timeout", 30.0))
         default_host = data.get("default_host") or None
         route = dict(data.get("route") or {})
+        exec_policy = ShellCommandPolicy.from_dict(data.get("exec_policy"))
+        approval_policy = data.get("approval_policy") or {}
 
         hosts: Dict[str, HostEndpointConfig] = {}
         raw_hosts = data.get("hosts") or {}
@@ -54,4 +59,6 @@ class HostConfig:
             route=route,
             default_host=default_host,
             timeout=timeout,
+            exec_policy=exec_policy,
+            approval_policy=approval_policy,
         )

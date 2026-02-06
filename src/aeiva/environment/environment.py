@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
+import logging
+
 from aeiva.environment.environment_config import EnvironmentConfig
+
+logger = logging.getLogger(__name__)
 
 class Environment(ABC):
     """
@@ -85,7 +89,7 @@ class Environment(ABC):
         """
         Visualize or output the environment's current state. Optional for subclasses.
         """
-        print(f"Environment State: {self.state}")
+        logger.debug("Environment state: %s", self.state)
 
     def get_context(self) -> Any:
         """
@@ -100,7 +104,7 @@ class Environment(ABC):
         """
         Clean up any resources tied to the environment when it's no longer needed.
         """
-        print("Closing environment and releasing resources.")
+        logger.info("Closing environment and releasing resources.")
 
     def __repr__(self) -> str:
         return (f"Environment(type={self.config.environment_type}, "

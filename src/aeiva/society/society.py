@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, Dict
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Society(ABC):
@@ -48,7 +51,7 @@ class Society(ABC):
         """
         await self.env.setup()
         await asyncio.gather(*(agent.setup() for agent in self.agents.values()))
-        print("Society: Setup completed.")
+        logger.info("Society setup completed.")
 
     @abstractmethod
     async def run(self) -> None:
@@ -99,4 +102,4 @@ class Society(ABC):
         Args:
             error (Exception): The exception that was raised.
         """
-        print(f"Society encountered an error: {error}")
+        logger.error("Society encountered an error: %s", error)

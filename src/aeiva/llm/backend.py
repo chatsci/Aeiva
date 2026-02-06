@@ -56,7 +56,7 @@ class LLMBackend:
         try:
             from litellm import get_model_info
             return get_model_info((self.config.llm_model_name or "").lower()).get("mode") == "responses"
-        except Exception:
+        except (ImportError, AttributeError, KeyError, TypeError, ValueError):
             return False
 
     def _get_handler(self) -> LLMHandler:

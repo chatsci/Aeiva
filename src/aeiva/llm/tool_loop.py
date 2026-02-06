@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import asyncio
+import json
 from typing import Any, AsyncGenerator, Dict, List, Optional
 from uuid import uuid4
 
@@ -41,6 +43,7 @@ class ToolLoopEngine:
 
     def run(self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs) -> ToolLoopResult:
         for _ in range(self.max_tool_loops):
+            self._sanitize_tool_history(messages)
             params = self.backend.build_params(messages, tools, **kwargs)
             response = self.backend.execute_sync(params)
             parsed = self.backend.parse_response(response)
@@ -58,6 +61,7 @@ class ToolLoopEngine:
 
     async def arun(self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs) -> ToolLoopResult:
         for _ in range(self.max_tool_loops):
+            self._sanitize_tool_history(messages)
             params = self.backend.build_params(messages, tools, **kwargs)
             response = await self.backend.execute(params, stream=False)
             parsed = self.backend.parse_response(response)
@@ -83,6 +87,7 @@ class ToolLoopEngine:
             return
 
         for _ in range(self.max_tool_loops):
+            self._sanitize_tool_history(messages)
             stream_result = await self._stream_once(messages, tools, **kwargs)
             if stream_result.content:
                 yield stream_result.content
@@ -181,6 +186,68 @@ class ToolLoopEngine:
                 result += chunk
         return result
 
+    def _sanitize_tool_history(self, messages: List[Any]) -> None:
+        """Ensure every assistant tool call has a matching tool result."""
+        if not isinstance(messages, list):
+            return
+
+        tool_result_ids: set[str] = set()
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("role") == "tool":
+                call_id = msg.get("tool_call_id")
+                if call_id:
+                    tool_result_ids.add(str(call_id))
+
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            if not isinstance(msg, dict):
+                i += 1
+                continue
+
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                tool_calls = msg.get("tool_calls") or []
+                missing: List[tuple[str, str]] = []
+                for tc in tool_calls:
+                    if isinstance(tc, ToolCall):
+                        call_id = tc.id
+                        name = tc.name
+                    elif isinstance(tc, dict):
+                        func = tc.get("function") or {}
+                        call_id = tc.get("id") or tc.get("call_id") or ""
+                        name = func.get("name") or tc.get("name") or ""
+                    else:
+                        call_id = getattr(tc, "id", None) or getattr(tc, "call_id", None) or ""
+                        func = getattr(tc, "function", None)
+                        name = (
+                            getattr(func, "name", None)
+                            if func is not None
+                            else getattr(tc, "name", None)
+                        ) or ""
+                    if call_id and call_id not in tool_result_ids:
+                        missing.append((str(call_id), name))
+
+                if missing:
+                    inserts = []
+                    for call_id, name in missing:
+                        inserts.append({
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "name": name or "tool",
+                            "content": self._format_tool_result({
+                                "success": False,
+                                "error": "tool_result_missing",
+                                "message": "Missing tool result; previous tool call was cancelled or interrupted.",
+                            }),
+                        })
+                        tool_result_ids.add(call_id)
+                    messages[i + 1:i + 1] = inserts
+                    i += len(inserts)
+
+            i += 1
+
     def _accumulate_tool_calls(
         self, tool_calls: List[ToolCall], deltas: List[ToolCallDelta]
     ) -> None:
@@ -199,16 +266,25 @@ class ToolLoopEngine:
         if not valid_calls:
             return
         self._ensure_tool_call_ids(valid_calls)
+        start_len = len(messages)
+        try:
+            messages.append({"role": "assistant", "tool_calls": [tc.as_chat_tool_call() for tc in valid_calls]})
+            available_names = self._available_tool_names(available_tools)
 
-        messages.append({"role": "assistant", "tool_calls": [tc.as_chat_tool_call() for tc in valid_calls]})
-        available_names = self._available_tool_names(available_tools)
-
-        for tool_call in valid_calls:
-            name = tool_call.name
-            args = tool_call.arguments_dict()
-            call_id = tool_call.id
-            result = self._run_tool_sync(name, args, available_names)
-            messages.append({"tool_call_id": call_id, "role": "tool", "name": name, "content": str(result)})
+            for tool_call in valid_calls:
+                name = tool_call.name
+                args = tool_call.arguments_dict()
+                call_id = tool_call.id
+                result = self._run_tool_sync(name, args, available_names)
+                messages.append({
+                    "tool_call_id": call_id,
+                    "role": "tool",
+                    "name": name,
+                    "content": self._format_tool_result(result),
+                })
+        except Exception:
+            del messages[start_len:]
+            raise
 
     async def _execute_tool_calls_async(
         self,
@@ -222,15 +298,30 @@ class ToolLoopEngine:
             return
         self._ensure_tool_call_ids(valid_calls)
 
-        messages.append({"role": "assistant", "tool_calls": [tc.as_chat_tool_call() for tc in valid_calls]})
-        available_names = self._available_tool_names(available_tools)
+        start_len = len(messages)
+        try:
+            messages.append({"role": "assistant", "tool_calls": [tc.as_chat_tool_call() for tc in valid_calls]})
+            available_names = self._available_tool_names(available_tools)
 
-        for tool_call in valid_calls:
-            name = tool_call.name
-            args = tool_call.arguments_dict()
-            call_id = tool_call.id
-            result = await self._run_tool_async(name, args, available_names)
-            messages.append({"tool_call_id": call_id, "role": "tool", "name": name, "content": str(result)})
+            for tool_call in valid_calls:
+                name = tool_call.name
+                args = tool_call.arguments_dict()
+                call_id = tool_call.id
+                result = await self._run_tool_async(name, args, available_names)
+                messages.append({
+                    "tool_call_id": call_id,
+                    "role": "tool",
+                    "name": name,
+                    "content": self._format_tool_result(result),
+                })
+        except asyncio.CancelledError:
+            # Roll back tool call messages to avoid dangling tool_calls without tool results.
+            del messages[start_len:]
+            raise
+        except Exception:
+            # Roll back partial tool-call messages on unexpected errors.
+            del messages[start_len:]
+            raise
 
     def _available_tool_names(self, available_tools: Optional[List[Dict[str, Any]]]) -> Optional[set]:
         if not available_tools:
@@ -261,6 +352,14 @@ class ToolLoopEngine:
         for tc in tool_calls:
             if not tc.id:
                 tc.id = f"call_{uuid4().hex}"
+
+    def _format_tool_result(self, result: Any) -> str:
+        if isinstance(result, (dict, list)):
+            try:
+                return json.dumps(result)
+            except (TypeError, ValueError):
+                return str(result)
+        return str(result)
 
     def _record_usage(self, parsed) -> None:
         if not self.metrics:

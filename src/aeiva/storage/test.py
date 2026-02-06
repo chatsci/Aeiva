@@ -1,189 +1,80 @@
-# test.py
+"""Manual storage smoke tests for the default embedded backends."""
 
 import logging
+import tempfile
 import uuid
+from pathlib import Path
 
-from database_factory import DatabaseConfigFactory, DatabaseFactory
+from aeiva.storage.database_factory import DatabaseConfigFactory, DatabaseFactory
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 
 
-def test_milvus():
-    """
-    Test the DatabaseFactory and DatabaseConfigFactory with Milvus database.
-    """
-    print("\n--- Testing Milvus Database ---")
-    # Create configuration for Milvus
-    milvus_config = DatabaseConfigFactory.create(
-        'milvus',
-        # uri='tcp://localhost:19530',
-        uri='storage/milvus_demo.db',
-        collection_name='test_collection',
-        embedding_model_dims=128,
-        metric_type='COSINE',
+def test_chroma(base_dir: Path) -> None:
+    print("\n--- Testing Chroma ---")
+    config = DatabaseConfigFactory.create(
+        "chroma",
+        path=str(base_dir / "chroma"),
+        collection_name="smoke_collection",
+        embedding_model_dims=3,
+        metric_type="COSINE",
     )
-
-    # Create Milvus database instance
-    milvus_db = DatabaseFactory.create('milvus', milvus_config)
-
+    db = DatabaseFactory.create("chroma", config)
     try:
-        # Prepare sample data
-        vector_dimension = milvus_config.embedding_model_dims
-        vectors = [
-            [float(i) for i in range(vector_dimension)],  # Sample vector 1
-            [float(i + 1) for i in range(vector_dimension)],  # Sample vector 2
-        ]
-        payloads = [
-            {'name': 'Vector 1', 'description': 'First test vector.'},
-            {'name': 'Vector 2', 'description': 'Second test vector.'},
-        ]
-        ids = [str(uuid.uuid4()), str(uuid.uuid4())]  # Generate unique IDs
-
-        # Insert vectors into the collection
-        milvus_db.insert_vectors(
-            collection_name=milvus_config.collection_name,
-            vectors=vectors,
-            payloads=payloads,
-            ids=ids
+        vector_id = uuid.uuid4().hex
+        db.insert_vectors(
+            collection_name=config.collection_name,
+            vectors=[[0.1, 0.2, 0.3]],
+            payloads=[{"kind": "smoke"}],
+            ids=[vector_id],
         )
-        logging.info(f"Inserted vectors with IDs: {ids}")
-
-        # Search for similar vectors
-        query_vector = [float(i + 0.5) for i in range(vector_dimension)]  # Query vector
-        search_results = milvus_db.search_vectors(
-            collection_name=milvus_config.collection_name,
-            query_vector=query_vector,
-            top_k=2
-        )
-        print(f"Milvus Search results:\n{search_results}")
-
-    except Exception as e:
-        logging.error(f"An error occurred while testing Milvus: {e}")
+        result = db.get_vector(config.collection_name, vector_id)
+        print("Chroma vector:", result["id"])
     finally:
-        # Close the connection
-        del milvus_db
+        db.close()
 
 
-def test_neo4j():
-    """
-    Test the DatabaseFactory and DatabaseConfigFactory with Neo4j database.
-    """
-    print("\n--- Testing Neo4j Database ---")
-    # Create configuration for Neo4j
-    neo4j_config = DatabaseConfigFactory.create(
-        'neo4j',
-        uri='bolt://localhost:7687',
-        user='neo4j',
-        password='cf57bwP9pcdcEK3',  # Replace with your actual password
-        database='neo4j',
-        encrypted=False,
+def test_kuzu(base_dir: Path) -> None:
+    print("\n--- Testing Kuzu ---")
+    config = DatabaseConfigFactory.create(
+        "kuzu",
+        database=str(base_dir / "kuzu.db"),
     )
-
-    # Create Neo4j database instance
-    neo4j_db = DatabaseFactory.create('neo4j', neo4j_config)
-
+    db = DatabaseFactory.create("kuzu", config)
     try:
-        # Add a node
-        node_id = 'node1'
-        neo4j_db.add_node(
-            node_id=node_id,
-            properties={'name': 'Alice', 'age': 30},
-            labels=['Person']
-        )
-        logging.info(f"Added node with ID: {node_id}")
-
-        # Retrieve the node
-        node_data = neo4j_db.get_node(node_id)
-        print(f"Neo4j Node data: {node_data}")
-
-        # Add another node and create a relationship
-        node_id2 = 'node2'
-        neo4j_db.add_node(
-            node_id=node_id2,
-            properties={'name': 'Bob', 'age': 25},
-            labels=['Person']
-        )
-        neo4j_db.add_edge(
-            source_id=node_id,
-            target_id=node_id2,
-            relationship='KNOWS',
-            properties={'since': 2020}
-        )
-        logging.info(f"Added edge between {node_id} and {node_id2}")
-
-        # Get neighbors
-        neighbors = neo4j_db.get_neighbors(node_id, relationship='KNOWS', direction='out')
-        print(f"Neo4j Neighbors of {node_id}: {neighbors}")
-
-    except Exception as e:
-        logging.error(f"An error occurred while testing Neo4j: {e}")
+        db.add_node("node_a", {"kind": "person"}, ["Entity"])
+        db.add_node("node_b", {"kind": "person"}, ["Entity"])
+        db.add_edge("node_a", "node_b", "KNOWS", {"since": 2024})
+        rel = db.get_relationship("node_a", "node_b", "KNOWS")
+        print("Kuzu relationship:", rel["type"])
     finally:
-        # Close the connection
-        neo4j_db.close()
+        db.close()
 
 
-def test_sqlite():
-    """
-    Test the DatabaseFactory and DatabaseConfigFactory with SQLite database.
-    """
-    print("\n--- Testing SQLite Database ---")
-    # Create configuration for SQLite
-    sqlite_config = DatabaseConfigFactory.create(
-        'sqlite',
-        database='storage/test_database.db'  # Use a file-based database for persistence
+def test_sqlite(base_dir: Path) -> None:
+    print("\n--- Testing SQLite ---")
+    config = DatabaseConfigFactory.create(
+        "sqlite",
+        database=str(base_dir / "sqlite.db"),
     )
-
-    # Create SQLite database instance
-    sqlite_db = DatabaseFactory.create('sqlite', sqlite_config)
-
+    db = DatabaseFactory.create("sqlite", config)
     try:
-        # Create a sample table
-        create_table_sql = """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            age INTEGER,
-            email TEXT UNIQUE
-        );
-        """
-        sqlite_db.execute_sql(create_table_sql)
-        logging.info("Created table 'users' in SQLite database.")
-
-        # Insert a record
-        record = {'name': 'Alice', 'age': 30, 'email': 'alice@example.com'}
-        user_id = sqlite_db.insert_record('users', record)
-        logging.info(f"Inserted user with ID: {user_id}")
-
-        # Retrieve the record
-        retrieved_record = sqlite_db.get_record('users', user_id)
-        print(f"SQLite Retrieved record: {retrieved_record}")
-
-        # Update the record
-        updates = {'age': 31}
-        sqlite_db.update_record('users', user_id, updates)
-        logging.info(f"Updated user with ID: {user_id}")
-
-        # Query records
-        conditions = {'age': 31}
-        users = sqlite_db.query_records('users', conditions)
-        print(f"SQLite Users with age 31: {users}")
-
-    except Exception as e:
-        logging.error(f"An error occurred while testing SQLite: {e}")
+        db.execute_sql("CREATE TABLE IF NOT EXISTS smoke (id TEXT PRIMARY KEY, val TEXT)")
+        record_id = uuid.uuid4().hex
+        db.insert_record("smoke", {"id": record_id, "val": "v"})
+        result = db.get_record("smoke", record_id)
+        print("SQLite record:", result)
     finally:
-        # Close the database connection
-        sqlite_db.close()
+        db.close()
 
 
-def main():
-    """
-    Main function to run tests for Milvus, Neo4j, and SQLite databases.
-    """
-    test_milvus()
-    test_neo4j()
-    test_sqlite()
+def main() -> None:
+    with tempfile.TemporaryDirectory(prefix="aeiva-storage-smoke-") as tmp_dir:
+        base_dir = Path(tmp_dir)
+        test_chroma(base_dir)
+        test_kuzu(base_dir)
+        test_sqlite(base_dir)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
