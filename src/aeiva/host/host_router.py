@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -127,11 +128,23 @@ class HostRouter:
             op = args.get("operation") or ""
             if op:
                 return f"{tool}.{op}"
+        if tool == "browser":
+            op = args.get("operation") or args.get("action") or ""
+            if isinstance(op, str) and op.strip():
+                op_key = op.strip().lower()
+                if op_key == "act":
+                    req = args.get("request")
+                    if isinstance(req, dict):
+                        kind = req.get("kind")
+                        if isinstance(kind, str) and kind.strip():
+                            return f"{tool}.{op_key}:{kind.strip().lower()}"
+                return f"{tool}.{op_key}"
         if tool == "shell":
             cmd = args.get("command") or ""
             head = cmd.strip().split()[0] if isinstance(cmd, str) and cmd.strip() else ""
             if head:
-                return f"{tool}:{head}"
+                head_base = os.path.basename(head) or head
+                return f"{tool}:{head_base}"
         return tool
 
 

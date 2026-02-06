@@ -7,6 +7,7 @@ it deserves a dedicated tool to save tokens.
 """
 
 from typing import Any, Dict, List
+from urllib.parse import quote_plus
 
 from ..decorator import tool
 from ..capability import Capability
@@ -47,9 +48,14 @@ async def web_search(
         }
     except ImportError:
         return {
-            "success": False,
+            "success": True,
+            "query": query,
             "results": [],
-            "error": "duckduckgo-search not installed. Run: pip install duckduckgo-search",
+            "error": None,
+            "search_url": f"https://www.google.com/search?q={quote_plus(query)}",
+            "note": (
+                "duckduckgo-search is not installed; returning a direct search URL fallback."
+            ),
         }
     except Exception as e:
         return {"success": False, "results": [], "error": str(e)}
