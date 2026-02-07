@@ -25,7 +25,8 @@ class LLMClient:
     Delegates tool calling and iteration logic to ToolLoopEngine.
     """
 
-    DEFAULT_MAX_TOOL_LOOPS = 10
+    DEFAULT_MAX_TOOL_LOOPS = 32
+    DEFAULT_TOOL_RESULT_MAX_CHARS = 8000
 
     def __init__(self, config: LLMGatewayConfig):
         self.config = config
@@ -44,11 +45,30 @@ class LLMClient:
             backend=self.backend,
             metrics=self.metrics,
             max_tool_loops=self.max_tool_loops,
+            tool_result_max_chars=self.tool_result_max_chars,
         )
 
     @property
     def max_tool_loops(self) -> int:
-        return getattr(self.config, "llm_max_tool_loops", self.DEFAULT_MAX_TOOL_LOOPS)
+        raw = getattr(self.config, "llm_max_tool_loops", self.DEFAULT_MAX_TOOL_LOOPS)
+        try:
+            parsed = int(raw)
+        except Exception:
+            return self.DEFAULT_MAX_TOOL_LOOPS
+        return max(1, min(parsed, 60))
+
+    @property
+    def tool_result_max_chars(self) -> int:
+        raw = getattr(
+            self.config,
+            "llm_tool_result_max_chars",
+            self.DEFAULT_TOOL_RESULT_MAX_CHARS,
+        )
+        try:
+            parsed = int(raw)
+        except Exception:
+            return self.DEFAULT_TOOL_RESULT_MAX_CHARS
+        return max(1000, min(parsed, 60000))
 
     @property
     def last_response_id(self) -> Optional[str]:

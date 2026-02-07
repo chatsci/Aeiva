@@ -53,6 +53,7 @@ DEFAULT_INPUT_EVENTS = [
 ERROR_POLICY_FAIL_FAST = "fail_fast"
 ERROR_POLICY_USER_FALLBACK = "user_fallback"
 DEFAULT_ERROR_FALLBACK_MESSAGE = "I ran into an internal error while thinking. Please try again."
+DEFAULT_TIMEOUT_BUFFER_SECONDS = 5.0
 
 
 @dataclass
@@ -103,6 +104,9 @@ class Cognition(BaseNeuron):
     @classmethod
     def build_config(cls, config: Any) -> CognitionConfig:
         """Build config from either `cognition_config` block or top-level keys."""
+        explicit_process_timeout = False
+        llm_timeout_value: Optional[float] = None
+
         if isinstance(config, CognitionConfig):
             cfg = config
         elif not isinstance(config, dict):
@@ -114,12 +118,31 @@ class Cognition(BaseNeuron):
             if isinstance(nested, dict):
                 merged.update({k: v for k, v in nested.items() if k in allowed})
             merged.update({k: v for k, v in config.items() if k in allowed})
+            explicit_process_timeout = "process_timeout" in merged
             cfg = CognitionConfig(**merged)
+            llm_cfg = config.get("llm_gateway_config")
+            if isinstance(llm_cfg, dict):
+                llm_timeout_value = cls._to_positive_float(llm_cfg.get("llm_timeout"))
 
         cfg.error_policy = cls._normalize_error_policy(cfg.error_policy)
         fallback = str(cfg.error_fallback_message or "").strip()
         cfg.error_fallback_message = fallback or DEFAULT_ERROR_FALLBACK_MESSAGE
+        if not explicit_process_timeout and llm_timeout_value is not None:
+            cfg.process_timeout = max(
+                float(cfg.process_timeout),
+                llm_timeout_value + DEFAULT_TIMEOUT_BUFFER_SECONDS,
+            )
         return cfg
+
+    @staticmethod
+    def _to_positive_float(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
 
     def __init__(
         self,

@@ -92,17 +92,33 @@ class HostRouter:
         if block is not None:
             return block
         payload = {"tool": tool, "args": args_clean, "id": str(uuid.uuid4())}
-        async with httpx.AsyncClient(timeout=host.timeout) as client:
-            resp = await client.post(
-                f"{host.url}/invoke",
-                json=payload,
-                headers=host.build_headers(),
-            )
-        resp.raise_for_status()
+        try:
+            async with httpx.AsyncClient(timeout=host.timeout) as client:
+                resp = await client.post(
+                    f"{host.url}/invoke",
+                    json=payload,
+                    headers=host.build_headers(),
+                )
+        except httpx.HTTPError as exc:
+            return {
+                "success": False,
+                "error": "connection_error",
+                "message": str(exc),
+                "host": host.url,
+            }
+
+        if resp.status_code >= 400:
+            return self._http_error_result(resp, host.url)
+
         data = resp.json()
         if data.get("ok"):
             return data.get("result")
-        raise RuntimeError(data.get("error") or "host execution failed")
+        return {
+            "success": False,
+            "error": "host_execution_failed",
+            "message": data.get("error") or "host execution failed",
+            "host": host.url,
+        }
 
     def execute_sync(self, tool: str, args: Dict[str, Any]) -> Any:
         host, args_clean, block = self._prepare_execution(tool, args)
@@ -111,17 +127,65 @@ class HostRouter:
         if block is not None:
             return block
         payload = {"tool": tool, "args": args_clean, "id": str(uuid.uuid4())}
-        with httpx.Client(timeout=host.timeout) as client:
-            resp = client.post(
-                f"{host.url}/invoke",
-                json=payload,
-                headers=host.build_headers(),
-            )
-        resp.raise_for_status()
+        try:
+            with httpx.Client(timeout=host.timeout) as client:
+                resp = client.post(
+                    f"{host.url}/invoke",
+                    json=payload,
+                    headers=host.build_headers(),
+                )
+        except httpx.HTTPError as exc:
+            return {
+                "success": False,
+                "error": "connection_error",
+                "message": str(exc),
+                "host": host.url,
+            }
+
+        if resp.status_code >= 400:
+            return self._http_error_result(resp, host.url)
+
         data = resp.json()
         if data.get("ok"):
             return data.get("result")
-        raise RuntimeError(data.get("error") or "host execution failed")
+        return {
+            "success": False,
+            "error": "host_execution_failed",
+            "message": data.get("error") or "host execution failed",
+            "host": host.url,
+        }
+
+    @staticmethod
+    def _http_error_result(resp: httpx.Response, host_url: str) -> Dict[str, Any]:
+        detail = ""
+        try:
+            payload = resp.json()
+            if isinstance(payload, dict):
+                detail = str(
+                    payload.get("detail")
+                    or payload.get("error")
+                    or payload.get("message")
+                    or ""
+                ).strip()
+        except Exception:
+            detail = ""
+        if not detail:
+            detail = (resp.text or "").strip() or f"HTTP {resp.status_code}"
+
+        if resp.status_code == 401:
+            error_code = "unauthorized"
+        elif resp.status_code == 403:
+            error_code = "forbidden"
+        else:
+            error_code = "http_error"
+
+        return {
+            "success": False,
+            "error": error_code,
+            "status_code": resp.status_code,
+            "message": detail,
+            "host": host_url,
+        }
 
     def _action_key(self, tool: str, args: Dict[str, Any]) -> str:
         if tool == "filesystem":

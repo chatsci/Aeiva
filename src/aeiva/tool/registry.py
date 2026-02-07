@@ -72,11 +72,21 @@ class ToolRegistry:
 
     def _discover_tier(self, tier_path: Path, tier_name: str) -> None:
         """Discover tools from a single tier directory."""
-        for file_path in tier_path.glob("*.py"):
-            if file_path.name.startswith("_"):
+        module_names: list[str] = []
+        for entry in sorted(tier_path.iterdir(), key=lambda item: item.name):
+            if entry.name.startswith("_"):
                 continue
+            if entry.is_file() and entry.suffix == ".py":
+                module_name = entry.stem
+            elif entry.is_dir() and (entry / "__init__.py").is_file():
+                module_name = entry.name
+            else:
+                continue
+            if module_name in module_names:
+                continue
+            module_names.append(module_name)
 
-            module_name = file_path.stem
+        for module_name in module_names:
             try:
                 # Import the module
                 full_module = f"aeiva.tool.{tier_name}.{module_name}"
@@ -92,7 +102,7 @@ class ToolRegistry:
                         logger.debug(f"Registered tool: {metadata.name} from {tier_name}/")
 
             except Exception as e:
-                logger.warning(f"Failed to load tool from {file_path}: {e}")
+                logger.warning(f"Failed to load tool module {tier_name}/{module_name}: {e}")
 
     def register(self, func: Callable) -> None:
         """

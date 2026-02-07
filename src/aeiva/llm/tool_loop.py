@@ -1,13 +1,19 @@
 from dataclasses import dataclass
 import asyncio
 import json
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Set
 from uuid import uuid4
 
 from aeiva.llm.backend import LLMBackend, LLMResponse
 from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
 from aeiva.llm.tool_types import ToolCall, ToolCallDelta
 from aeiva.tool.registry import get_registry
+
+DEFAULT_TOOL_RESULT_MAX_CHARS = 8_000
+_TOOL_RESULT_MAX_DEPTH = 4
+_TOOL_RESULT_MAX_LIST_ITEMS = 80
+_TOOL_RESULT_MAX_DICT_ITEMS = 120
+_TOOL_RESULT_MAX_STRING_CHARS = 2_000
 
 
 @dataclass
@@ -34,12 +40,14 @@ class ToolLoopEngine:
         metrics: Optional[LLMUsageMetrics] = None,
         max_tool_loops: int = 10,
         registry=None,
+        tool_result_max_chars: int = DEFAULT_TOOL_RESULT_MAX_CHARS,
     ) -> None:
         self.backend = backend
         self.metrics = metrics
         self.max_tool_loops = max_tool_loops
         self.registry = registry or get_registry()
         self.last_response_id: Optional[str] = None
+        self.tool_result_max_chars = self._normalize_tool_result_max_chars(tool_result_max_chars)
 
     def run(self, messages: List[Any], tools: List[Dict[str, Any]] = None, **kwargs) -> ToolLoopResult:
         for _ in range(self.max_tool_loops):
@@ -354,12 +362,119 @@ class ToolLoopEngine:
                 tc.id = f"call_{uuid4().hex}"
 
     def _format_tool_result(self, result: Any) -> str:
-        if isinstance(result, (dict, list)):
+        normalized = self._normalize_tool_result(result)
+        if isinstance(normalized, str):
+            return self._truncate_text(normalized, self.tool_result_max_chars)
+
+        try:
+            serialized = json.dumps(
+                normalized,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        except (TypeError, ValueError):
+            return self._truncate_text(str(result), self.tool_result_max_chars)
+
+        if len(serialized) <= self.tool_result_max_chars:
+            return serialized
+
+        preview = serialized[: max(0, self.tool_result_max_chars - 256)]
+        while True:
+            envelope = {
+                "truncated": True,
+                "original_length": len(serialized),
+                "preview": preview,
+            }
             try:
-                return json.dumps(result)
+                truncated = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
             except (TypeError, ValueError):
-                return str(result)
-        return str(result)
+                return self._truncate_text(serialized, self.tool_result_max_chars)
+            if len(truncated) <= self.tool_result_max_chars:
+                return truncated
+            if not preview:
+                return self._truncate_text(truncated, self.tool_result_max_chars)
+            overflow = len(truncated) - self.tool_result_max_chars
+            trim = max(16, overflow + 8)
+            preview = preview[:-trim]
+
+    @staticmethod
+    def _normalize_tool_result_max_chars(value: Any) -> int:
+        try:
+            parsed = int(value)
+        except Exception:
+            parsed = DEFAULT_TOOL_RESULT_MAX_CHARS
+        return max(1_000, min(parsed, 60_000))
+
+    @staticmethod
+    def _truncate_text(value: str, limit: int) -> str:
+        if len(value) <= limit:
+            return value
+        if limit <= 64:
+            return value[:limit]
+        omitted = len(value) - limit
+        suffix = f"...<truncated:{omitted} chars>"
+        keep = max(1, limit - len(suffix))
+        return value[:keep] + suffix
+
+    def _normalize_tool_result(self, value: Any) -> Any:
+        return self._normalize_tool_result_recursive(value, depth=0, seen=set())
+
+    def _normalize_tool_result_recursive(
+        self,
+        value: Any,
+        *,
+        depth: int,
+        seen: Set[int],
+    ) -> Any:
+        if depth > _TOOL_RESULT_MAX_DEPTH:
+            return "<omitted:depth_limit>"
+
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+
+        if isinstance(value, str):
+            return self._truncate_text(value, _TOOL_RESULT_MAX_STRING_CHARS)
+
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return f"<binary:{len(value)} bytes>"
+
+        if isinstance(value, dict):
+            marker = id(value)
+            if marker in seen:
+                return "<omitted:cycle>"
+            seen.add(marker)
+            normalized: Dict[str, Any] = {}
+            items = list(value.items())
+            for idx, (raw_key, raw_val) in enumerate(items):
+                if idx >= _TOOL_RESULT_MAX_DICT_ITEMS:
+                    normalized["__truncated_fields__"] = len(items) - _TOOL_RESULT_MAX_DICT_ITEMS
+                    break
+                key = str(raw_key)
+                normalized[key] = self._normalize_tool_result_recursive(
+                    raw_val,
+                    depth=depth + 1,
+                    seen=seen,
+                )
+            seen.discard(marker)
+            return normalized
+
+        if isinstance(value, (list, tuple, set)):
+            marker = id(value)
+            if marker in seen:
+                return ["<omitted:cycle>"]
+            seen.add(marker)
+            sequence = list(value)
+            clipped = sequence[:_TOOL_RESULT_MAX_LIST_ITEMS]
+            normalized_list = [
+                self._normalize_tool_result_recursive(item, depth=depth + 1, seen=seen)
+                for item in clipped
+            ]
+            if len(sequence) > _TOOL_RESULT_MAX_LIST_ITEMS:
+                normalized_list.append(f"<truncated_items:{len(sequence) - _TOOL_RESULT_MAX_LIST_ITEMS}>")
+            seen.discard(marker)
+            return normalized_list
+
+        return self._truncate_text(repr(value), _TOOL_RESULT_MAX_STRING_CHARS)
 
     def _record_usage(self, parsed) -> None:
         if not self.metrics:

@@ -12,345 +12,44 @@ It is intentionally not auto-discovered as a tool module.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
+import re
+import shutil
+import sys
+import tempfile
 import time
-from collections import deque
-from dataclasses import dataclass, field
-from typing import Any, Callable, Deque, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional
+
+from .runtime_interaction import RuntimeInteractionMixin
+from .runtime_launch import RuntimeLaunchMixin
+from .runtime_snapshot_script import _SNAPSHOT_JS
+from .runtime_common import (
+    DEFAULT_POST_GOTO_SETTLE_MS,
+    DEFAULT_SELECT_SETTLE_MS,
+    DEFAULT_SLOW_TYPE_DELAY_MS,
+    DEFAULT_TIMEOUT_MS,
+    DEFAULT_TYPE_DELAY_MS,
+    BrowserRuntime,
+    TabState,
+    _coerce_bool,
+    _distributed_attempt_timeout,
+    _extract_numeric_token,
+    _normalize_text_value,
+    _normalize_timeout,
+    _now_iso,
+    _parse_int_env,
+    _read_attr,
+    _repair_subprocess_policy_for_loop,
+    _safe_title,
+)
+from .session_manager import BrowserSessionManager
+from .security import BrowserSecurityPolicy
+
+logger = logging.getLogger(__name__)
 
 
-MAX_EVENT_HISTORY = 200
-DEFAULT_TIMEOUT_MS = 30_000
-
-
-def _now_iso() -> str:
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-
-def _safe_title(value: Any) -> str:
-    try:
-        return str(value) if value is not None else ""
-    except Exception:
-        return ""
-
-
-def _read_attr(obj: Any, name: str, default: Any = "") -> Any:
-    value = getattr(obj, name, default)
-    if callable(value):
-        try:
-            return value()
-        except Exception:
-            return default
-    return value
-
-
-def _normalize_timeout(timeout_ms: Optional[int], default: int = DEFAULT_TIMEOUT_MS) -> int:
-    if timeout_ms is None:
-        return default
-    try:
-        parsed = int(timeout_ms)
-    except Exception:
-        return default
-    return max(1, parsed)
-
-
-def _is_asyncio_loop_instance(loop: Any) -> bool:
-    module = type(loop).__module__
-    return module.startswith("asyncio.")
-
-
-def _has_usable_child_watcher(policy: Any) -> bool:
-    getter = getattr(policy, "get_child_watcher", None)
-    if not callable(getter):
-        return False
-    try:
-        return getter() is not None
-    except Exception:
-        return False
-
-
-def _repair_subprocess_policy_for_loop(loop: Any) -> bool:
-    """
-    Ensure asyncio subprocess support for a pre-existing stdlib asyncio loop.
-
-    Some web stacks set a custom event-loop policy (e.g. uvloop) after the main
-    loop is already created. On Python 3.12 this can break `create_subprocess_exec`
-    for that existing loop because policy child watcher APIs may be unavailable.
-    """
-    if os.name != "posix":
-        return False
-    if not _is_asyncio_loop_instance(loop):
-        return False
-
-    policy = asyncio.get_event_loop_policy()
-    if _has_usable_child_watcher(policy):
-        return False
-
-    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-    repaired_policy = asyncio.get_event_loop_policy()
-
-    getter = getattr(repaired_policy, "get_child_watcher", None)
-    setter = getattr(repaired_policy, "set_child_watcher", None)
-    watcher = None
-    if callable(getter):
-        try:
-            watcher = getter()
-        except Exception:
-            watcher = None
-    if watcher is None and callable(setter):
-        try:
-            watcher = asyncio.ThreadedChildWatcher()
-            setter(watcher)
-        except Exception:
-            watcher = None
-
-    if watcher is not None:
-        attach_loop = getattr(watcher, "attach_loop", None)
-        if callable(attach_loop):
-            try:
-                attach_loop(loop)
-            except Exception:
-                pass
-    return True
-
-
-@dataclass
-class TabEvents:
-    console: Deque[Dict[str, Any]] = field(
-        default_factory=lambda: deque(maxlen=MAX_EVENT_HISTORY)
-    )
-    errors: Deque[Dict[str, Any]] = field(
-        default_factory=lambda: deque(maxlen=MAX_EVENT_HISTORY)
-    )
-    network: Deque[Dict[str, Any]] = field(
-        default_factory=lambda: deque(maxlen=MAX_EVENT_HISTORY)
-    )
-
-
-@dataclass
-class TabState:
-    target_id: str
-    page: Any
-    refs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    events: TabEvents = field(default_factory=TabEvents)
-
-
-class BrowserRuntime(Protocol):
-    async def start(self) -> None: ...
-
-    async def stop(self) -> None: ...
-
-    async def status(self) -> Dict[str, Any]: ...
-
-    async def list_tabs(self) -> List[Dict[str, Any]]: ...
-
-    async def open_tab(self, url: str, timeout_ms: int) -> Dict[str, Any]: ...
-
-    async def focus_tab(self, target_id: str) -> Dict[str, Any]: ...
-
-    async def close_tab(self, target_id: str) -> Dict[str, Any]: ...
-
-    async def back(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-    ) -> Dict[str, Any]: ...
-
-    async def forward(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-    ) -> Dict[str, Any]: ...
-
-    async def reload(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-    ) -> Dict[str, Any]: ...
-
-    async def navigate(
-        self,
-        url: str,
-        timeout_ms: int,
-        target_id: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def click(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-        double_click: bool = False,
-        button: str = "left",
-    ) -> Dict[str, Any]: ...
-
-    async def type_text(
-        self,
-        *,
-        text: str,
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-        submit: bool = False,
-        slowly: bool = False,
-    ) -> Dict[str, Any]: ...
-
-    async def press(
-        self,
-        *,
-        key: str,
-        target_id: Optional[str],
-        timeout_ms: int,
-    ) -> Dict[str, Any]: ...
-
-    async def hover(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def select(
-        self,
-        *,
-        values: List[str],
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def drag(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        start_selector: Optional[str] = None,
-        start_ref: Optional[str] = None,
-        end_selector: Optional[str] = None,
-        end_ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def scroll(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-        delta_x: int = 0,
-        delta_y: int = 800,
-    ) -> Dict[str, Any]: ...
-
-    async def upload(
-        self,
-        *,
-        paths: List[str],
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def wait(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        text: Optional[str] = None,
-        text_gone: Optional[str] = None,
-        url_contains: Optional[str] = None,
-        time_ms: Optional[int] = None,
-        load_state: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def evaluate(
-        self,
-        *,
-        script: str,
-        target_id: Optional[str],
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def screenshot(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        full_page: bool,
-        image_type: str,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def pdf(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        scale: float = 1.0,
-        print_background: bool = True,
-    ) -> Dict[str, Any]: ...
-
-    async def get_text(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def get_html(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        selector: Optional[str] = None,
-        ref: Optional[str] = None,
-    ) -> Dict[str, Any]: ...
-
-    async def snapshot(
-        self,
-        *,
-        target_id: Optional[str],
-        timeout_ms: int,
-        limit: int,
-    ) -> Dict[str, Any]: ...
-
-    async def get_console(
-        self,
-        *,
-        target_id: Optional[str],
-        limit: int,
-    ) -> Dict[str, Any]: ...
-
-    async def get_errors(
-        self,
-        *,
-        target_id: Optional[str],
-        limit: int,
-    ) -> Dict[str, Any]: ...
-
-    async def get_network(
-        self,
-        *,
-        target_id: Optional[str],
-        limit: int,
-    ) -> Dict[str, Any]: ...
-
-
-class PlaywrightRuntime(BrowserRuntime):
+class PlaywrightRuntime(RuntimeLaunchMixin, RuntimeInteractionMixin, BrowserRuntime):
     """Persistent local Playwright runtime for one profile."""
 
     def __init__(self, profile: str, headless: bool = True):
@@ -368,6 +67,8 @@ class PlaywrightRuntime(BrowserRuntime):
         self._page_to_tab: Dict[int, str] = {}
         self._last_target_id: Optional[str] = None
         self._launch_strategy: Optional[str] = None
+        self._launch_user_data_dir: Optional[str] = None
+        self._security = BrowserSecurityPolicy.from_env()
 
     async def start(self) -> None:
         if self._started:
@@ -392,6 +93,12 @@ class PlaywrightRuntime(BrowserRuntime):
                 self._context.on("page", self._on_page_created)
                 self._started = True
                 self._started_at = time.time()
+                logger.info(
+                    "Browser runtime started profile=%s headless=%s launch_strategy=%s",
+                    self.profile,
+                    self.headless,
+                    self._launch_strategy,
+                )
                 return
             except NotImplementedError as exc:
                 await self._cleanup_partial_start()
@@ -436,6 +143,7 @@ class PlaywrightRuntime(BrowserRuntime):
                 await playwright.stop()
         except Exception:
             pass
+        self._cleanup_launch_user_data_dir()
 
     async def stop(self) -> None:
         if not self._started:
@@ -464,6 +172,27 @@ class PlaywrightRuntime(BrowserRuntime):
             finally:
                 if playwright is not None:
                     await playwright.stop()
+        self._cleanup_launch_user_data_dir()
+        logger.info("Browser runtime stopped profile=%s", self.profile)
+
+    def _ensure_launch_user_data_dir(self) -> str:
+        existing = self._launch_user_data_dir
+        if existing:
+            return existing
+        safe_profile = re.sub(r"[^A-Za-z0-9_.-]+", "-", self.profile).strip("-") or "default"
+        created = tempfile.mkdtemp(prefix=f"aeiva-browser-{safe_profile}-")
+        self._launch_user_data_dir = created
+        return created
+
+    def _cleanup_launch_user_data_dir(self) -> None:
+        path = self._launch_user_data_dir
+        self._launch_user_data_dir = None
+        if not path:
+            return
+        try:
+            shutil.rmtree(path, ignore_errors=True)
+        except Exception:
+            pass
 
     async def status(self) -> Dict[str, Any]:
         tab_count = len(self._tab_states)
@@ -606,23 +335,112 @@ class PlaywrightRuntime(BrowserRuntime):
         slowly: bool = False,
     ) -> Dict[str, Any]:
         page, resolved_target = await self._resolve_page(target_id=target_id, create=True)
-        primary_selector, fallback_selector = self._resolve_selector(
-            target_id=resolved_target, selector=selector, ref=ref
+        payload_text = text or ""
+        locator: Optional[Any] = None
+
+        if selector or ref:
+            primary_selector, fallback_selector = self._resolve_selector(
+                target_id=resolved_target, selector=selector, ref=ref
+            )
+            locator = await self._wait_for_locator(
+                page,
+                primary_selector,
+                timeout_ms,
+                fallback_selector=fallback_selector,
+                allow_attached_fallback=True,
+            )
+        elif not await self._focused_element_is_editable(page):
+            locator = await self._find_best_editable_locator(page, timeout_ms)
+            if locator is None:
+                raise ValueError(
+                    "selector or ref is required unless an editable element is already focused"
+                )
+
+        typed = await self._write_text_with_fallback(
+            page=page,
+            locator=locator,
+            text=payload_text,
+            timeout_ms=timeout_ms,
+            slowly=slowly,
         )
-        locator = await self._wait_for_locator(
-            page,
-            primary_selector,
-            timeout_ms,
-            fallback_selector=fallback_selector,
-        )
-        if slowly:
-            await locator.click(timeout=timeout_ms)
-            await page.keyboard.type(text or "", delay=60)
-        else:
-            await locator.fill(text or "", timeout=timeout_ms)
+        typed_ok, typed_locator = typed
+        if not typed_ok:
+            raise ValueError("Unable to type text into target field")
         if submit:
             await page.keyboard.press("Enter", timeout=timeout_ms)
-        return await self._tab_payload(resolved_target)
+        payload = await self._tab_payload(resolved_target)
+        try:
+            payload["field_value"] = await self._read_field_value(
+                page=page,
+                locator=typed_locator if typed_locator is not None else locator,
+            )
+        except Exception:
+            pass
+        return payload
+
+    async def _write_text_with_fallback(
+        self,
+        *,
+        page: Any,
+        locator: Optional[Any],
+        text: str,
+        timeout_ms: int,
+        slowly: bool,
+    ) -> tuple[bool, Optional[Any]]:
+        if locator is None:
+            await self._type_via_keyboard(
+                page,
+                locator,
+                text,
+                timeout_ms,
+                slowly=slowly,
+            )
+            return await self._text_matches_active(page, text), None
+
+        if not slowly:
+            try:
+                await locator.fill(text, timeout=timeout_ms)
+                if await self._text_matches_locator(locator, text):
+                    return True, locator
+            except Exception:
+                pass
+
+        await self._type_via_keyboard(
+            page,
+            locator,
+            text,
+            timeout_ms,
+            slowly=slowly,
+        )
+        if await self._text_matches_locator(locator, text):
+            return True, locator
+        if await self._text_matches_active(page, text):
+            return True, locator
+
+        if await self._apply_numeric_value_fallback(
+            locator=locator,
+            text=text,
+            timeout_ms=timeout_ms,
+        ):
+            if await self._text_matches_locator(locator, text):
+                return True, locator
+
+        editable = await self._find_editable_within_locator(locator, timeout_ms)
+        if editable is None:
+            # Do not spill targeted writes into an unrelated global input.
+            # If this scoped target has no editable descendant, fail fast so
+            # the caller can recover with a better ref/selector.
+            return False, locator
+        await self._type_via_keyboard(
+            page,
+            editable,
+            text,
+            timeout_ms,
+            slowly=slowly,
+        )
+        if await self._text_matches_locator(editable, text):
+            return True, editable
+        return await self._text_matches_active(page, text), editable
 
     async def press(
         self,
@@ -670,17 +488,42 @@ class PlaywrightRuntime(BrowserRuntime):
         if not values:
             raise ValueError("values are required for select operation")
         page, resolved_target = await self._resolve_page(target_id=target_id, create=True)
-        primary_selector, fallback_selector = self._resolve_selector(
-            target_id=resolved_target, selector=selector, ref=ref
-        )
-        locator = await self._wait_for_locator(
-            page,
-            primary_selector,
-            timeout_ms,
-            fallback_selector=fallback_selector,
-        )
-        await locator.select_option(values=values, timeout=timeout_ms)
-        return await self._tab_payload(resolved_target)
+        locator: Optional[Any] = None
+        if selector or ref:
+            primary_selector, fallback_selector = self._resolve_selector(
+                target_id=resolved_target, selector=selector, ref=ref
+            )
+            locator = await self._wait_for_locator(
+                page,
+                primary_selector,
+                timeout_ms,
+                fallback_selector=fallback_selector,
+                allow_attached_fallback=True,
+            )
+            try:
+                await locator.select_option(value=values, timeout=timeout_ms)
+            except Exception:
+                await self._select_custom_values(
+                    page=page,
+                    control_locator=locator,
+                    values=values,
+                    timeout_ms=timeout_ms,
+                )
+        else:
+            await self._select_values_from_open_dropdown(
+                page=page,
+                values=values,
+                timeout_ms=timeout_ms,
+            )
+        payload = await self._tab_payload(resolved_target)
+        try:
+            payload["selected_values"] = await self._read_selected_values(
+                page=page,
+                locator=locator,
+            )
+        except Exception:
+            pass
+        return payload
 
     async def drag(
         self,
@@ -729,6 +572,11 @@ class PlaywrightRuntime(BrowserRuntime):
         delta_y: int = 800,
     ) -> Dict[str, Any]:
         page, resolved_target = await self._resolve_page(target_id=target_id, create=True)
+        viewport_before = await self._read_viewport_scroll(page)
+        element_scrolled = False
+        element_scroll: Optional[Dict[str, Any]] = None
+        active_container_scroll: Optional[Dict[str, Any]] = None
+
         if selector or ref:
             primary, fallback = self._resolve_selector(
                 target_id=resolved_target,
@@ -740,11 +588,232 @@ class PlaywrightRuntime(BrowserRuntime):
                 primary,
                 timeout_ms,
                 fallback_selector=fallback,
+                allow_attached_fallback=True,
             )
-            await locator.scroll_into_view_if_needed(timeout=timeout_ms)
-            await locator.hover(timeout=timeout_ms)
-        await page.mouse.wheel(int(delta_x), int(delta_y))
-        return await self._tab_payload(resolved_target)
+            try:
+                element_scroll = await locator.evaluate(
+                    """(el, delta) => {
+                      const dx = Number(delta?.x || 0);
+                      const dy = Number(delta?.y || 0);
+                      const canScrollX = (el.scrollWidth || 0) > (el.clientWidth || 0);
+                      const canScrollY = (el.scrollHeight || 0) > (el.clientHeight || 0);
+                      if (!canScrollX && !canScrollY) {
+                        return {
+                          scrolled: false,
+                          left: Number(el.scrollLeft || 0),
+                          top: Number(el.scrollTop || 0)
+                        };
+                      }
+                      if (typeof el.scrollBy === "function") {
+                        el.scrollBy(dx, dy);
+                      } else {
+                        el.scrollLeft = Number(el.scrollLeft || 0) + dx;
+                        el.scrollTop = Number(el.scrollTop || 0) + dy;
+                      }
+                      return {
+                        scrolled: true,
+                        left: Number(el.scrollLeft || 0),
+                        top: Number(el.scrollTop || 0)
+                      };
+                    }""",
+                    {"x": int(delta_x), "y": int(delta_y)},
+                )
+                if isinstance(element_scroll, dict) and bool(element_scroll.get("scrolled")):
+                    element_scrolled = True
+            except Exception:
+                element_scrolled = False
+
+        if not element_scrolled:
+            # When interacting with dialogs (date pickers, dropdown panels),
+            # scrolling the nearest active container is more stable than
+            # moving the whole page viewport.
+            active_container_scroll = await self._scroll_active_container(
+                page=page,
+                delta_x=int(delta_x),
+                delta_y=int(delta_y),
+            )
+            if isinstance(active_container_scroll, dict) and bool(active_container_scroll.get("scrolled")):
+                element_scrolled = True
+            else:
+                await page.mouse.wheel(int(delta_x), int(delta_y))
+
+        viewport_after = await self._read_viewport_scroll(page)
+        viewport_moved = (
+            int(viewport_before.get("x", 0)) != int(viewport_after.get("x", 0))
+            or int(viewport_before.get("y", 0)) != int(viewport_after.get("y", 0))
+        )
+        scroll_effective = bool(element_scrolled or viewport_moved)
+        payload = await self._tab_payload(resolved_target)
+        payload.update(
+            {
+                "scrolled_container": bool(element_scrolled),
+                "scroll_effective": scroll_effective,
+                "container_scroll": element_scroll if isinstance(element_scroll, dict) else None,
+                "active_container_scroll": (
+                    active_container_scroll if isinstance(active_container_scroll, dict) else None
+                ),
+                "viewport_scroll_before": viewport_before,
+                "viewport_scroll_after": viewport_after,
+            }
+        )
+        return payload
+
+    async def _scroll_active_container(
+        self,
+        *,
+        page: Any,
+        delta_x: int,
+        delta_y: int,
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            result = await page.evaluate(
+                """(delta) => {
+                  const dx = Number(delta?.x || 0);
+                  const dy = Number(delta?.y || 0);
+
+                  const isVisible = (el) => {
+                    if (!(el instanceof HTMLElement)) return false;
+                    const style = window.getComputedStyle(el);
+                    if (!style) return false;
+                    if (style.display === "none" || style.visibility === "hidden") return false;
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                  };
+
+                  const isScrollable = (el) => {
+                    if (!(el instanceof HTMLElement)) return false;
+                    const canX = (el.scrollWidth || 0) > (el.clientWidth || 0) + 1;
+                    const canY = (el.scrollHeight || 0) > (el.clientHeight || 0) + 1;
+                    return canX || canY;
+                  };
+
+                  const buildContainerKey = (el) => {
+                    if (!(el instanceof HTMLElement)) return "";
+                    const tag = String(el.tagName || "").toLowerCase();
+                    const id = String(el.id || "").trim();
+                    const classes = String(el.className || "")
+                      .trim()
+                      .split(/\\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .join(".");
+                    const role = String(el.getAttribute("role") || "").trim();
+                    const aria = String(el.getAttribute("aria-label") || "").trim().slice(0, 24);
+                    return [tag, id, classes, role, aria].filter(Boolean).join("|");
+                  };
+
+                  const collectAncestors = (node) => {
+                    const out = [];
+                    let cur = node;
+                    while (cur && cur instanceof HTMLElement && out.length < 16) {
+                      out.push(cur);
+                      cur = cur.parentElement;
+                    }
+                    return out;
+                  };
+
+                  const candidates = [];
+                  const active = document.activeElement;
+                  if (active instanceof HTMLElement) {
+                    candidates.push(...collectAncestors(active));
+                  }
+
+                  const overlays = Array.from(
+                    document.querySelectorAll(
+                      "[aria-modal='true'], [role='dialog'], [role='listbox'], [role='menu'], [role='region']"
+                    )
+                  );
+                  for (const el of overlays) {
+                    if (el instanceof HTMLElement) candidates.push(el);
+                  }
+
+                  const seen = new Set();
+                  const ordered = [];
+                  for (const item of candidates) {
+                    if (!(item instanceof HTMLElement)) continue;
+                    if (!isVisible(item) || !isScrollable(item)) continue;
+                    if (seen.has(item)) continue;
+                    seen.add(item);
+                    ordered.push(item);
+                  }
+                  if (!ordered.length) {
+                    return { scrolled: false };
+                  }
+
+                  const scoreForDirection = (el) => {
+                    const top = Number(el.scrollTop || 0);
+                    const left = Number(el.scrollLeft || 0);
+                    const maxTop = Math.max(0, Number(el.scrollHeight || 0) - Number(el.clientHeight || 0));
+                    const maxLeft = Math.max(0, Number(el.scrollWidth || 0) - Number(el.clientWidth || 0));
+                    const roomY = dy > 0
+                      ? Math.max(0, maxTop - top)
+                      : dy < 0
+                        ? Math.max(0, top)
+                        : Math.max(top, Math.max(0, maxTop - top));
+                    const roomX = dx > 0
+                      ? Math.max(0, maxLeft - left)
+                      : dx < 0
+                        ? Math.max(0, left)
+                        : Math.max(left, Math.max(0, maxLeft - left));
+                    const primaryRoom = Math.abs(dy) >= Math.abs(dx) ? roomY : roomX;
+                    const secondaryRoom = Math.abs(dy) >= Math.abs(dx) ? roomX : roomY;
+                    const area = Number(el.clientWidth || 0) * Number(el.clientHeight || 0);
+                    return {
+                      roomX,
+                      roomY,
+                      score: primaryRoom * 1000 + secondaryRoom * 100 + Math.min(area, 2_000_000) / 2000
+                    };
+                  };
+
+                  let target = null;
+                  let targetMeta = null;
+                  for (const candidate of ordered) {
+                    const meta = scoreForDirection(candidate);
+                    const hasRoom = meta.roomX > 1 || meta.roomY > 1;
+                    if (!hasRoom) continue;
+                    if (!targetMeta || meta.score > targetMeta.score) {
+                      target = candidate;
+                      targetMeta = meta;
+                    }
+                  }
+                  if (!(target instanceof HTMLElement)) {
+                    target = ordered[0];
+                    targetMeta = scoreForDirection(target);
+                  }
+
+                  const before = {
+                    left: Number(target.scrollLeft || 0),
+                    top: Number(target.scrollTop || 0),
+                  };
+                  if (typeof target.scrollBy === "function") {
+                    target.scrollBy(dx, dy);
+                  } else {
+                    target.scrollLeft = Number(target.scrollLeft || 0) + dx;
+                    target.scrollTop = Number(target.scrollTop || 0) + dy;
+                  }
+                  const after = {
+                    left: Number(target.scrollLeft || 0),
+                    top: Number(target.scrollTop || 0),
+                  };
+                  const scrolled = before.left !== after.left || before.top !== after.top;
+                  return {
+                    scrolled,
+                    before,
+                    after,
+                    role: String(target.getAttribute("role") || ""),
+                    aria_label: String(target.getAttribute("aria-label") || ""),
+                    container_key: buildContainerKey(target),
+                    room_x: Number(targetMeta?.roomX || 0),
+                    room_y: Number(targetMeta?.roomY || 0),
+                  };
+                }""",
+                {"x": int(delta_x), "y": int(delta_y)},
+            )
+        except Exception:
+            return None
+        if not isinstance(result, dict):
+            return None
+        return result
 
     async def upload(
         self,
@@ -757,7 +826,7 @@ class PlaywrightRuntime(BrowserRuntime):
     ) -> Dict[str, Any]:
         if not paths:
             raise ValueError("paths are required for upload operation")
-        resolved_paths = [os.path.expanduser(str(path)) for path in paths]
+        resolved_paths = self._security.resolve_upload_paths(paths)
         page, resolved_target = await self._resolve_page(target_id=target_id, create=True)
         primary, fallback = self._resolve_selector(
             target_id=resolved_target,
@@ -779,6 +848,7 @@ class PlaywrightRuntime(BrowserRuntime):
         target_id: Optional[str],
         timeout_ms: int,
         selector: Optional[str] = None,
+        selector_state: Optional[str] = None,
         text: Optional[str] = None,
         text_gone: Optional[str] = None,
         url_contains: Optional[str] = None,
@@ -792,7 +862,8 @@ class PlaywrightRuntime(BrowserRuntime):
             await page.wait_for_timeout(max(0, int(time_ms)))
             waited = True
         if selector:
-            await page.wait_for_selector(selector, timeout=timeout_ms)
+            state = self._normalize_selector_state(selector_state)
+            await page.wait_for_selector(selector, timeout=timeout_ms, state=state)
             waited = True
         if text:
             await page.get_by_text(text).first.wait_for(timeout=timeout_ms)
@@ -975,48 +1046,100 @@ class PlaywrightRuntime(BrowserRuntime):
         await page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
 
         max_items = max(1, min(int(limit), 200))
-        raw_nodes = await page.evaluate(_SNAPSHOT_JS, {"limit": max_items})
-        if not isinstance(raw_nodes, list):
-            raw_nodes = []
+        raw_scoped_nodes: List[tuple[str, List[Dict[str, Any]]]] = []
+        contexts = [("main", page)]
+        for idx, frame in enumerate(self._iter_locator_contexts(page)[1:], start=1):
+            contexts.append((f"frame-{idx}", frame))
+
+        collected = 0
+        for scope, context in contexts:
+            remaining = max_items - collected
+            if remaining <= 0:
+                break
+            nodes = await self._snapshot_nodes_for_context(context, remaining)
+            if not nodes:
+                continue
+            raw_scoped_nodes.append((scope, nodes))
+            collected += len(nodes)
 
         ref_map: Dict[str, Dict[str, Any]] = {}
         nodes: List[Dict[str, Any]] = []
         lines: List[str] = []
 
-        for idx, node in enumerate(raw_nodes, start=1):
-            if not isinstance(node, dict):
-                continue
-            ref = _safe_title(node.get("ref")).strip() or f"e{idx}"
-            selector = _safe_title(node.get("selector")).strip()
-            fallback_selector = _safe_title(node.get("fallback_selector")).strip()
-            if not selector and not fallback_selector:
-                continue
+        emitted = 0
+        for scope, scoped_nodes in raw_scoped_nodes:
+            for node in scoped_nodes:
+                if not isinstance(node, dict):
+                    continue
+                emitted += 1
+                raw_ref = _safe_title(node.get("ref")).strip() or f"e{emitted}"
+                ref = raw_ref if scope == "main" else f"{scope}:{raw_ref}"
+                selector = _safe_title(node.get("selector")).strip()
+                fallback_selector = _safe_title(node.get("fallback_selector")).strip()
+                if not selector and not fallback_selector:
+                    continue
 
-            role = _safe_title(node.get("role")).strip() or _safe_title(node.get("tag")).strip()
-            name = _safe_title(node.get("name")).strip()
-            text_value = _safe_title(node.get("text")).strip()
+                role = _safe_title(node.get("role")).strip() or _safe_title(node.get("tag")).strip()
+                tag = _safe_title(node.get("tag")).strip()
+                name = _safe_title(node.get("name")).strip()
+                text_value = _safe_title(node.get("text")).strip()
+                aria_label = _safe_title(node.get("aria_label")).strip()
+                placeholder = _safe_title(node.get("placeholder")).strip()
+                value = _safe_title(node.get("value")).strip()
+                aria_valuenow = _safe_title(node.get("aria_valuenow")).strip()
+                input_type = _safe_title(node.get("input_type")).strip()
+                dom_id = _safe_title(node.get("dom_id")).strip()
+                name_attr = _safe_title(node.get("name_attr")).strip()
+                label_text = _safe_title(node.get("label_text")).strip()
+                readonly = _coerce_bool(node.get("readonly"))
+                disabled = _coerce_bool(node.get("disabled"))
 
-            ref_map[ref] = {
-                "selector": selector or fallback_selector,
-                "fallback_selector": fallback_selector or None,
-                "role": role,
-                "name": name,
-                "text": text_value,
-            }
-
-            nodes.append(
-                {
-                    "ref": ref,
+                ref_map[ref] = {
+                    "selector": selector or fallback_selector,
+                    "fallback_selector": fallback_selector or None,
+                    "tag": tag,
                     "role": role,
                     "name": name,
                     "text": text_value,
-                    "selector": selector or fallback_selector,
-                    "fallback_selector": fallback_selector or None,
+                    "aria_label": aria_label,
+                    "placeholder": placeholder,
+                    "value": value,
+                    "aria_valuenow": aria_valuenow,
+                    "input_type": input_type,
+                    "dom_id": dom_id,
+                    "name_attr": name_attr,
+                    "label_text": label_text,
+                    "readonly": readonly,
+                    "disabled": disabled,
+                    "scope": scope,
                 }
-            )
 
-            line_label = name or text_value or selector or fallback_selector
-            lines.append(f"{ref} [{role or 'node'}] {line_label}".strip())
+                nodes.append(
+                    {
+                        "ref": ref,
+                        "scope": scope,
+                        "tag": tag,
+                        "role": role,
+                        "name": name,
+                        "text": text_value,
+                        "aria_label": aria_label,
+                        "placeholder": placeholder,
+                        "value": value,
+                        "aria_valuenow": aria_valuenow,
+                        "input_type": input_type,
+                        "dom_id": dom_id,
+                        "name_attr": name_attr,
+                        "label_text": label_text,
+                        "readonly": readonly,
+                        "disabled": disabled,
+                        "selector": selector or fallback_selector,
+                        "fallback_selector": fallback_selector or None,
+                    }
+                )
+
+                line_label = name or label_text or name_attr or text_value or value or selector or fallback_selector
+                scope_prefix = "" if scope == "main" else f"{scope} "
+                lines.append(f"{ref} [{scope_prefix}{role or 'node'}] {line_label}".strip())
 
         tab = self._tab_states.get(resolved_target)
         if tab is not None:
@@ -1028,6 +1151,23 @@ class PlaywrightRuntime(BrowserRuntime):
             "nodes": nodes,
             "snapshot": "\n".join(lines),
         }
+
+    async def _snapshot_nodes_for_context(
+        self,
+        context: Any,
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        try:
+            nodes = await context.evaluate(_SNAPSHOT_JS, {"limit": max(1, min(limit, 200))})
+        except Exception:
+            return []
+        if not isinstance(nodes, list):
+            return []
+        normalized: List[Dict[str, Any]] = []
+        for node in nodes:
+            if isinstance(node, dict):
+                normalized.append(node)
+        return normalized
 
     async def get_console(
         self,
@@ -1068,110 +1208,6 @@ class PlaywrightRuntime(BrowserRuntime):
     async def _ensure_started(self) -> None:
         if not self._started:
             await self.start()
-
-    async def _launch_browser_with_fallback(self, playwright: Any) -> tuple[Any, str]:
-        browser_type = playwright.chromium
-        common_args = ["--disable-dev-shm-usage"]
-        requested_headless = bool(self.headless)
-
-        env_executable = os.getenv("AEIVA_BROWSER_EXECUTABLE_PATH", "").strip() or None
-        env_channels_raw = os.getenv("AEIVA_BROWSER_CHANNELS", "").strip()
-        env_channels = [
-            item.strip()
-            for item in env_channels_raw.split(",")
-            if item.strip()
-        ]
-        preferred_channels = env_channels or ["chrome", "msedge"]
-
-        def candidate(
-            label: str,
-            *,
-            headless: bool,
-            channel: Optional[str] = None,
-            executable_path: Optional[str] = None,
-        ) -> dict[str, Any]:
-            launch_kwargs: Dict[str, Any] = {
-                "headless": headless,
-                "args": list(common_args),
-                "chromium_sandbox": False,
-            }
-            if channel:
-                launch_kwargs["channel"] = channel
-            if executable_path:
-                launch_kwargs["executable_path"] = executable_path
-            return {"label": label, "kwargs": launch_kwargs}
-
-        candidates: List[Dict[str, Any]] = []
-        candidates.append(candidate("chromium-default", headless=requested_headless))
-        for channel in preferred_channels:
-            candidates.append(
-                candidate(
-                    f"chromium-channel:{channel}",
-                    headless=requested_headless,
-                    channel=channel,
-                )
-            )
-        if env_executable:
-            candidates.append(
-                candidate(
-                    "chromium-executable-env",
-                    headless=requested_headless,
-                    executable_path=env_executable,
-                )
-            )
-
-        if requested_headless:
-            candidates.append(candidate("chromium-default-headed-fallback", headless=False))
-            for channel in preferred_channels:
-                candidates.append(
-                    candidate(
-                        f"chromium-channel:{channel}-headed-fallback",
-                        headless=False,
-                        channel=channel,
-                    )
-                )
-
-        failures: List[str] = []
-        seen_signatures: set[str] = set()
-
-        for entry in candidates:
-            kwargs = entry["kwargs"]
-            signature = repr(sorted(kwargs.items()))
-            if signature in seen_signatures:
-                continue
-            seen_signatures.add(signature)
-
-            label = entry["label"]
-            try:
-                browser = await browser_type.launch(**kwargs)
-                return browser, label
-            except Exception as exc:
-                message = self._compact_exception_message(exc)
-                failures.append(f"{label}: {message}")
-
-        guidance = [
-            "Failed to launch browser automation.",
-            "Set `AEIVA_BROWSER_CHANNELS=chrome` or `AEIVA_BROWSER_EXECUTABLE_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` and retry.",
-        ]
-        if failures:
-            guidance.append("Attempts: " + " | ".join(failures[:5]))
-        raise RuntimeError(" ".join(guidance))
-
-    @staticmethod
-    def _compact_exception_message(exc: Exception) -> str:
-        text = str(exc).strip()
-        if not text:
-            return exc.__class__.__name__
-        lowered = text.lower()
-        if "mach_port_rendezvous" in lowered:
-            return "macOS launch permission error (mach_port_rendezvous)"
-        if "no such file or directory" in lowered:
-            return "executable not found"
-        if "failed to launch" in lowered:
-            return "failed to launch"
-        if len(text) > 220:
-            return text[:220] + "..."
-        return text
 
     async def _sync_known_pages(self) -> None:
         if self._context is None:
@@ -1343,18 +1379,46 @@ class PlaywrightRuntime(BrowserRuntime):
 
         page = tab.page
         title = ""
+        viewport_scroll = {"x": 0, "y": 0}
         try:
             title = await page.title()
         except Exception:
             title = ""
+        try:
+            viewport_scroll = await self._read_viewport_scroll(page)
+        except Exception:
+            viewport_scroll = {"x": 0, "y": 0}
         return {
             "target_id": target_id,
             "url": _safe_title(getattr(page, "url", "")),
             "title": _safe_title(title),
+            "viewport_scroll": viewport_scroll,
+        }
+
+    async def _read_viewport_scroll(self, page: Any) -> Dict[str, int]:
+        try:
+            value = await page.evaluate(
+                "() => ({x: Math.round(window.scrollX || 0), y: Math.round(window.scrollY || 0)})"
+            )
+        except Exception:
+            return {"x": 0, "y": 0}
+        if not isinstance(value, dict):
+            return {"x": 0, "y": 0}
+        return {
+            "x": int(value.get("x") or 0),
+            "y": int(value.get("y") or 0),
         }
 
     async def _goto(self, page: Any, url: str, timeout_ms: int) -> None:
         normalized_timeout = _normalize_timeout(timeout_ms)
+        settle_timeout = min(
+            normalized_timeout,
+            _parse_int_env(
+                "AEIVA_BROWSER_POST_GOTO_SETTLE_MS",
+                DEFAULT_POST_GOTO_SETTLE_MS,
+                50,
+            ),
+        )
         last_error: Optional[Exception] = None
         for _ in range(2):
             try:
@@ -1363,314 +1427,18 @@ class PlaywrightRuntime(BrowserRuntime):
                     timeout=normalized_timeout,
                     wait_until="domcontentloaded",
                 )
+                # Many modern SPAs mount critical form widgets shortly after DOM ready.
+                # Best-effort extra settle improves reliability without hard failing.
+                try:
+                    await page.wait_for_load_state(
+                        "networkidle",
+                        timeout=settle_timeout,
+                    )
+                except Exception:
+                    pass
                 return
             except Exception as exc:
                 last_error = exc
                 await page.wait_for_timeout(120)
         if last_error is not None:
             raise last_error
-
-    def _resolve_selector(
-        self,
-        *,
-        target_id: str,
-        selector: Optional[str],
-        ref: Optional[str],
-    ) -> tuple[str, Optional[str]]:
-        clean_ref = (ref or "").strip()
-        clean_selector = (selector or "").strip()
-
-        if clean_ref:
-            tab = self._tab_states.get(target_id)
-            if tab:
-                entry = tab.refs.get(clean_ref)
-                if isinstance(entry, str) and entry.strip():
-                    return entry.strip(), None
-                if isinstance(entry, dict):
-                    primary = _safe_title(entry.get("selector")).strip()
-                    fallback = _safe_title(entry.get("fallback_selector")).strip()
-                    if primary:
-                        return primary, (fallback or None)
-                    if fallback:
-                        return fallback, None
-            raise ValueError(
-                f"Unknown ref: {clean_ref}. Call snapshot first and use returned refs."
-            )
-
-        if clean_selector:
-            return clean_selector, None
-
-        raise ValueError("selector or ref is required")
-
-    async def _wait_for_locator(
-        self,
-        page: Any,
-        selector: str,
-        timeout_ms: int,
-        *,
-        fallback_selector: Optional[str] = None,
-    ) -> Any:
-        timeout_value = _normalize_timeout(timeout_ms)
-        selectors = [selector]
-        if fallback_selector and fallback_selector != selector:
-            selectors.append(fallback_selector)
-
-        last_error: Optional[Exception] = None
-        for candidate in selectors:
-            locator = page.locator(candidate).first
-            try:
-                await locator.wait_for(state="visible", timeout=timeout_value)
-                return locator
-            except Exception as exc:
-                last_error = exc
-        if last_error is not None:
-            raise last_error
-        raise ValueError("Unable to resolve locator")
-
-
-@dataclass
-class BrowserSession:
-    profile: str
-    headless: bool
-    runtime: BrowserRuntime
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    created_at: float = field(default_factory=time.time)
-    last_used_at: float = field(default_factory=time.time)
-
-
-class BrowserSessionManager:
-    """
-    Profile-scoped browser runtime manager.
-
-    Each profile has one persistent runtime guarded by a per-profile lock.
-    """
-
-    def __init__(
-        self,
-        runtime_factory: Optional[Callable[[str, bool], BrowserRuntime]] = None,
-    ) -> None:
-        self._runtime_factory = runtime_factory or (
-            lambda profile, headless: PlaywrightRuntime(profile=profile, headless=headless)
-        )
-        self._sessions: Dict[str, BrowserSession] = {}
-        self._manager_lock = asyncio.Lock()
-
-    async def get_session(self, profile: str) -> Optional[BrowserSession]:
-        async with self._manager_lock:
-            return self._sessions.get(profile)
-
-    async def ensure_session(self, profile: str, headless: bool) -> BrowserSession:
-        clean_profile = profile.strip() or "default"
-        session_to_stop: Optional[BrowserSession] = None
-        async with self._manager_lock:
-            current = self._sessions.get(clean_profile)
-            if current and current.headless == bool(headless):
-                return current
-
-            if current is not None:
-                self._sessions.pop(clean_profile, None)
-                session_to_stop = current
-
-        if session_to_stop is not None:
-            async with session_to_stop.lock:
-                await session_to_stop.runtime.stop()
-
-        runtime = self._runtime_factory(clean_profile, bool(headless))
-        session = BrowserSession(
-            profile=clean_profile,
-            headless=bool(headless),
-            runtime=runtime,
-        )
-        try:
-            await runtime.start()
-        except Exception:
-            # Ensure partially initialized runtimes do not leak processes/resources.
-            try:
-                await runtime.stop()
-            except Exception:
-                pass
-            raise
-
-        async with self._manager_lock:
-            existing = self._sessions.get(clean_profile)
-            if existing is not None:
-                async with existing.lock:
-                    await existing.runtime.stop()
-            self._sessions[clean_profile] = session
-        return session
-
-    async def run_with_session(
-        self,
-        *,
-        profile: str,
-        headless: bool,
-        create: bool,
-        fn: Callable[[BrowserRuntime], Any],
-    ) -> Any:
-        session: Optional[BrowserSession]
-        if create:
-            session = await self.ensure_session(profile, headless)
-        else:
-            session = await self.get_session(profile)
-            if session is None:
-                raise ValueError(f"Browser profile not running: {profile}")
-
-        async with session.lock:
-            session.last_used_at = time.time()
-            return await fn(session.runtime)
-
-    async def stop_session(self, profile: str) -> bool:
-        clean_profile = profile.strip() or "default"
-        async with self._manager_lock:
-            session = self._sessions.pop(clean_profile, None)
-        if session is None:
-            return False
-        async with session.lock:
-            await session.runtime.stop()
-        return True
-
-    async def stop_all(self) -> None:
-        async with self._manager_lock:
-            sessions = list(self._sessions.values())
-            self._sessions.clear()
-        for session in sessions:
-            async with session.lock:
-                await session.runtime.stop()
-
-    async def list_profiles(self) -> List[Dict[str, Any]]:
-        async with self._manager_lock:
-            items = list(self._sessions.values())
-
-        profiles: List[Dict[str, Any]] = []
-        for session in items:
-            runtime_status = await session.runtime.status()
-            profiles.append(
-                {
-                    "profile": session.profile,
-                    "headless": session.headless,
-                    "created_at": session.created_at,
-                    "last_used_at": session.last_used_at,
-                    "status": runtime_status,
-                }
-            )
-        return profiles
-
-
-_SNAPSHOT_JS = """
-({ limit }) => {
-  const maxItems = Math.max(1, Math.min(Number(limit || 80), 200));
-  const refAttr = "data-aeiva-ref";
-  if (!Number.isInteger(window.__aeivaRefCounter) || window.__aeivaRefCounter < 1) {
-    window.__aeivaRefCounter = 1;
-  }
-
-  const candidates = Array.from(
-    document.querySelectorAll(
-      "a,button,input,textarea,select,summary,[role],[onclick],[tabindex]"
-    )
-  );
-
-  const esc = (value) => {
-    if (window.CSS && typeof window.CSS.escape === "function") {
-      return window.CSS.escape(String(value));
-    }
-    return String(value).replace(/([ #;?%&,.+*~':!^$[\\]()=>|\\/])/g, "\\\\$1");
-  };
-
-  const visible = (el) => {
-    if (!(el instanceof HTMLElement)) return false;
-    const style = window.getComputedStyle(el);
-    if (!style || style.display === "none" || style.visibility === "hidden") return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  };
-
-  const roleOf = (el) => {
-    const explicitRole = el.getAttribute("role");
-    if (explicitRole) return explicitRole;
-    return el.tagName.toLowerCase();
-  };
-
-  const textOf = (el) => {
-    const value =
-      el.getAttribute("aria-label") ||
-      el.getAttribute("title") ||
-      ("value" in el ? el.value : "") ||
-      el.textContent ||
-      "";
-    return String(value).replace(/\\s+/g, " ").trim().slice(0, 160);
-  };
-
-  const selectorOf = (el) => {
-    if (el.id) return `#${esc(el.id)}`;
-
-    const parts = [];
-    let cur = el;
-    while (cur && cur.nodeType === Node.ELEMENT_NODE && parts.length < 6) {
-      let part = cur.tagName.toLowerCase();
-
-      const classes = Array.from(cur.classList || []).filter(Boolean);
-      if (classes.length > 0) {
-        part += `.${esc(classes[0])}`;
-      }
-
-      if (cur.parentElement) {
-        const sameTag = Array.from(cur.parentElement.children).filter(
-          (node) => node.tagName === cur.tagName
-        );
-        if (sameTag.length > 1) {
-          part += `:nth-of-type(${sameTag.indexOf(cur) + 1})`;
-        }
-      }
-
-      parts.unshift(part);
-      cur = cur.parentElement;
-      if (!cur || cur.tagName.toLowerCase() === "html") break;
-    }
-    return parts.join(" > ");
-  };
-
-  const ensureRef = (el) => {
-    const existing = (el.getAttribute(refAttr) || "").trim();
-    if (existing) return existing;
-
-    let value = "";
-    for (let i = 0; i < 20000; i++) {
-      const candidate = `e${window.__aeivaRefCounter++}`;
-      const owner = document.querySelector(`[${refAttr}="${candidate}"]`);
-      if (!owner || owner === el) {
-        value = candidate;
-        break;
-      }
-    }
-    if (!value) {
-      value = `e${Date.now()}`;
-    }
-    el.setAttribute(refAttr, value);
-    return value;
-  };
-
-  const seen = new Set();
-  const out = [];
-  for (const el of candidates) {
-    if (!visible(el)) continue;
-    const fallbackSelector = selectorOf(el);
-    const ref = ensureRef(el);
-    const stableSelector = `[${refAttr}="${ref}"]`;
-
-    if ((!stableSelector && !fallbackSelector) || seen.has(ref)) continue;
-    seen.add(ref);
-    out.push({
-      ref,
-      tag: el.tagName.toLowerCase(),
-      role: roleOf(el),
-      name: textOf(el),
-      text: String(el.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 160),
-      selector: stableSelector,
-      fallback_selector: fallbackSelector
-    });
-    if (out.length >= maxItems) break;
-  }
-  return out;
-}
-"""

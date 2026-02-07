@@ -1,10 +1,13 @@
 import asyncio
+import concurrent.futures
 import logging
 import sys
 import threading
+import time
 from typing import Any, Dict, Optional
 
 from aeiva.interface.gateway_base import GatewayBase
+from aeiva.interface.progress_hints import build_progress_hint, normalize_progress_phases
 from aeiva.neuron import Signal
 from aeiva.event.event_names import EventNames
 
@@ -36,7 +39,25 @@ class TerminalGateway(GatewayBase[str]):
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._streaming = False
+        self._awaiting_sync_response = False
+        self._hint_line_visible = False
         self._show_emotion = bool(cfg.get("show_emotion", False))
+        self.response_label = str(cfg.get("response_label", "Response: "))
+        self.progress_hint_enabled = bool(cfg.get("progress_hint_enabled", True))
+        self.progress_hint_interval = max(
+            0.1,
+            float(cfg.get("progress_hint_interval", 4.0)),
+        )
+        self.progress_poll_timeout = max(
+            0.05,
+            float(cfg.get("progress_poll_timeout", 0.5)),
+        )
+        self._progress_phases = normalize_progress_phases(cfg.get("progress_hint_phases"))
+        self.progress_hint_style = str(cfg.get("progress_hint_style", "status")).strip().lower() or "status"
+        self.progress_hint_persist_after = max(
+            0.0,
+            float(cfg.get("progress_hint_persist_after", 8.0)),
+        )
 
     async def setup(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -69,28 +90,28 @@ class TerminalGateway(GatewayBase[str]):
     async def send_message(self, route: Optional[str], text: str) -> None:
         if not text:
             return
-        sys.stdout.write("\r\033[K")
-        print("Response: ", end="", flush=True)
-        print(text, flush=True)
-        print(self.prompt, end="", flush=True)
+        self._render_response(text, show_prompt=not self._awaiting_sync_response)
 
     async def on_stream_chunk(self, route: Optional[str], chunk: str, final: bool) -> None:
         if not chunk:
             return
         if not self._streaming:
+            self._clear_status_line()
             sys.stdout.write("\r\033[K")
-            print("Response: ", end="", flush=True)
+            print(self.response_label, end="", flush=True)
             self._streaming = True
         print(chunk, end="", flush=True)
         if final:
             print("", flush=True)
-            print(self.prompt, end="", flush=True)
+            if not self._awaiting_sync_response:
+                print(self.prompt, end="", flush=True)
             self._streaming = False
 
     async def on_stream_end(self, route: Optional[str]) -> None:
         if self._streaming:
             print("", flush=True)
-            print(self.prompt, end="", flush=True)
+            if not self._awaiting_sync_response:
+                print(self.prompt, end="", flush=True)
             self._streaming = False
 
     async def _handle_agent_stop(self, event: Any) -> None:
@@ -114,9 +135,11 @@ class TerminalGateway(GatewayBase[str]):
             message += f" state={state}"
         if expression is not None:
             message += f" expression={expression}"
+        self._clear_status_line()
         sys.stdout.write("\r\033[K")
         print(message, flush=True)
-        print(self.prompt, end="", flush=True)
+        if not self._awaiting_sync_response:
+            print(self.prompt, end="", flush=True)
 
     def _input_loop(self) -> None:
         loop = self._loop
@@ -157,12 +180,98 @@ class TerminalGateway(GatewayBase[str]):
                 source=EventNames.PERCEPTION_TERMINAL,
                 route=self._route_token,
             )
-            asyncio.run_coroutine_threadsafe(
+            response_future = asyncio.run_coroutine_threadsafe(
                 self.emit_input(
                     signal,
                     route=self._route_token,
                     add_pending_route=True,
                     event_name=EventNames.PERCEPTION_STIMULI,
+                    await_response=True,
                 ),
                 loop,
             )
+            self._wait_for_response(response_future)
+
+    def _build_progress_hint(self, *, elapsed_seconds: float, hint_index: int) -> str:
+        return build_progress_hint(
+            elapsed_seconds=elapsed_seconds,
+            hint_index=hint_index,
+            phases=self._progress_phases,
+        )
+
+    def _show_status_line(self, text: str) -> None:
+        sys.stdout.write("\r\033[K")
+        sys.stdout.write(str(text))
+        sys.stdout.flush()
+        self._hint_line_visible = True
+
+    def _clear_status_line(self) -> None:
+        if not self._hint_line_visible:
+            return
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+        self._hint_line_visible = False
+
+    def _render_response(self, text: str, *, show_prompt: bool = True) -> None:
+        self._clear_status_line()
+        sys.stdout.write("\r\033[K")
+        print(self.response_label, end="", flush=True)
+        print(text, flush=True)
+        if show_prompt:
+            print(self.prompt, end="", flush=True)
+
+    def _emit_progress_hint(self, hint: str, *, elapsed_seconds: float) -> None:
+        if self.progress_hint_style in {"line", "log"}:
+            self._clear_status_line()
+            sys.stdout.write("\r\033[K")
+            print(f"[AEIVA] {hint}", flush=True)
+            return
+        self._show_status_line(hint)
+        if elapsed_seconds < self.progress_hint_persist_after:
+            return
+        sys.stdout.write("\r\033[K")
+        print(f"[AEIVA] {hint}", flush=True)
+        self._hint_line_visible = False
+
+    def _wait_for_response(self, response_future: "concurrent.futures.Future[str]") -> None:
+        start_at = time.time()
+        next_hint_at = start_at
+        hint_index = 0
+        self._awaiting_sync_response = True
+        try:
+            while self._running and not self._stop_event.is_set():
+                try:
+                    response = response_future.result(timeout=self.progress_poll_timeout)
+                    self._clear_status_line()
+                    if isinstance(response, str) and response.strip():
+                        self._render_response(response, show_prompt=False)
+                    return
+                except concurrent.futures.TimeoutError:
+                    # TimeoutError is overloaded: it can mean either
+                    # "poll timed out" or "the coroutine completed with timeout".
+                    if response_future.done():
+                        self._render_response(
+                            "I'm sorry, I didn't receive a response in time.",
+                            show_prompt=False,
+                        )
+                        return
+                    if not self.progress_hint_enabled:
+                        continue
+                    now = time.time()
+                    if now < next_hint_at:
+                        continue
+                    hint = self._build_progress_hint(
+                        elapsed_seconds=now - start_at,
+                        hint_index=hint_index,
+                    )
+                    hint_index += 1
+                    next_hint_at = now + self.progress_hint_interval
+                    self._emit_progress_hint(hint, elapsed_seconds=now - start_at)
+                except Exception as exc:
+                    self._render_response(f"Error: {exc}", show_prompt=False)
+                    return
+        finally:
+            self._awaiting_sync_response = False
+            self._clear_status_line()
+            if not response_future.done():
+                response_future.cancel()

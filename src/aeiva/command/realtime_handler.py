@@ -22,12 +22,17 @@ import base64
 import io
 import logging
 import queue
+import time
 from typing import Any, Generator, Optional, Union
 
 from aeiva.neuron import Signal
 from aeiva.event.event_names import EventNames
+from aeiva.interface.progress_hints import build_progress_hint
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PROGRESS_HINT_INTERVAL = 4.0
+DEFAULT_PROGRESS_POLL_TIMEOUT = 0.8
 
 
 def encode_image_to_base64(image_array) -> Optional[str]:
@@ -99,6 +104,15 @@ class RealtimePipelineHandler:
         self.emit_timeout = float(
             (config_dict.get("realtime_config") or {}).get("emit_timeout", 10.0)
         )
+        realtime_cfg = config_dict.get("realtime_config") or {}
+        self.progress_hint_interval = max(
+            0.1,
+            float(realtime_cfg.get("progress_hint_interval", DEFAULT_PROGRESS_HINT_INTERVAL)),
+        )
+        self.progress_poll_timeout = max(
+            0.05,
+            float(realtime_cfg.get("progress_poll_timeout", DEFAULT_PROGRESS_POLL_TIMEOUT)),
+        )
 
     def update_latest_frame(self, frame: Any) -> None:
         """Cache the latest webcam frame for fallback image sends."""
@@ -138,7 +152,7 @@ class RealtimePipelineHandler:
         # 2. Update chatbot with user message
         chatbot = list(chatbot)
         chatbot.append({"role": "user", "content": text})
-        yield AdditionalOutputs(chatbot)
+        yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
 
         # 3. Build payload (text-only or multimodal)
         payload = self._build_payload(text, camera_image, uploaded_image)
@@ -174,7 +188,7 @@ class RealtimePipelineHandler:
         except Exception as e:
             logger.error(f"Failed to emit perception.realtime: {e}")
             chatbot.append({"role": "assistant", "content": f"Error: {e}"})
-            yield AdditionalOutputs(chatbot)
+            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
             return
 
         stream = False  # Force non-streaming for realtime audio stability
@@ -186,9 +200,14 @@ class RealtimePipelineHandler:
                 chatbot, trace_id, timeout=self.response_timeout
             )
         else:
-            response_text = self._collect_response(trace_id, timeout=self.response_timeout)
-            chatbot.append({"role": "assistant", "content": response_text})
-            yield AdditionalOutputs(chatbot)
+            chatbot.append({"role": "assistant", "content": ""})
+            response_text = yield from self._collect_response_with_hints(
+                chatbot=chatbot,
+                trace_id=trace_id,
+                timeout=self.response_timeout,
+            )
+            chatbot[-1]["content"] = response_text
+            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
 
         # 6. TTS -> yield audio chunks (after full text available)
         if self.tts_model is not None and response_text:
@@ -269,6 +288,67 @@ class RealtimePipelineHandler:
             logger.warning("Timeout waiting for response")
             return "I'm sorry, I didn't receive a response in time."
 
+    @staticmethod
+    def _build_progress_hint(*, elapsed_seconds: float, hint_index: int) -> str:
+        return build_progress_hint(
+            elapsed_seconds=elapsed_seconds,
+            hint_index=hint_index,
+            phases=(
+                "Thinking",
+                "Acting",
+                "Waiting for tools",
+                "Retrying if needed",
+                "Summarizing",
+            ),
+        )
+
+    def _collect_response_with_hints(
+        self,
+        *,
+        chatbot: list,
+        trace_id: Optional[str],
+        timeout: float = 30.0,
+        now_fn=time.time,
+    ) -> Generator:
+        """Collect non-streaming response with periodic user-visible progress hints."""
+        from fastrtc import AdditionalOutputs
+
+        start_at = now_fn()
+        deadline = start_at + max(0.0, float(timeout))
+        next_hint_at = start_at + self.progress_hint_interval
+        hint_index = 0
+
+        # Emit an immediate visible status so the UI never appears frozen.
+        if chatbot:
+            chatbot[-1]["content"] = self._build_progress_hint(
+                elapsed_seconds=0.0,
+                hint_index=hint_index,
+            )
+            hint_index += 1
+            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+
+        while True:
+            remaining = deadline - now_fn()
+            if remaining <= 0:
+                logger.warning("Timeout waiting for response")
+                return "I'm sorry, I didn't receive a response in time."
+            try:
+                response = self._queue_get(trace_id, min(self.progress_poll_timeout, remaining))
+                return str(response)
+            except queue.Empty:
+                now = now_fn()
+                if now < next_hint_at:
+                    continue
+                hint_text = self._build_progress_hint(
+                    elapsed_seconds=now - start_at,
+                    hint_index=hint_index,
+                )
+                hint_index += 1
+                next_hint_at = now + self.progress_hint_interval
+                if chatbot:
+                    chatbot[-1]["content"] = hint_text
+                    yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+
     def _collect_response_stream(self, chatbot: list, trace_id: Optional[str], timeout: float = 30.0) -> str:
         """Stream response chunks to the chatbot as they arrive.
 
@@ -294,9 +374,20 @@ class RealtimePipelineHandler:
 
             response_parts.append(str(chunk))
             chatbot[-1]["content"] = "".join(response_parts)
-            yield AdditionalOutputs(chatbot)
+            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
 
         return "".join(response_parts)
+
+    @staticmethod
+    def _snapshot_chatbot(chatbot: list) -> list:
+        """Return a detached chat history copy to force downstream UI updates."""
+        snapshot = []
+        for item in list(chatbot):
+            if isinstance(item, dict):
+                snapshot.append(dict(item))
+            else:
+                snapshot.append(item)
+        return snapshot
 
     def _queue_get(self, trace_id: Optional[str], timeout: float) -> Any:
         if self.gateway is not None and hasattr(self.gateway, "get_for_trace"):

@@ -1,4 +1,5 @@
 import json
+import importlib
 import pytest
 
 from aeiva.llm.backend import LLMResponse
@@ -218,6 +219,60 @@ def test_tool_call_fallback_from_text():
     result = engine.run([{"role": "user", "content": "hi"}], tools=tools)
     assert result.text == "{\"operation\":\"list\",\"path\":\"/tmp\"}"
 
+
+def test_tool_result_formatting_truncates_large_payload():
+    class DummyBackend:
+        def build_params(self, *args, **kwargs):
+            return {}
+
+        async def execute(self, params, stream: bool):
+            return {}
+
+        def execute_sync(self, params):
+            return {}
+
+        def parse_response(self, response):
+            return LLMResponse("", [], None, {}, response)
+
+        def parse_stream_delta(self, chunk, **kwargs):
+            return None, None
+
+    engine = ToolLoopEngine(backend=DummyBackend(), tool_result_max_chars=1200)
+    large_payload = {
+        "success": True,
+        "nodes": [{"ref": f"e{i}", "text": "x" * 120} for i in range(300)],
+        "screenshot": b"x" * 4096,
+    }
+
+    text = engine._format_tool_result(large_payload)
+    assert len(text) <= 1200
+    parsed = json.loads(text)
+    assert parsed.get("truncated") is True
+    assert parsed.get("original_length", 0) > 1200
+
+
+def test_tool_result_formatting_summarizes_binary_values():
+    class DummyBackend:
+        def build_params(self, *args, **kwargs):
+            return {}
+
+        async def execute(self, params, stream: bool):
+            return {}
+
+        def execute_sync(self, params):
+            return {}
+
+        def parse_response(self, response):
+            return LLMResponse("", [], None, {}, response)
+
+        def parse_stream_delta(self, chunk, **kwargs):
+            return None, None
+
+    engine = ToolLoopEngine(backend=DummyBackend())
+    text = engine._format_tool_result({"blob": bytearray(b"x" * 32)})
+    parsed = json.loads(text)
+    assert parsed["blob"] == "<binary:32 bytes>"
+
 @pytest.mark.asyncio
 async def test_stream_tool_call_fallback_from_text():
     class StreamBackend(FakeBackend):
@@ -297,3 +352,107 @@ async def test_llmbrain_uses_arun():
 
     assert chunks == ["ok"]
     assert brain.llm_client.called == 1
+
+
+@pytest.mark.asyncio
+async def test_multiturn_browser_tool_accepts_argument_variants(monkeypatch):
+    browser_mod = importlib.import_module("aeiva.tool.meta.browser")
+
+    class FakeBrowserService:
+        def __init__(self):
+            self.calls = []
+
+        async def execute(self, **kwargs):
+            self.calls.append(kwargs)
+            return {
+                "success": True,
+                "target_id": kwargs.get("target_id") or "tab-1",
+                "url": "https://www.google.com/travel/flights",
+            }
+
+    fake_service = FakeBrowserService()
+    monkeypatch.setattr(browser_mod, "get_browser_service", lambda: fake_service)
+
+    class VariantBackend(FakeBackend):
+        def __init__(self):
+            self.calls = 0
+
+        def parse_response(self, response):
+            if self.calls == 0:
+                self.calls += 1
+                return LLMResponse(
+                    "",
+                    [
+                        ToolCall(
+                            id="call_wait",
+                            name="browser",
+                            arguments=json.dumps(
+                                {
+                                    "operation": "wait",
+                                    "targetId": "tab-1",
+                                    "time_ms": 2000,
+                                    "loadState": "domcontentloaded",
+                                    "url_contains": "flights",
+                                }
+                            ),
+                        )
+                    ],
+                    "resp_1",
+                    {},
+                    response,
+                )
+            if self.calls == 1:
+                self.calls += 1
+                return LLMResponse(
+                    "",
+                    [
+                        ToolCall(
+                            id="call_act",
+                            name="browser",
+                            arguments=json.dumps(
+                                {
+                                    "operation": "act",
+                                    "kind": "scroll",
+                                    "targetId": "tab-1",
+                                    "deltaY": 600,
+                                }
+                            ),
+                        )
+                    ],
+                    "resp_2",
+                    {},
+                    response,
+                )
+            return LLMResponse("Final answer", [], "resp_3", {}, response)
+
+    class ToolRegistryProxy:
+        async def execute(self, name, **kwargs):
+            if name != "browser":
+                return {"success": False, "error": f"unexpected tool {name}"}
+            return await browser_mod.browser(**kwargs)
+
+        def execute_sync(self, name, **kwargs):
+            raise NotImplementedError
+
+    engine = ToolLoopEngine(
+        backend=VariantBackend(),
+        registry=ToolRegistryProxy(),
+        max_tool_loops=5,
+    )
+    messages = [{"role": "user", "content": "help me find cheapest flight"}]
+    result = await engine.arun(
+        messages,
+        tools=[{"type": "function", "function": {"name": "browser"}}],
+    )
+
+    assert result.text == "Final answer"
+    assert len(fake_service.calls) == 2
+    wait_call = fake_service.calls[0]
+    act_call = fake_service.calls[1]
+    assert wait_call["operation"] == "wait"
+    assert wait_call["request"]["time_ms"] == 2000
+    assert wait_call["request"]["loadState"] == "domcontentloaded"
+    assert wait_call["request"]["targetId"] == "tab-1"
+    assert act_call["operation"] == "act"
+    assert act_call["request"]["kind"] == "scroll"
+    assert act_call["request"]["deltaY"] == 600

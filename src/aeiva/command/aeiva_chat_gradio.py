@@ -18,9 +18,10 @@ import threading
 import asyncio
 import queue
 import logging
+import time
 from datetime import datetime
 from uuid import uuid4
-from typing import Any, Optional
+from typing import Any, Callable, Dict, Iterator, Optional
 
 import click
 from dotenv import load_dotenv
@@ -33,12 +34,70 @@ from aeiva.command.command_utils import (
 )
 from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.gateway_base import ResponseQueueGateway
+from aeiva.interface.progress_hints import build_progress_hint
 from aeiva.event.event_names import EventNames
 
 logger = logging.getLogger(__name__)
 
 PACKAGE_ROOT = get_package_root()
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
+DEFAULT_PROGRESS_HINT_INTERVAL = 4.0
+DEFAULT_PROGRESS_POLL_TIMEOUT = 0.8
+
+
+def _build_progress_hint(*, elapsed_seconds: float, hint_index: int) -> str:
+    return build_progress_hint(
+        elapsed_seconds=elapsed_seconds,
+        hint_index=hint_index,
+        phases=(
+            "Thinking",
+            "Acting",
+            "Waiting for tools",
+            "Retrying if needed",
+            "Summarizing",
+        ),
+    )
+
+
+def _iter_trace_response_events(
+    *,
+    queue_gateway: Any,
+    trace_id: Optional[str],
+    timeout: float,
+    poll_timeout: float = DEFAULT_PROGRESS_POLL_TIMEOUT,
+    hint_interval: float = DEFAULT_PROGRESS_HINT_INTERVAL,
+    now_fn: Callable[[], float] = time.time,
+) -> Iterator[Dict[str, Any]]:
+    start_at = now_fn()
+    deadline = start_at + max(0.0, float(timeout))
+    next_hint_at = start_at
+    hint_index = 0
+
+    while True:
+        now = now_fn()
+        remaining = deadline - now
+        if remaining <= 0:
+            yield {"type": "timeout"}
+            return
+        try:
+            payload = queue_gateway.get_for_trace(
+                trace_id,
+                min(max(0.05, float(poll_timeout)), remaining),
+            )
+            yield {"type": "response", "payload": payload}
+            return
+        except queue.Empty:
+            now = now_fn()
+            if now >= next_hint_at:
+                yield {
+                    "type": "hint",
+                    "payload": _build_progress_hint(
+                        elapsed_seconds=now - start_at,
+                        hint_index=hint_index,
+                    ),
+                }
+                hint_index += 1
+                next_hint_at = now + max(0.1, float(hint_interval))
 
 
 @click.command(name="aeiva-chat-gradio")
@@ -310,29 +369,81 @@ def build_gradio_chat_ui(
             log.info(f"Emitted perception.stimuli for gradio input: {user_input[:80]}")
 
             assistant_message = ''
+            hint_interval = float(
+                (config_dict.get("gradio_config") or {}).get(
+                    "progress_hint_interval",
+                    DEFAULT_PROGRESS_HINT_INTERVAL,
+                )
+            )
+            poll_timeout = float(
+                (config_dict.get("gradio_config") or {}).get(
+                    "progress_poll_timeout",
+                    DEFAULT_PROGRESS_POLL_TIMEOUT,
+                )
+            )
             if stream:
+                start_at = time.time()
+                next_hint_at = start_at + max(0.1, hint_interval)
+                hint_index = 0
+                got_chunk = False
+                # Emit immediate status so long tool/action phases don't look frozen.
+                hint_text = _build_progress_hint(elapsed_seconds=0.0, hint_index=hint_index)
+                hint_index += 1
+                new_history = list(history)
+                new_history[-1] = {"role": "assistant", "content": hint_text}
+                yield new_history, '', session_id
                 while True:
-                    try:
-                        chunk = queue_gateway.get_for_trace(trace_id, resp_timeout)
-                        if chunk == "<END_OF_RESPONSE>":
-                            break
-                        assistant_message += str(chunk)
-                        new_history = list(history)
-                        new_history[-1] = {"role": "assistant", "content": assistant_message}
-                        yield new_history, '', session_id
-                    except queue.Empty:
+                    now = time.time()
+                    remaining = (start_at + resp_timeout) - now
+                    if remaining <= 0:
                         log.warning("Timeout: No response received from Agent.")
                         new_history = list(history)
                         new_history[-1] = {"role": "assistant", "content": "I'm sorry, I didn't receive a response in time."}
                         yield new_history, '', session_id
                         break
+                    try:
+                        chunk = queue_gateway.get_for_trace(trace_id, min(poll_timeout, remaining))
+                        if chunk == "<END_OF_RESPONSE>":
+                            break
+                        got_chunk = True
+                        next_hint_at = time.time() + max(0.1, hint_interval)
+                        assistant_message += str(chunk)
+                        new_history = list(history)
+                        new_history[-1] = {"role": "assistant", "content": assistant_message}
+                        yield new_history, '', session_id
+                    except queue.Empty:
+                        now = time.time()
+                        if now >= next_hint_at and not got_chunk:
+                            hint_text = _build_progress_hint(
+                                elapsed_seconds=now - start_at,
+                                hint_index=hint_index,
+                            )
+                            hint_index += 1
+                            next_hint_at = now + max(0.1, hint_interval)
+                            new_history = list(history)
+                            new_history[-1] = {"role": "assistant", "content": hint_text}
+                            yield new_history, '', session_id
             else:
-                try:
-                    response = queue_gateway.get_for_trace(trace_id, resp_timeout)
-                    assistant_message = str(response)
-                except queue.Empty:
-                    log.warning("Timeout: No response received from Agent.")
-                    assistant_message = "I'm sorry, I didn't receive a response in time."
+                for event in _iter_trace_response_events(
+                    queue_gateway=queue_gateway,
+                    trace_id=trace_id,
+                    timeout=resp_timeout,
+                    poll_timeout=poll_timeout,
+                    hint_interval=hint_interval,
+                ):
+                    event_type = event.get("type")
+                    if event_type == "hint":
+                        new_history = list(history)
+                        new_history[-1] = {"role": "assistant", "content": str(event.get("payload") or "")}
+                        yield new_history, '', session_id
+                        continue
+                    if event_type == "response":
+                        assistant_message = str(event.get("payload") or "")
+                        break
+                    if event_type == "timeout":
+                        log.warning("Timeout: No response received from Agent.")
+                        assistant_message = "I'm sorry, I didn't receive a response in time."
+                        break
                 new_history = list(history)
                 new_history[-1] = {"role": "assistant", "content": assistant_message}
                 yield new_history, '', session_id

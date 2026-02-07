@@ -8,14 +8,13 @@ Tests cover:
 - Action/tool-requiring prompts
 """
 
-import asyncio
 import os
+import socket
 import pytest
-from typing import List, Dict, Any
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock
 
 from aeiva.llm.llm_client import LLMClient
-from aeiva.llm.backend import MODEL_API_REGISTRY, _detect_api_type
+from aeiva.llm.backend import _detect_api_type
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.llm.api_handlers import ChatAPIHandler, ResponsesAPIHandler
 
@@ -386,9 +385,20 @@ class TestParameterFiltering:
 # Integration Tests (require API key)
 # ============================================================
 
+def _can_run_openai_integration() -> bool:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return False
+    try:
+        socket.getaddrinfo("api.openai.com", 443)
+    except OSError:
+        return False
+    return True
+
+
 @pytest.mark.skipif(
-    not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY not set"
+    not _can_run_openai_integration(),
+    reason="OPENAI_API_KEY not set or api.openai.com unreachable",
 )
 class TestIntegration:
     """Integration tests with real API calls."""

@@ -145,6 +145,7 @@ class Agent:
             brain.setup()
             self.cognition = Cognition(
                 name="cognition",
+                config=cognition_config,
                 brain=brain,
                 event_bus=self.event_bus
             )

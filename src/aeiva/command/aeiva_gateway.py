@@ -9,11 +9,13 @@ import asyncio
 import os
 import secrets
 import signal
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse
 
 import click
 
@@ -125,6 +127,100 @@ def _prepare_host_auth_for_autostart(
                 host_entry["token"] = daemon_token
 
 
+def _is_local_loopback_host(host: Optional[str]) -> bool:
+    if not isinstance(host, str):
+        return False
+    normalized = host.strip().lower()
+    return normalized in {"127.0.0.1", "localhost", "::1"}
+
+
+def _is_tcp_port_available(host: str, port: int) -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((host, int(port)))
+        return True
+    except OSError:
+        return False
+
+
+def _pick_free_tcp_port(host: str) -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((host, 0))
+        return int(sock.getsockname()[1])
+
+
+def _rewrite_local_host_urls_for_port(
+    host_cfg: Dict[str, Any],
+    *,
+    old_port: int,
+    new_port: int,
+) -> None:
+    raw_hosts = host_cfg.get("hosts")
+    if not isinstance(raw_hosts, dict):
+        return
+
+    for host_entry in raw_hosts.values():
+        if not isinstance(host_entry, dict):
+            continue
+        url = _as_non_empty_str(host_entry.get("url"))
+        if not url:
+            continue
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        if not _is_local_loopback_host(parsed.hostname):
+            continue
+        if parsed.port != int(old_port):
+            continue
+
+        host_part = parsed.hostname or "127.0.0.1"
+        if ":" in host_part and not host_part.startswith("["):
+            host_part = f"[{host_part}]"
+        netloc = f"{host_part}:{int(new_port)}"
+        if parsed.username:
+            auth = parsed.username
+            if parsed.password:
+                auth += f":{parsed.password}"
+            netloc = f"{auth}@{netloc}"
+
+        host_entry["url"] = urlunparse(parsed._replace(netloc=netloc))
+
+
+def _resolve_autostart_daemon_port(
+    logger: Any,
+    host_cfg: Dict[str, Any],
+    *,
+    daemon_host: str,
+    daemon_port: int,
+) -> int:
+    """Pick a daemon port, rebinding when configured local port is already in use."""
+    if _is_tcp_port_available(daemon_host, daemon_port):
+        return daemon_port
+
+    try:
+        new_port = _pick_free_tcp_port(daemon_host)
+    except OSError:
+        # Fallback for uncommon host strings where bind(host, 0) is not valid.
+        new_port = _pick_free_tcp_port("127.0.0.1")
+
+    logger.warning(
+        "Host daemon port %s is already in use; rebinding auto-start daemon to %s.",
+        daemon_port,
+        new_port,
+    )
+
+    daemon_cfg = host_cfg.get("daemon")
+    if isinstance(daemon_cfg, dict):
+        daemon_cfg["port"] = new_port
+    _rewrite_local_host_urls_for_port(
+        host_cfg,
+        old_port=daemon_port,
+        new_port=new_port,
+    )
+    return new_port
+
+
 @dataclass
 class UvicornHandle:
     server: Any
@@ -147,6 +243,12 @@ def _try_start_host(logger, config_dict, log_dir: Path, config_path: Optional[Pa
     daemon_cfg = host_cfg.get("daemon") or {}
     host = daemon_cfg.get("host") or "127.0.0.1"
     port = int(daemon_cfg.get("port") or 7090)
+    port = _resolve_autostart_daemon_port(
+        logger,
+        host_cfg,
+        daemon_host=host,
+        daemon_port=port,
+    )
     allow_tools = daemon_cfg.get("allowed_tools") or daemon_cfg.get("allow_tools")
     if isinstance(allow_tools, str):
         allow_tools = [item.strip() for item in allow_tools.split(",") if item.strip()]

@@ -58,6 +58,14 @@ class LLMGatewayConfig(BaseConfig):
         default=3,
         metadata={"help": "The number of times to retry failed API requests."}
     )
+    llm_max_tool_loops: Optional[int] = field(
+        default=32,
+        metadata={"help": "Maximum tool-call iterations per response (higher supports longer multi-step workflows)."}
+    )
+    llm_tool_result_max_chars: Optional[int] = field(
+        default=8000,
+        metadata={"help": "Maximum characters preserved from each tool result before truncation for the next LLM turn."}
+    )
     llm_retry_backoff_factor: Optional[float] = field(
         default=0.5,
         metadata={"help": "Factor for exponential backoff between retries."}

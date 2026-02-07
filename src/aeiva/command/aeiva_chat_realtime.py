@@ -297,8 +297,19 @@ def build_turn_based_realtime_ui(
                     time_limit=webrtc_time_limit,
                     send_input_on="submit",
                 )
+                def _apply_chatbot_update(old_history, new_history):
+                    if not isinstance(new_history, list):
+                        return old_history if isinstance(old_history, list) else []
+                    normalized = []
+                    for item in new_history:
+                        if isinstance(item, dict):
+                            normalized.append(dict(item))
+                        else:
+                            normalized.append(item)
+                    return normalized
+
                 webrtc.on_additional_outputs(
-                    lambda old, new: new,
+                    _apply_chatbot_update,
                     inputs=[chatbot],
                     outputs=[chatbot],
                 )

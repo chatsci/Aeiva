@@ -30,14 +30,13 @@ The decorator extracts schema from:
 
 import asyncio
 import inspect
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import wraps
 from typing import (
     Any,
     Callable,
     Dict,
     List,
-    Optional,
     Set,
     Type,
     Union,
@@ -278,6 +277,11 @@ def tool(
         parameters = []
         for param_name, param in sig.parameters.items():
             if param_name in ('self', 'cls'):
+                continue
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
                 continue
 
             param_type = type_hints.get(param_name, str)
