@@ -12,7 +12,7 @@ from .service_utils import (
 )
 
 if TYPE_CHECKING:
-    from .service import _ExecuteContext
+    from .browser_service import _ExecuteContext
 
 
 class BrowserServiceDispatchInteractionMixin:

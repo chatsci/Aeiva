@@ -54,7 +54,7 @@ def _build_progress_hint(*, elapsed_seconds: float, hint_index: int) -> str:
             "Acting",
             "Waiting for tools",
             "Retrying if needed",
-            "Summarizing",
+            "Still working",
         ),
     )
 
@@ -346,7 +346,7 @@ def build_gradio_chat_ui(
 
             stream = (config_dict.get("llm_gateway_config") or {}).get("llm_stream", False)
             resp_timeout = float(
-                (config_dict.get("gradio_config") or {}).get("response_timeout", 60.0)
+                (config_dict.get("gradio_config") or {}).get("response_timeout", 180.0)
             )
 
             # Emit input via gateway

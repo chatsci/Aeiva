@@ -9,7 +9,7 @@ DEFAULT_PROGRESS_PHASES: Tuple[str, ...] = (
     "Acting",
     "Waiting for tools",
     "Retrying if needed",
-    "Summarizing",
+    "Still working",
 )
 DEFAULT_PHASE_THRESHOLDS_SECONDS: Tuple[int, ...] = (0, 5, 12, 24, 40)
 

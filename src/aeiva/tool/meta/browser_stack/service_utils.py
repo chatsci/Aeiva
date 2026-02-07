@@ -3,39 +3,24 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, unquote_plus, urlsplit
 
-from .runtime import DEFAULT_TIMEOUT_MS
+from .browser_runtime import DEFAULT_TIMEOUT_MS
+from .runtime_common import _normalize_timeout as _normalize_timeout_ms
+from .value_utils import _as_bool, _as_int, _as_str, _coalesce
 
 
 _SHORTHAND_RULES: tuple[tuple[set[str], str, str], ...] = (
-    ({"to", "destination", "arrive", "arrival", "where_to"}, "to", "type_or_option"),
-    ({"from", "origin", "depart", "departure", "where_from"}, "from", "type_or_option"),
-    ({"date", "departure_date", "depart_date", "outbound_date"}, "departure date", "set_date"),
-    ({"check_in", "checkin", "check_in_date", "checkin_date"}, "check-in date", "set_date"),
-    (
-        {"check_out", "checkout", "check_out_date", "checkout_date", "return_date", "inbound_date"},
-        "check-out date",
-        "set_date",
-    ),
-    ({"baggage", "bag", "checked_baggage", "checked_bag", "luggage"}, "checked baggage", "set_number"),
-    ({"passengers", "passenger", "pax", "travellers", "travelers", "people"}, "passengers", "set_number"),
-    ({"guests", "guest", "guest_count", "adults", "children"}, "guests", "set_number"),
-    ({"cabin", "class", "seat_class", "travel_class"}, "cabin", "choose_option"),
-    ({"trip_type", "trip", "journey_type"}, "trip type", "choose_option"),
+    ({"to", "destination", "where_to"}, "to", "type_or_option"),
+    ({"from", "origin", "where_from"}, "from", "type_or_option"),
+    ({"date"}, "date", "set_date"),
     ({"sort", "order", "sort_by"}, "sort", "choose_option"),
     ({"query", "search", "search_query", "keyword", "keywords"}, "search query", "search_query"),
 )
 
 
 def _normalize_timeout(timeout: Optional[int]) -> int:
-    if timeout is None:
-        return DEFAULT_TIMEOUT_MS
-    try:
-        value = int(timeout)
-    except Exception:
-        return DEFAULT_TIMEOUT_MS
-    return max(1, value)
+    return _normalize_timeout_ms(timeout, default=DEFAULT_TIMEOUT_MS)
 
 
 def _extract_operation_name(payload: Dict[str, Any]) -> str:
@@ -228,22 +213,6 @@ def _fill_fields_signature_paths(step: Dict[str, Any]) -> tuple[str, ...]:
     return (text,) if text else ()
 
 
-def _as_str(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text if text else None
-
-
-def _as_int(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except Exception:
-        return None
-
-
 def _as_float(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -251,27 +220,6 @@ def _as_float(value: Any) -> Optional[float]:
         return float(value)
     except Exception:
         return None
-
-
-def _as_bool(value: Any, *, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "on"}:
-        return True
-    if text in {"0", "false", "no", "off"}:
-        return False
-    return default
-
-
-def _coalesce(*values: Any) -> Any:
-    for value in values:
-        if value is not None:
-            return value
-    return None
-
 
 def _normalize_values(value: Any) -> list[str]:
     if value is None:
@@ -358,6 +306,128 @@ def _looks_like_google_sorry(payload: Dict[str, Any]) -> bool:
     return False
 
 
+def _looks_like_bot_challenge(payload: Dict[str, Any]) -> bool:
+    if _looks_like_google_sorry(payload):
+        return True
+    url = (_as_str(payload.get("url")) or "").lower()
+    title = (_as_str(payload.get("title")) or "").lower()
+    strong_url_markers = (
+        "/captcha",
+        "recaptcha",
+        "hcaptcha",
+        "/challenge",
+        "__cf_chl_",
+        "/cdn-cgi/challenge",
+        "/cdn-cgi/challenge-platform",
+        "distil_r_captcha",
+        "geo.captcha-delivery.com",
+        "challenges.cloudflare.com",
+    )
+    strong_title_markers = (
+        "captcha",
+        "verify you are human",
+        "are you human",
+        "robot check",
+        "security check",
+    )
+    weak_title_markers = (
+        "attention required",
+        "just a moment",
+    )
+    url_markers = (
+        "__cf_chl_",
+        "/cdn-cgi/",
+        "challenge-platform",
+        "challenges.cloudflare.com",
+    )
+    if any(marker in url for marker in strong_url_markers):
+        return True
+    if any(marker in title for marker in strong_title_markers):
+        return True
+    if any(marker in title for marker in weak_title_markers) and any(marker in url for marker in url_markers):
+        return True
+    return False
+
+
+def _extract_search_query_from_url(url: Optional[str]) -> Optional[str]:
+    clean = _as_str(url)
+    if not clean:
+        return None
+    try:
+        parsed = urlsplit(clean)
+    except Exception:
+        return None
+    host = (parsed.hostname or "").lower()
+    path = (parsed.path or "").lower()
+    if not _is_search_results_url(host=host, path=path):
+        return None
+    parsed_params = _extract_search_params(parsed.query, parsed.fragment)
+    for key in ("q", "query", "p", "wd", "text", "search_query", "search_term", "keyword", "k"):
+        value = _first_non_empty_value(parsed_params, key)
+        if value is not None:
+            return value
+
+    # Path-based search routes (e.g. /search/<query> or /results/<query>)
+    segments = [seg for seg in path.split("/") if seg]
+    for idx, seg in enumerate(segments):
+        if seg in {"search", "results", "find"} and idx + 1 < len(segments):
+            decoded = unquote_plus(segments[idx + 1]).strip()
+            if decoded:
+                return decoded
+    return None
+
+
+def _is_search_results_url(*, host: str, path: str) -> bool:
+    if not host:
+        return False
+    if "google." in host and (path == "/search" or path.endswith("/search") or path == "/webhp"):
+        return True
+    if host.endswith("bing.com") and path.startswith("/search"):
+        return True
+    if "duckduckgo.com" in host and path in {"", "/"}:
+        return True
+    if "yahoo." in host and path.startswith("/search"):
+        return True
+    if host.endswith("baidu.com") and path.startswith("/s"):
+        return True
+    if host.endswith("yandex.com") and path.startswith("/search"):
+        return True
+    if host.endswith("ecosia.org") and path.startswith("/search"):
+        return True
+    return False
+
+
+def _extract_search_params(query: str, fragment: str) -> Dict[str, list[str]]:
+    merged: Dict[str, list[str]] = {}
+    candidates = [query]
+    if fragment and "=" in fragment:
+        candidates.append(fragment.lstrip("#"))
+    for raw in candidates:
+        if not raw:
+            continue
+        try:
+            parsed = parse_qs(raw, keep_blank_values=False)
+        except Exception:
+            continue
+        for key, values in parsed.items():
+            if key not in merged:
+                merged[key] = list(values)
+            else:
+                merged[key].extend(values)
+    return merged
+
+
+def _first_non_empty_value(params: Dict[str, list[str]], key: str) -> Optional[str]:
+    values = params.get(key)
+    if not values:
+        return None
+    for value in values:
+        clean = str(value).strip()
+        if clean:
+            return clean
+    return None
+
+
 def _extract_scroll_y(value: Any) -> int:
     if isinstance(value, dict):
         return int(_as_int(value.get("y")) or 0)
@@ -415,7 +485,7 @@ def _sign(value: int) -> int:
 def _build_search_fallback_results(query: str) -> list[Dict[str, str]]:
     clean = (query or "").strip()
     encoded = quote_plus(clean)
-    results: list[Dict[str, str]] = [
+    return [
         {
             "title": f"Google Search: {clean}",
             "url": f"https://www.google.com/search?q={encoded}",
@@ -432,70 +502,3 @@ def _build_search_fallback_results(query: str) -> list[Dict[str, str]]:
             "source": "fallback",
         },
     ]
-    lower = clean.lower()
-    if any(token in lower for token in ("flight", "airfare", "ticket", "机票", "航班")):
-        results.extend(
-            [
-                {
-                    "title": f"Google Flights: {clean}",
-                    "url": f"https://www.google.com/travel/flights?q={encoded}",
-                    "source": "fallback",
-                },
-                {
-                    "title": f"Kayak Flights: {clean}",
-                    "url": f"https://www.kayak.com/flights/{encoded}?sort=bestflight_a",
-                    "source": "fallback",
-                },
-                {
-                    "title": f"Skyscanner: {clean}",
-                    "url": f"https://www.skyscanner.com/transport/flights/?q={encoded}",
-                    "source": "fallback",
-                },
-                {
-                    "title": f"Trip.com Flights: {clean}",
-                    "url": f"https://www.trip.com/flights/?locale=en-US&curr=USD&searchword={encoded}",
-                    "source": "fallback",
-                },
-            ]
-        )
-    return results
-
-
-def _looks_like_flight_query(query: str) -> bool:
-    lower = (query or "").strip().lower()
-    if not lower:
-        return False
-    return any(token in lower for token in ("flight", "airfare", "ticket", "机票", "航班"))
-
-
-def _build_flight_comparison_links(query: str) -> list[Dict[str, str]]:
-    clean = (query or "").strip()
-    if not clean:
-        return []
-    encoded = quote_plus(clean)
-    return [
-        {
-            "source": "google_flights",
-            "title": "Google Flights",
-            "url": f"https://www.google.com/travel/flights?q={encoded}",
-        },
-        {
-            "source": "kayak",
-            "title": "Kayak",
-            "url": f"https://www.kayak.com/flights/{encoded}?sort=bestflight_a",
-        },
-        {
-            "source": "skyscanner",
-            "title": "Skyscanner",
-            "url": f"https://www.skyscanner.com/transport/flights/?q={encoded}",
-        },
-        {
-            "source": "trip",
-            "title": "Trip.com",
-            "url": f"https://www.trip.com/flights/?locale=en-US&curr=USD&searchword={encoded}",
-        },
-    ]
-
-
-
-

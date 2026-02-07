@@ -298,7 +298,7 @@ class RealtimePipelineHandler:
                 "Acting",
                 "Waiting for tools",
                 "Retrying if needed",
-                "Summarizing",
+                "Still working",
             ),
         )
 

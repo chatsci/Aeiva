@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections import deque
 from typing import Any, Deque, Dict, Optional
@@ -14,6 +15,9 @@ from .element_matching import (
 )
 from .service_constants import DEFAULT_SCROLL_RECOVERY_CLICK_TIMEOUT_MS
 from .service_utils import _as_int, _as_str, _resolve_scroll_positions, _sign
+from .logging_utils import _log_browser_event
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserServiceScrollGuardMixin:
@@ -294,7 +298,16 @@ class BrowserServiceScrollGuardMixin:
                     ref=selected_ref,
                 ),
             )
-        except Exception:
+        except Exception as exc:
+            _log_browser_event(
+                logger,
+                level=logging.DEBUG,
+                event="scroll_auto_recovery_failed",
+                profile=profile,
+                trigger_code=trigger_code,
+                recovery_ref=selected_ref,
+                error=exc,
+            )
             return None
         repaired["auto_recovered"] = True
         repaired["recovery_action"] = "click"

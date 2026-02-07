@@ -14,7 +14,7 @@ from .service_utils import (
 )
 
 if TYPE_CHECKING:
-    from .service import _ExecuteContext
+    from .browser_service import _ExecuteContext
 
 
 class BrowserServiceDispatchCoreMixin:
@@ -77,6 +77,7 @@ class BrowserServiceDispatchCoreMixin:
 
         if ctx.op == "stop":
             stopped = await self._sessions.stop_session(ctx.profile)
+            self._clear_profile_interaction_state(ctx.profile)
             return self._ok(stopped=stopped, profile=ctx.profile)
 
         if ctx.op == "status":

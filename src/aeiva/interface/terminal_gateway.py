@@ -28,7 +28,7 @@ class TerminalGateway(GatewayBase[str]):
             cfg,
             event_bus,
             stream_mode=str(cfg.get("stream_mode", "buffer")),
-            response_timeout=float(cfg.get("response_timeout", 60.0)),
+            response_timeout=float(cfg.get("response_timeout", 180.0)),
             max_routes=int(cfg.get("max_route_cache", 2048)),
             pending_queue_max=int(cfg.get("max_pending_routes", 256)),
         )
@@ -233,15 +233,31 @@ class TerminalGateway(GatewayBase[str]):
         print(f"[AEIVA] {hint}", flush=True)
         self._hint_line_visible = False
 
-    def _wait_for_response(self, response_future: "concurrent.futures.Future[str]") -> None:
-        start_at = time.time()
+    def _wait_for_response(
+        self,
+        response_future: "concurrent.futures.Future[str]",
+        *,
+        now_fn=time.time,
+    ) -> None:
+        start_at = now_fn()
+        deadline = start_at + max(0.1, float(self.response_timeout))
         next_hint_at = start_at
         hint_index = 0
         self._awaiting_sync_response = True
         try:
             while self._running and not self._stop_event.is_set():
+                now = now_fn()
+                remaining = deadline - now
+                if remaining <= 0:
+                    self._render_response(
+                        "I'm sorry, I didn't receive a response in time.",
+                        show_prompt=False,
+                    )
+                    return
                 try:
-                    response = response_future.result(timeout=self.progress_poll_timeout)
+                    response = response_future.result(
+                        timeout=min(self.progress_poll_timeout, max(0.05, remaining))
+                    )
                     self._clear_status_line()
                     if isinstance(response, str) and response.strip():
                         self._render_response(response, show_prompt=False)
@@ -255,9 +271,15 @@ class TerminalGateway(GatewayBase[str]):
                             show_prompt=False,
                         )
                         return
+                    now = now_fn()
+                    if now >= deadline:
+                        self._render_response(
+                            "I'm sorry, I didn't receive a response in time.",
+                            show_prompt=False,
+                        )
+                        return
                     if not self.progress_hint_enabled:
                         continue
-                    now = time.time()
                     if now < next_hint_at:
                         continue
                     hint = self._build_progress_hint(

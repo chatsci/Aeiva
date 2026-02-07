@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from ..capability import Capability
 from ..decorator import tool
-from .browser_stack.service import get_browser_service
+from .browser_stack.browser_service import get_browser_service
 
 
 @tool(
@@ -38,7 +38,7 @@ async def browser(
     request: Optional[Dict[str, Any]] = None,
     full_page: bool = False,
     image_type: str = "png",
-    limit: int = 140,
+    limit: int = 80,
     time_ms: Optional[int] = None,
     selector_state: Optional[str] = None,
     state: Optional[str] = None,

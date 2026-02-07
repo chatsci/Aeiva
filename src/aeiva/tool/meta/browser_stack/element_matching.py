@@ -5,12 +5,19 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Optional
 
-
-def _as_str(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text if text else None
+from .value_utils import _as_str
+from .element_node_utils import (
+    _build_node_haystack,
+    _compact_node_match,
+    _contains_hint_token,
+    _looks_like_date_literal,
+    _node_has_nonempty_value,
+    _node_is_clickable,
+    _node_is_disabled,
+    _node_is_editable,
+    _node_is_readonly,
+    _node_looks_negative_action,
+)
 
 
 def _find_scroll_recovery_refs(nodes: list[Any], *, max_results: int = 8) -> list[Dict[str, Any]]:
@@ -255,7 +262,6 @@ def _rank_type_targets_from_nodes(
     clean_field = (field_hint or "").strip().casefold()
     field_tokens = [token for token in clean_field.split() if token]
     intent = _infer_input_intent(value)
-    field_intent = _infer_field_intent(field_hint)
 
     ranked: list[tuple[int, Dict[str, Any]]] = []
     for node in nodes:
@@ -274,24 +280,19 @@ def _rank_type_targets_from_nodes(
         editable = _node_is_editable(node)
         clickable = _node_is_clickable(node)
         has_aria_numeric = bool(_as_str(node.get("aria_valuenow")))
-        baggage_hint = any(token in haystack for token in _BAGGAGE_HINT_TOKENS)
         date_hint = any(token in haystack for token in _DATE_HINT_TOKENS)
-        destination_hint = any(token in haystack for token in _DESTINATION_HINT_TOKENS)
-        origin_hint = any(token in haystack for token in _ORIGIN_HINT_TOKENS)
-        departure_date_hint = any(token in haystack for token in _DEPARTURE_DATE_HINT_TOKENS)
-        return_date_hint = any(token in haystack for token in _RETURN_DATE_HINT_TOKENS)
-        passenger_hint = any(token in haystack for token in _PASSENGER_HINT_TOKENS)
         numeric_control = role == "spinbutton" or input_type in {"number", "range"} or has_aria_numeric
         date_control = input_type in {"date", "datetime-local", "time"} or date_hint
 
         can_target = editable
         if not can_target:
-            if intent == "baggage":
-                can_target = clickable and (numeric_control or baggage_hint)
-            elif intent == "numeric":
+            if intent == "numeric":
                 can_target = clickable and numeric_control
             elif intent == "date":
                 can_target = clickable and date_control
+            elif intent == "text":
+                # Generic combobox wrappers are often clickable instead of directly editable.
+                can_target = clickable and role in {"combobox", "button"} and bool(field_tokens)
         if not can_target:
             continue
 
@@ -338,57 +339,14 @@ def _rank_type_targets_from_nodes(
             elif field_tokens and all(_contains_hint_token(haystack, token) for token in field_tokens):
                 score += 20
 
-        if field_intent == "destination":
-            if destination_hint:
-                score += 24
-            if origin_hint:
-                score -= 28
-        elif field_intent == "origin":
-            if origin_hint:
-                score += 24
-            if destination_hint:
-                score -= 20
-        elif field_intent == "departure_date":
-            if departure_date_hint:
-                score += 20
-            if return_date_hint:
-                score -= 24
-        elif field_intent == "return_date":
-            if return_date_hint:
-                score += 20
-            if departure_date_hint:
-                score -= 18
-        elif field_intent == "baggage":
-            if baggage_hint or numeric_control:
-                score += 14
-            if passenger_hint:
-                score -= 10
-        elif field_intent == "passengers":
-            if passenger_hint:
-                score += 18
-            if baggage_hint:
-                score -= 12
-
-        if intent == "baggage":
-            if numeric_control:
-                score += 20
-            if baggage_hint:
-                score += 18
-        elif intent == "numeric":
+        if intent == "numeric":
             if numeric_control:
                 score += 18
         elif intent == "date":
             if date_control:
                 score += 16
             if date_hint:
-                score += 10
-        elif intent == "airport":
-            if destination_hint:
-                score += 16
-            if origin_hint:
-                score -= 8
-            if has_value:
-                score -= 4
+                score += 8
 
         ranked.append((score, _compact_node_match(node)))
 
@@ -447,7 +405,6 @@ def _rank_select_targets_from_nodes(
     clean_field = (field_hint or "").strip().casefold()
     field_tokens = [token for token in clean_field.split() if token]
     value_tokens = [str(v).strip().casefold() for v in values if str(v).strip()]
-    field_intent = _infer_field_intent(field_hint)
 
     ranked: list[tuple[int, Dict[str, Any]]] = []
     for node in nodes:
@@ -464,12 +421,6 @@ def _rank_select_targets_from_nodes(
             continue
 
         haystack = _build_node_haystack(node)
-        destination_hint = any(token in haystack for token in _DESTINATION_HINT_TOKENS)
-        origin_hint = any(token in haystack for token in _ORIGIN_HINT_TOKENS)
-        departure_date_hint = any(token in haystack for token in _DEPARTURE_DATE_HINT_TOKENS)
-        return_date_hint = any(token in haystack for token in _RETURN_DATE_HINT_TOKENS)
-        baggage_hint = any(token in haystack for token in _BAGGAGE_HINT_TOKENS)
-        passenger_hint = any(token in haystack for token in _PASSENGER_HINT_TOKENS)
         if not haystack:
             continue
         score = 0
@@ -489,37 +440,6 @@ def _rank_select_targets_from_nodes(
 
         if value_tokens and all(_contains_hint_token(haystack, token) for token in value_tokens):
             score += 8
-
-        if field_intent == "destination":
-            if destination_hint:
-                score += 20
-            if origin_hint:
-                score -= 24
-        elif field_intent == "origin":
-            if origin_hint:
-                score += 20
-            if destination_hint:
-                score -= 16
-        elif field_intent == "departure_date":
-            if departure_date_hint:
-                score += 16
-            if return_date_hint:
-                score -= 18
-        elif field_intent == "return_date":
-            if return_date_hint:
-                score += 16
-            if departure_date_hint:
-                score -= 12
-        elif field_intent == "baggage":
-            if baggage_hint:
-                score += 14
-            if passenger_hint:
-                score -= 10
-        elif field_intent == "passengers":
-            if passenger_hint:
-                score += 14
-            if baggage_hint:
-                score -= 10
 
         if not clean_field and has_value:
             score -= 10
@@ -553,10 +473,6 @@ def _find_editable_recovery_refs(nodes: list[Any], *, max_results: int = 8) -> l
             score += 8
         if input_type in {"date", "datetime-local", "number", "range"}:
             score += 5
-        if any(token in haystack for token in _DESTINATION_HINT_TOKENS):
-            score += 8
-        if any(token in haystack for token in _BAGGAGE_HINT_TOKENS):
-            score += 6
         if _node_has_nonempty_value(node):
             score -= 3
         ranked.append((score, _compact_node_match(node)))
@@ -640,61 +556,6 @@ def _match_snapshot_nodes(nodes: list[Any], query: str, *, max_results: int = 20
     return [item for _, item in ranked[:max_results]]
 
 
-def _build_node_haystack(node: Dict[str, Any]) -> str:
-    parts: list[str] = []
-    for key in (
-        "ref",
-        "tag",
-        "role",
-        "name",
-        "label_text",
-        "name_attr",
-        "dom_id",
-        "text",
-        "value",
-        "aria_label",
-        "aria_valuenow",
-        "placeholder",
-        "input_type",
-        "selector",
-        "fallback_selector",
-    ):
-        value = node.get(key)
-        if value is None:
-            continue
-        text = str(value).strip().casefold()
-        if text:
-            parts.append(text)
-    return " ".join(parts)
-
-
-def _compact_node_match(node: Dict[str, Any]) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {
-        "ref": node.get("ref"),
-        "tag": node.get("tag"),
-        "role": node.get("role"),
-        "name": node.get("name"),
-        "label_text": node.get("label_text"),
-        "name_attr": node.get("name_attr"),
-        "dom_id": node.get("dom_id"),
-        "text": node.get("text"),
-        "selector": node.get("selector"),
-    }
-    for optional_key in ("value", "aria_valuenow", "placeholder", "input_type", "scope"):
-        if optional_key in node:
-            payload[optional_key] = node.get(optional_key)
-    return payload
-
-
-def _contains_hint_token(haystack: str, token: str) -> bool:
-    clean_token = (token or "").strip().casefold()
-    if not clean_token:
-        return False
-    if len(clean_token) <= 2 and clean_token.isascii():
-        return re.search(rf"\b{re.escape(clean_token)}\b", haystack) is not None
-    return clean_token in haystack
-
-
 def _is_stale_target_error(exc: Exception) -> bool:
     text = str(exc or "").strip().casefold()
     if not text:
@@ -715,62 +576,13 @@ def _infer_input_intent(value_text: str) -> str:
     clean = (value_text or "").strip().casefold()
     if not clean:
         return "text"
-    if any(unit in clean for unit in ("kg", "公斤", "lbs", "lb", "bag", "baggage", "luggage", "行李")):
-        return "baggage"
     if re.search(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}", clean):
         return "date"
-    if re.fullmatch(r"[a-z]{3}", clean):
-        return "airport"
     if re.search(r"\d", clean):
         return "numeric"
     return "text"
 
 
-def _looks_like_date_literal(value_text: str) -> bool:
-    clean = (value_text or "").strip().casefold()
-    if not clean:
-        return False
-    return re.search(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}", clean) is not None
-
-
-def _infer_field_intent(field_hint: Optional[str]) -> str:
-    clean = (field_hint or "").strip().casefold()
-    if not clean:
-        return "generic"
-
-    def has_any(tokens: set[str]) -> bool:
-        return any(_contains_hint_token(clean, token) for token in tokens)
-
-    if has_any(_DESTINATION_HINT_TOKENS):
-        return "destination"
-    if has_any(_ORIGIN_HINT_TOKENS):
-        return "origin"
-    if has_any(_RETURN_DATE_HINT_TOKENS):
-        return "return_date"
-    if has_any(_DEPARTURE_DATE_HINT_TOKENS):
-        return "departure_date"
-    if has_any(_BAGGAGE_HINT_TOKENS):
-        return "baggage"
-    if has_any(_PASSENGER_HINT_TOKENS):
-        return "passengers"
-    return "generic"
-
-
-_CLICKABLE_ROLES = {"button", "link", "option", "menuitem", "tab", "checkbox", "radio"}
-_EDITABLE_ROLES = {"input", "textarea", "select", "textbox", "searchbox", "combobox", "spinbutton"}
-_NEGATIVE_ACTION_TOKENS = {
-    "cancel",
-    "close",
-    "dismiss",
-    "clear",
-    "reset",
-    "back",
-    "取消",
-    "关闭",
-    "清除",
-    "重置",
-    "返回",
-}
 _CONFIRM_KEYWORDS = {
     "done",
     "confirm",
@@ -811,43 +623,7 @@ _SEARCH_ACTION_KEYWORDS = {
     "预订",
     "提交",
 }
-_DESTINATION_HINT_TOKENS = {"to", "destination", "arrive", "arrival", "where to", "到", "目的地", "到达"}
-_ORIGIN_HINT_TOKENS = {"from", "origin", "depart", "departure", "where from", "出发", "始发"}
-_BAGGAGE_HINT_TOKENS = {"bag", "baggage", "luggage", "carry-on", "checked", "kg", "lbs", "行李", "托运"}
 _DATE_HINT_TOKENS = {"date", "day", "depart", "departure", "return", "日期", "时间", "出发"}
-_DEPARTURE_DATE_HINT_TOKENS = {
-    "date",
-    "depart",
-    "departure",
-    "outbound",
-    "check-in",
-    "check in",
-    "出发",
-    "去程",
-}
-_RETURN_DATE_HINT_TOKENS = {
-    "return",
-    "inbound",
-    "check-out",
-    "check out",
-    "返程",
-    "回程",
-    "退房",
-}
-_PASSENGER_HINT_TOKENS = {
-    "passenger",
-    "passengers",
-    "traveler",
-    "travellers",
-    "pax",
-    "adult",
-    "adults",
-    "guest",
-    "guests",
-    "乘客",
-    "旅客",
-    "人数",
-}
 _FILL_FIELDS_STEP_OPERATIONS = (
     "type",
     "fill",
@@ -874,72 +650,3 @@ _FILL_FIELDS_STEP_OPERATIONS = (
     "evaluate",
     "close",
 )
-
-
-def _node_is_clickable(node: Dict[str, Any]) -> bool:
-    role = str(node.get("role") or "").strip().casefold()
-    if role in _CLICKABLE_ROLES:
-        return True
-    selector = str(node.get("selector") or "").casefold()
-    if "button" in selector:
-        return True
-    return False
-
-
-def _node_looks_negative_action(node: Dict[str, Any]) -> bool:
-    haystack = _build_node_haystack(node)
-    return any(token in haystack for token in _NEGATIVE_ACTION_TOKENS)
-
-
-def _node_is_disabled(node: Dict[str, Any]) -> bool:
-    value = node.get("disabled")
-    if isinstance(value, bool):
-        return value
-    text = str(value or "").strip().lower()
-    return text in {"1", "true", "yes", "on"}
-
-
-def _node_is_readonly(node: Dict[str, Any]) -> bool:
-    value = node.get("readonly")
-    if isinstance(value, bool):
-        return value
-    text = str(value or "").strip().lower()
-    return text in {"1", "true", "yes", "on"}
-
-
-def _node_is_editable(node: Dict[str, Any]) -> bool:
-    input_type = str(node.get("input_type") or "").strip().casefold()
-    if input_type == "hidden":
-        return False
-    role = str(node.get("role") or "").strip().casefold()
-    if role in _EDITABLE_ROLES:
-        return True
-    if input_type in {
-        "text",
-        "search",
-        "email",
-        "url",
-        "tel",
-        "password",
-        "number",
-        "range",
-        "date",
-        "datetime-local",
-        "time",
-        "month",
-        "week",
-        "file",
-    }:
-        return True
-    selector = str(node.get("selector") or "").casefold()
-    fallback = str(node.get("fallback_selector") or "").casefold()
-    haystack = f"{selector} {fallback}"
-    return any(token in haystack for token in ("input", "textarea", "select", "combobox", "spinbutton"))
-
-
-def _node_has_nonempty_value(node: Dict[str, Any]) -> bool:
-    value = str(node.get("value") or "").strip()
-    if value:
-        return True
-    aria_now = str(node.get("aria_valuenow") or "").strip()
-    return bool(aria_now)

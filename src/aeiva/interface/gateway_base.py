@@ -41,7 +41,7 @@ class GatewayBase(Generic[RouteT]):
         event_bus: Any,
         *,
         stream_mode: str = "buffer",
-        response_timeout: float = 60.0,
+        response_timeout: float = 180.0,
         max_routes: int = 2048,
         pending_queue_max: int = 256,
     ) -> None:

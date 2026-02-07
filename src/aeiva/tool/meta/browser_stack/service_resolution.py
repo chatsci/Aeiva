@@ -13,3 +13,7 @@ class BrowserServiceResolutionMixin(
     BrowserServiceScrollGuardMixin,
 ):
     """Composition point for target resolution and scroll guard behaviors."""
+
+    def _clear_profile_interaction_state(self, profile: str) -> None:
+        self._clear_field_target_lock(profile)
+        self._clear_scroll_guard(profile)

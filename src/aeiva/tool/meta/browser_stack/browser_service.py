@@ -19,7 +19,7 @@ from .element_matching import (
     _find_select_target_from_nodes,
     _find_type_target_from_nodes,
 )
-from .fill_fields_engine import FillFieldsEngine, FillFieldsHelpers
+from .form_fill_engine import FillFieldsEngine, FillFieldsHelpers
 from .search_engine import SearchEngine
 from .security import BrowserSecurityPolicy
 from .service_constants import (
@@ -33,6 +33,7 @@ from .service_constants import (
 from .service_actions import BrowserServiceActionsMixin
 from .service_dispatch import BrowserServiceDispatchMixin
 from .service_resolution import BrowserServiceResolutionMixin
+from .logging_utils import _log_browser_event
 from .service_utils import (
     _as_bool,
     _as_float,
@@ -48,7 +49,7 @@ from .service_utils import (
     _normalize_timeout,
     _normalize_values,
 )
-from .runtime import BrowserSessionManager, DEFAULT_TIMEOUT_MS
+from .browser_runtime import BrowserSessionManager, DEFAULT_TIMEOUT_MS
 
 logger = logging.getLogger(__name__)
 
@@ -229,17 +230,32 @@ class BrowserService(
         try:
             payload = await self._dispatch_execute(ctx)
             if payload is not None:
-                if should_clear_guard_after_success and bool(payload.get("success")):
+                is_success = bool(payload.get("success", True))
+                if should_clear_guard_after_success and is_success:
                     self._clear_scroll_guard(profile_name)
                 duration_ms = int((time.perf_counter() - started) * 1000)
-                logger.debug(
-                    "browser.execute success op=%s profile=%s headless=%s duration_ms=%s",
-                    op or operation,
-                    profile_name,
-                    effective_headless,
-                    duration_ms,
+                event_name = "execute_success" if is_success else "execute_failure"
+                log_level = logging.DEBUG if is_success else logging.WARNING
+                _log_browser_event(
+                    logger,
+                    level=log_level,
+                    event=event_name,
+                    op=op or operation,
+                    profile=profile_name,
+                    headless=effective_headless,
+                    duration_ms=duration_ms,
+                    error_code=payload.get("error_code"),
                 )
                 return payload
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            _log_browser_event(
+                logger,
+                level=logging.DEBUG,
+                event="execute_unknown_operation",
+                op=op or operation,
+                profile=profile_name,
+                duration_ms=duration_ms,
+            )
             return self._err(
                 f"Unknown operation: {operation}",
                 code="unknown_operation",
@@ -247,12 +263,14 @@ class BrowserService(
             )
         except ValueError as exc:
             duration_ms = int((time.perf_counter() - started) * 1000)
-            logger.debug(
-                "browser.execute invalid_request op=%s profile=%s duration_ms=%s error=%s",
-                op or operation,
-                profile_name,
-                duration_ms,
-                exc,
+            _log_browser_event(
+                logger,
+                level=logging.DEBUG,
+                event="execute_invalid_request",
+                op=op or operation,
+                profile=profile_name,
+                duration_ms=duration_ms,
+                error=exc,
             )
             return self._err(str(exc), code="invalid_request")
         except Exception as exc:
@@ -260,20 +278,24 @@ class BrowserService(
             message = str(exc)
             launch_details = _classify_launch_failure(message)
             if launch_details is not None:
-                logger.warning(
-                    "browser.execute launch_blocked op=%s profile=%s duration_ms=%s error=%s",
-                    op or operation,
-                    profile_name,
-                    duration_ms,
-                    message,
+                _log_browser_event(
+                    logger,
+                    level=logging.WARNING,
+                    event="execute_launch_blocked",
+                    op=op or operation,
+                    profile=profile_name,
+                    duration_ms=duration_ms,
+                    error=message,
                 )
                 return self._err(message, code="launch_blocked", details=launch_details)
-            logger.warning(
-                "browser.execute runtime_error op=%s profile=%s duration_ms=%s error=%s",
-                op or operation,
-                profile_name,
-                duration_ms,
-                message,
+            _log_browser_event(
+                logger,
+                level=logging.WARNING,
+                event="execute_runtime_error",
+                op=op or operation,
+                profile=profile_name,
+                duration_ms=duration_ms,
+                error=message,
             )
             return self._err(message, code="runtime_error")
 

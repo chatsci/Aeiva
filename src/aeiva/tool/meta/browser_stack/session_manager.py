@@ -11,8 +11,8 @@ from .runtime_common import BrowserRuntime, _parse_int_env
 
 
 def _default_runtime_factory(profile: str, headless: bool) -> BrowserRuntime:
-    # Lazy import avoids circular imports while keeping runtime.py as the public API.
-    from .runtime import PlaywrightRuntime
+    # Lazy import avoids circular imports while keeping startup overhead low.
+    from .browser_runtime import PlaywrightRuntime
 
     return PlaywrightRuntime(profile=profile, headless=headless)
 
