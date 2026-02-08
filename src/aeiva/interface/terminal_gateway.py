@@ -227,11 +227,6 @@ class TerminalGateway(GatewayBase[str]):
             print(f"[AEIVA] {hint}", flush=True)
             return
         self._show_status_line(hint)
-        if elapsed_seconds < self.progress_hint_persist_after:
-            return
-        sys.stdout.write("\r\033[K")
-        print(f"[AEIVA] {hint}", flush=True)
-        self._hint_line_visible = False
 
     def _wait_for_response(
         self,

@@ -142,6 +142,12 @@ def prepare_runtime_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
     The operation mutates and returns `config_dict` for efficient command startup.
     """
     resolve_env_vars(config_dict)
+    try:
+        from aeiva.metaui import configure_metaui_runtime
+        configure_metaui_runtime(config_dict)
+    except Exception:
+        # MetaUI is optional at runtime; config wiring must not break startup.
+        pass
     validate_runtime_config(config_dict)
     return config_dict
 

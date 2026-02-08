@@ -1,0 +1,2533 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MetaUI Desktop</title>
+    <style>
+      :root {
+        --bg-top: #e5efe8;
+        --bg-bottom: #f3f7fc;
+        --panel: rgba(255, 255, 255, 0.94);
+        --panel-border: rgba(148, 163, 184, 0.24);
+        --text: #0b1629;
+        --muted: #54657f;
+        --border: #d5deea;
+        --border-strong: #c2cfdf;
+        --accent: #0f766e;
+        --accent-strong: #0b5f59;
+        --accent-soft: #d8f4ef;
+        --focus-ring: rgba(15, 118, 110, 0.16);
+        --shadow-soft: 0 10px 24px rgba(15, 23, 42, 0.08);
+        --shadow-panel: 0 18px 44px rgba(15, 23, 42, 0.12);
+        --danger: #b91c1c;
+        --radius-md: 14px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Text", "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+        background:
+          radial-gradient(1200px 600px at -20% -10%, rgba(15, 118, 110, 0.18), transparent 60%),
+          radial-gradient(900px 480px at 120% 0%, rgba(56, 189, 248, 0.16), transparent 55%),
+          linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+        color: var(--text);
+      }
+      .shell {
+        padding: 18px;
+        height: 100vh;
+      }
+      .panel {
+        border: 1px solid var(--panel-border);
+        border-radius: 18px;
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+        padding: 14px 16px 18px 16px;
+        box-shadow: var(--shadow-panel);
+        height: calc(100vh - 36px);
+        display: flex;
+        flex-direction: column;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 11px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 750;
+        letter-spacing: 0.01em;
+      }
+      #status {
+        color: #28585d;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        background: var(--accent-soft);
+        border: 1px solid rgba(15, 118, 110, 0.26);
+        border-radius: 999px;
+        padding: 4px 9px;
+      }
+      #content {
+        margin-top: 15px;
+        overflow: auto;
+        flex: 1;
+        padding-right: 5px;
+      }
+      #content::-webkit-scrollbar {
+        width: 8px;
+      }
+      #content::-webkit-scrollbar-thumb {
+        background: #c7d4e3;
+        border-radius: 999px;
+      }
+      #content::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .toast-wrap {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 9999;
+      }
+      .toast {
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.96);
+        padding: 9px 11px;
+        border-radius: 10px;
+        min-width: 220px;
+        box-shadow: var(--shadow-soft);
+        font-size: 12px;
+      }
+      .toast.info { border-left: 4px solid #0f766e; }
+      .toast.warn { border-left: 4px solid #d97706; }
+      .toast.error { border-left: 4px solid var(--danger); }
+
+      .component {
+        margin-bottom: 14px;
+      }
+      .component.card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+        box-shadow: var(--shadow-soft);
+        padding: 12px;
+        transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+      }
+      .component.card:hover {
+        border-color: var(--border-strong);
+        transform: translateY(-1px);
+        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.09);
+      }
+      .component-title {
+        font-weight: 750;
+        margin-bottom: 10px;
+        font-size: 13px;
+        letter-spacing: 0.01em;
+      }
+      .text {
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .markdown {
+        font-size: 13px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .container.row {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .chat-panel {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        overflow: hidden;
+      }
+      .chat-stream {
+        max-height: 360px;
+        overflow: auto;
+        padding: 10px;
+        background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+      }
+      .chat-row {
+        display: flex;
+        margin-bottom: 8px;
+      }
+      .chat-row.user {
+        justify-content: flex-end;
+      }
+      .chat-row.assistant {
+        justify-content: flex-start;
+      }
+      .chat-bubble {
+        max-width: min(86%, 720px);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 8px 10px;
+        font-size: 13px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+      .chat-row.user .chat-bubble {
+        background: var(--accent-soft);
+        border-color: rgba(15, 118, 110, 0.25);
+      }
+      .chat-row.assistant .chat-bubble {
+        background: #fff;
+      }
+      .chat-role {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 3px;
+      }
+      .chat-input-row {
+        display: flex;
+        gap: 8px;
+        padding: 10px;
+        border-top: 1px solid var(--border);
+        background: #fcfeff;
+      }
+      .chat-input-row input[type="text"] {
+        flex: 1;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 10px;
+        overflow: hidden;
+        font-size: 12px;
+        background: #fff;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 7px 9px;
+        text-align: left;
+      }
+      th {
+        background: #eef4fb;
+        font-weight: 650;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+      tbody tr:nth-child(even) {
+        background: #fafcff;
+      }
+      tbody tr:hover {
+        background: #f2f7fc;
+      }
+      input, select, textarea, button {
+        font: inherit;
+      }
+      input[type="text"], input[type="number"], input[type="date"], select, textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 9px;
+        background: #fff;
+      }
+      input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: rgba(15, 118, 110, 0.45);
+        box-shadow: 0 0 0 3px var(--focus-ring);
+      }
+      .field {
+        margin-bottom: 10px;
+      }
+      .field label {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      button {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #fff;
+        padding: 7px 11px;
+        cursor: pointer;
+        transition: all 130ms ease;
+        box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
+      }
+      button.primary {
+        background: linear-gradient(180deg, #13887f 0%, var(--accent) 100%);
+        color: #fff;
+        border-color: var(--accent);
+      }
+      button.primary:hover {
+        background: linear-gradient(180deg, #12786f 0%, var(--accent-strong) 100%);
+      }
+      button.secondary {
+        background: #fff;
+      }
+      button.secondary:hover {
+        border-color: #c5d2df;
+        background: #f7fafc;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      button + button {
+        margin-left: 6px;
+      }
+      .progress-row {
+        margin-bottom: 10px;
+      }
+      .progress-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      .progress-track {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        background: #e4edf6;
+        overflow: hidden;
+      }
+      .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #0f766e 0%, #14b8a6 100%);
+      }
+      .small {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      canvas {
+        width: 100%;
+        max-width: 720px;
+        height: 260px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+      }
+      .action-bar {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+        position: sticky;
+        bottom: 0;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0), #f9fcff 42%);
+      }
+      .error {
+        color: var(--danger);
+      }
+      .fallback {
+        border: 1px dashed #d7e1ea;
+        border-radius: 10px;
+        background: #f8fbfd;
+        padding: 10px;
+      }
+      .fallback pre {
+        margin: 8px 0 0 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="panel">
+        <div class="header">
+          <h1 id="title">MetaUI Desktop</h1>
+          <div id="status">Connecting...</div>
+        </div>
+        <div id="content"></div>
+      </div>
+      <div class="toast-wrap" id="toasts"></div>
+    </div>
+    <script>
+      const WS_URL = __WS_URL__;
+      const TOKEN = __TOKEN__;
+      const CLIENT_ID = "metaui-desktop";
+
+      const titleEl = document.getElementById("title");
+      const statusEl = document.getElementById("status");
+      const contentEl = document.getElementById("content");
+      const toastsEl = document.getElementById("toasts");
+
+      const appState = {
+        ws: null,
+        spec: null,
+        componentById: {},
+        state: {},
+        surfaceStore: {},
+        dataModelStore: {},
+        surfaceMeta: {},
+        catalog: null,
+      };
+
+      const SUPPORTED_PROTOCOL_VERSIONS = ["1.0"];
+      const SUPPORTED_COMPONENTS = [
+        "container",
+        "tabs",
+        "accordion",
+        "divider",
+        "text",
+        "markdown",
+        "badge",
+        "metric_card",
+        "list_view",
+        "code_block",
+        "image",
+        "iframe",
+        "chat_panel",
+        "file_uploader",
+        "data_table",
+        "chart",
+        "form",
+        "form_step",
+        "button",
+        "input",
+        "textarea",
+        "select",
+        "checkbox",
+        "radio_group",
+        "slider",
+        "progress_panel",
+        "result_export",
+      ];
+      const SUPPORTED_COMMANDS = [
+        "render_full",
+        "patch",
+        "set_state",
+        "notify",
+        "close",
+        "surface_update",
+        "data_model_update",
+        "begin_rendering",
+        "delete_surface",
+      ];
+      const SUPPORTED_FEATURES = [
+        "a2ui_stream_v1",
+        "json_pointer_bindings_v1",
+      ];
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function showToast(message, level) {
+        const toast = document.createElement("div");
+        toast.className = "toast " + (level || "info");
+        toast.textContent = message;
+        toastsEl.appendChild(toast);
+        window.setTimeout(() => toast.remove(), 3600);
+      }
+
+      function encodeHtml(text) {
+        return String(text || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      function mergeObjects(target, source) {
+        const out = Object.assign({}, target || {});
+        for (const [key, value] of Object.entries(source || {})) {
+          if (value && typeof value === "object" && !Array.isArray(value)) {
+            out[key] = mergeObjects(out[key], value);
+          } else {
+            out[key] = value;
+          }
+        }
+        return out;
+      }
+
+      function normalizeToken(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "");
+      }
+
+      function normalizeTheme(theme) {
+        if (!theme || typeof theme !== "object") return {};
+        const aliases = {
+          primary: "color_primary",
+          accent: "color_primary",
+          text: "color_text",
+          muted: "color_muted",
+          panel: "color_surface",
+          bg_top: "color_bg_top",
+          bg_bottom: "color_bg_bottom",
+          border: "color_border",
+          radius: "radius_md",
+        };
+        const out = {};
+        for (const [rawKey, rawValue] of Object.entries(theme)) {
+          const token = aliases[normalizeToken(rawKey)] || normalizeToken(rawKey);
+          if (!token) continue;
+          if (rawValue === null || rawValue === undefined) continue;
+          if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+            out[token] = rawValue;
+            continue;
+          }
+          out[token] = String(rawValue);
+        }
+        return out;
+      }
+
+      function applyTheme(theme) {
+        const vars = {
+          color_bg_top: "--bg-top",
+          color_bg_bottom: "--bg-bottom",
+          color_surface: "--panel",
+          color_text: "--text",
+          color_muted: "--muted",
+          color_border: "--border",
+          color_border_strong: "--border-strong",
+          color_primary: "--accent",
+          color_primary_hover: "--accent-strong",
+          color_primary_soft: "--accent-soft",
+          color_focus_ring: "--focus-ring",
+          shadow_soft: "--shadow-soft",
+          shadow_panel: "--shadow-panel",
+          color_danger: "--danger",
+          radius_md: "--radius-md",
+        };
+        const normalized = normalizeTheme(theme);
+        const root = document.documentElement;
+        for (const cssVar of Object.values(vars)) {
+          root.style.removeProperty(cssVar);
+        }
+        for (const [key, value] of Object.entries(normalized)) {
+          const cssVar = vars[key];
+          if (!cssVar) continue;
+          if (typeof value === "number" && key === "radius_md") {
+            root.style.setProperty(cssVar, String(value) + "px");
+          } else {
+            root.style.setProperty(cssVar, String(value));
+          }
+        }
+      }
+
+      function parseDelimitedTextList(value) {
+        if (typeof value !== "string") return [];
+        const normalized = value
+          .replace(/，/g, ",")
+          .replace(/\\n/g, ",")
+          .replace(/;/g, ",")
+          .trim();
+        if (!normalized) return [];
+        return normalized.split(",").map((item) => item.trim()).filter(Boolean);
+      }
+
+      function normalizeChartType(value, fallbackType) {
+        const raw = String(value || "").trim().toLowerCase();
+        if (raw.includes("折线")) return "line";
+        if (raw.includes("柱状") || raw.includes("条形")) return "bar";
+        const token = normalizeToken(value);
+        if (["line", "line_chart", "linechart", "plot", "timeseries", "time_series", "trend"].includes(token)) {
+          return "line";
+        }
+        if (["bar", "bar_chart", "barchart", "histogram"].includes(token)) {
+          return "bar";
+        }
+        return fallbackType || "bar";
+      }
+
+      function normalizeComponentType(value) {
+        const token = normalizeToken(value);
+        const aliases = {
+          row: "container",
+          column: "container",
+          card: "container",
+          modal: "container",
+          textfield: "input",
+          text_field: "input",
+          choicepicker: "select",
+          choice_picker: "select",
+          datetimeinput: "input",
+          datetime_input: "input",
+          icon: "badge",
+          video: "iframe",
+          audioplayer: "iframe",
+          audio_player: "iframe",
+          tabset: "tabs",
+          tab_set: "tabs",
+          collapse: "accordion",
+          separator: "divider",
+          hr: "divider",
+          table: "data_table",
+          grid: "data_table",
+          data_grid: "data_table",
+          datagrid: "data_table",
+          chat: "chat_panel",
+          chatbox: "chat_panel",
+          chat_box: "chat_panel",
+          chat_window: "chat_panel",
+          conversation: "chat_panel",
+          dialog: "chat_panel",
+          upload: "file_uploader",
+          uploader: "file_uploader",
+          file_upload: "file_uploader",
+          wizard: "form_step",
+          form_wizard: "form_step",
+          multi_step_form: "form_step",
+          step_form: "form_step",
+          progress: "progress_panel",
+          status_panel: "progress_panel",
+          export: "result_export",
+          metric: "metric_card",
+          kpi: "metric_card",
+          stat: "metric_card",
+          list: "list_view",
+          listview: "list_view",
+          code: "code_block",
+          codeblock: "code_block",
+          pre: "code_block",
+          img: "image",
+          picture: "image",
+          embed: "iframe",
+          webview: "iframe",
+          btn: "button",
+          action_button: "button",
+          text_input: "input",
+          input_field: "input",
+          text_area: "textarea",
+          dropdown: "select",
+          toggle: "checkbox",
+          switch: "checkbox",
+          radio: "radio_group",
+          radiogroup: "radio_group",
+          range: "slider",
+        };
+        if (aliases[token]) {
+          return { type: aliases[token] };
+        }
+        if (["line", "line_chart", "linechart", "plot", "timeseries", "time_series", "trend"].includes(token)) {
+          return { type: "chart", chartType: "line" };
+        }
+        if (["bar", "bar_chart", "barchart", "histogram"].includes(token)) {
+          return { type: "chart", chartType: "bar" };
+        }
+        return { type: String(value || "") };
+      }
+
+      function toFiniteNumber(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function extractChartFromData(data) {
+        const labels = [];
+        const values = [];
+        for (let i = 0; i < (Array.isArray(data) ? data.length : 0); i += 1) {
+          const item = data[i];
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            const label = item.label ?? item.x ?? item.name ?? item.time ?? item.date ?? item.category ?? (i + 1);
+            const rawValue = item.value ?? item.y ?? item.count ?? item.amount ?? item.score;
+            const number = toFiniteNumber(rawValue);
+            if (number === null) continue;
+            labels.push(String(label));
+            values.push(number);
+            continue;
+          }
+          const number = toFiniteNumber(item);
+          if (number === null) continue;
+          labels.push(String(i + 1));
+          values.push(number);
+        }
+        return { labels, values };
+      }
+
+      function normalizeChartProps(props, inferredChartType) {
+        const out = mergeObjects({}, props || {});
+        out.chart_type = normalizeChartType(out.chart_type || out.kind || out.mode, inferredChartType || "bar");
+
+        let labels = Array.isArray(out.labels) ? out.labels.slice() : parseDelimitedTextList(out.labels);
+        let values = Array.isArray(out.values) ? out.values.slice() : parseDelimitedTextList(out.values);
+        if (!labels.length || !values.length) {
+          if (Array.isArray(out.data)) {
+            const extracted = extractChartFromData(out.data);
+            labels = extracted.labels;
+            values = extracted.values;
+          } else if (Array.isArray(out.series) && out.series.length && out.series[0] && typeof out.series[0] === "object") {
+            const first = out.series[0];
+            if (Array.isArray(first.labels) && Array.isArray(first.values)) {
+              labels = first.labels.slice();
+              values = first.values.slice();
+            } else if (Array.isArray(first.data)) {
+              const extracted = extractChartFromData(first.data);
+              labels = extracted.labels;
+              values = extracted.values;
+            }
+          }
+        }
+
+        const parsedValues = [];
+        const parsedLabels = [];
+        for (let i = 0; i < values.length; i += 1) {
+          const number = toFiniteNumber(values[i]);
+          if (number === null) continue;
+          parsedValues.push(number);
+          parsedLabels.push(String(i < labels.length ? labels[i] : i + 1));
+        }
+        out.values = parsedValues;
+        out.labels = parsedLabels;
+        return out;
+      }
+
+      function normalizeTableProps(props) {
+        const out = mergeObjects({}, props || {});
+        const rows = Array.isArray(out.rows) ? out.rows : (Array.isArray(out.data) ? out.data : []);
+        out.rows = rows;
+        if (Array.isArray(out.columns) && out.columns.length) {
+          out.columns = out.columns.map((item) => String(item));
+          return out;
+        }
+        if (rows.length && rows.every((item) => item && typeof item === "object" && !Array.isArray(item))) {
+          const columns = [];
+          const seen = new Set();
+          for (const row of rows) {
+            for (const key of Object.keys(row)) {
+              if (!seen.has(key)) {
+                seen.add(key);
+                columns.push(String(key));
+              }
+            }
+          }
+          out.columns = columns;
+          return out;
+        }
+        if (rows.length && rows.every((item) => Array.isArray(item))) {
+          const maxLen = Math.max(...rows.map((item) => item.length));
+          out.columns = Array.from({ length: maxLen }, (_, idx) => "col_" + String(idx + 1));
+          return out;
+        }
+        out.columns = [];
+        return out;
+      }
+
+      function normalizeChatProps(props) {
+        const out = mergeObjects({}, props || {});
+        const rawMessages = Array.isArray(out.messages) ? out.messages : [];
+        const messages = [];
+        for (const item of rawMessages) {
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            const roleRaw = String(item.role || item.speaker || "assistant").toLowerCase();
+            const role = ["user", "human", "client"].includes(roleRaw) ? "user" : "assistant";
+            const content = item.content ?? item.text;
+            if (content !== undefined && content !== null) {
+              messages.push({ role, content: String(content) });
+            }
+            continue;
+          }
+          if (typeof item === "string" && item.trim()) {
+            messages.push({ role: "assistant", content: item.trim() });
+          }
+        }
+        out.messages = messages;
+        if (out.placeholder !== undefined && out.placeholder !== null) out.placeholder = String(out.placeholder);
+        if (out.send_label !== undefined && out.send_label !== null) out.send_label = String(out.send_label);
+        if (out.empty_text !== undefined && out.empty_text !== null) out.empty_text = String(out.empty_text);
+        return out;
+      }
+
+      function normalizeOptionList(options) {
+        if (!Array.isArray(options)) return [];
+        const out = [];
+        for (const item of options) {
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            const value = item.value !== undefined && item.value !== null
+              ? String(item.value)
+              : String(item.label || "");
+            const label = item.label !== undefined && item.label !== null
+              ? String(item.label)
+              : value;
+            if (!value && !label) continue;
+            out.push({ label: label || value, value: value || label });
+            continue;
+          }
+          if (item === undefined || item === null) continue;
+          const text = String(item);
+          if (!text) continue;
+          out.push({ label: text, value: text });
+        }
+        return out;
+      }
+
+      function normalizeTabsProps(props) {
+        const out = mergeObjects({}, props || {});
+        const tabs = [];
+        for (const item of Array.isArray(out.tabs) ? out.tabs : []) {
+          if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+          const id = String(item.id || "").trim();
+          if (!id) continue;
+          const label = String(item.label || id);
+          const children = Array.isArray(item.children) ? item.children.map((child) => String(child)) : [];
+          tabs.push({ id, label, children });
+        }
+        out.tabs = tabs;
+        if (!out.active_tab && tabs.length) out.active_tab = tabs[0].id;
+        if (out.active_tab !== undefined && out.active_tab !== null) out.active_tab = String(out.active_tab);
+        return out;
+      }
+
+      function normalizeAccordionProps(props) {
+        const out = mergeObjects({}, props || {});
+        const sections = [];
+        for (const item of Array.isArray(out.sections) ? out.sections : []) {
+          if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+          const id = String(item.id || "").trim();
+          if (!id) continue;
+          const title = String(item.title || id);
+          const children = Array.isArray(item.children) ? item.children.map((child) => String(child)) : [];
+          sections.push({ id, title, children });
+        }
+        out.sections = sections;
+        if (!out.open_section && sections.length) out.open_section = sections[0].id;
+        if (out.open_section !== undefined && out.open_section !== null) out.open_section = String(out.open_section);
+        return out;
+      }
+
+      function resolveIframeSandbox(props) {
+        const profileRaw = props && props.sandbox_profile !== undefined ? props.sandbox_profile : "strict";
+        const profile = normalizeToken(profileRaw);
+        const profileMap = {
+          strict: "allow-same-origin",
+          interactive: "allow-same-origin allow-scripts allow-forms",
+        };
+        const allowed = new Set([
+          "allow-downloads",
+          "allow-forms",
+          "allow-modals",
+          "allow-popups",
+          "allow-popups-to-escape-sandbox",
+          "allow-presentation",
+          "allow-same-origin",
+          "allow-scripts",
+        ]);
+        const rawSandbox = props && props.sandbox !== undefined ? String(props.sandbox).trim() : "";
+        if (!rawSandbox) {
+          return profileMap[profile] || profileMap.strict;
+        }
+        const tokens = rawSandbox
+          .split(/\s+/)
+          .map((item) => String(item || "").trim().toLowerCase())
+          .filter((item) => allowed.has(item));
+        if (!tokens.length) {
+          return profileMap[profile] || profileMap.strict;
+        }
+        return Array.from(new Set(tokens)).sort().join(" ");
+      }
+
+      function normalizeComponent(component) {
+        if (!component || typeof component !== "object") return component;
+        const normalized = mergeObjects({}, component);
+        const rawType = normalized.type || normalized.component;
+        const mergedProps = mergeObjects({}, normalized.props || {});
+        for (const [key, value] of Object.entries(normalized)) {
+          if (["id", "type", "component", "props"].includes(key)) continue;
+          if (!(key in mergedProps)) mergedProps[key] = value;
+        }
+        normalized.props = mergedProps;
+        const typeInfo = normalizeComponentType(rawType);
+        normalized.type = typeInfo.type;
+        normalized.props = mergeObjects({}, normalized.props || {});
+        const token = normalizeToken(rawType);
+        if (token === "row") {
+          normalized.props.direction = "row";
+          if (!Array.isArray(normalized.props.children)) {
+            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+          }
+        } else if (token === "column") {
+          normalized.props.direction = "column";
+          if (!Array.isArray(normalized.props.children)) {
+            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+          }
+        } else if (token === "card") {
+          normalized.props.direction = "column";
+          normalized.props.card = true;
+          if (!Array.isArray(normalized.props.children)) {
+            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+          }
+        } else if (token === "modal") {
+          normalized.props.direction = "column";
+          normalized.props.card = true;
+          normalized.props.modal = true;
+          if (!Array.isArray(normalized.props.children)) {
+            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+          }
+        } else if (["textfield", "text_field"].includes(token)) {
+          normalized.type = "input";
+          if (!normalized.props.input_type) normalized.props.input_type = "text";
+          if (!normalized.props.name) normalized.props.name = String(normalized.id || "field");
+        } else if (["choicepicker", "choice_picker"].includes(token)) {
+          const variant = normalizeToken(normalized.props.variant);
+          normalized.type = variant === "mutuallyexclusive" || variant === "mutually_exclusive"
+            ? "radio_group"
+            : "select";
+          if (!normalized.props.name) normalized.props.name = String(normalized.id || "choice");
+        } else if (["datetimeinput", "datetime_input"].includes(token)) {
+          normalized.type = "input";
+          const variant = normalizeToken(normalized.props.variant || normalized.props.mode);
+          if (["datetime", "date_time", "dateandtime"].includes(variant)) {
+            normalized.props.input_type = "datetime-local";
+          } else if (variant === "time") {
+            normalized.props.input_type = "time";
+          } else {
+            normalized.props.input_type = "date";
+          }
+          if (!normalized.props.name) normalized.props.name = String(normalized.id || "datetime");
+        } else if (token === "icon") {
+          normalized.type = "badge";
+          const rawName = normalized.props.name;
+          const iconName = rawName && typeof rawName === "object" ? rawName.path : rawName;
+          normalized.props.text = String(iconName || normalized.props.text || normalized.props.label || "icon");
+        } else if (token === "video") {
+          normalized.type = "iframe";
+          normalized.props.src = normalized.props.url || normalized.props.src || "";
+          if (!normalized.props.height) normalized.props.height = 360;
+        } else if (["audioplayer", "audio_player"].includes(token)) {
+          normalized.type = "iframe";
+          normalized.props.src = normalized.props.url || normalized.props.src || "";
+          if (!normalized.props.height) normalized.props.height = 120;
+          if (!normalized.props.title && normalized.props.description) {
+            normalized.props.title = normalized.props.description;
+          }
+        }
+        if (normalized.type === "chart") {
+          normalized.props = normalizeChartProps(normalized.props, typeInfo.chartType || null);
+        } else if (normalized.type === "data_table") {
+          normalized.props = normalizeTableProps(normalized.props);
+        } else if (normalized.type === "chat_panel") {
+          normalized.props = normalizeChatProps(normalized.props);
+        } else if (normalized.type === "tabs") {
+          normalized.props = normalizeTabsProps(normalized.props);
+        } else if (normalized.type === "accordion") {
+          normalized.props = normalizeAccordionProps(normalized.props);
+        } else if (normalized.type === "iframe") {
+          normalized.props.sandbox = resolveIframeSandbox(normalized.props);
+          if (!normalized.props.sandbox_profile) normalized.props.sandbox_profile = "strict";
+        }
+        return normalized;
+      }
+
+      function mergeComponentList(baseComponents, incomingComponents) {
+        const byId = {};
+        const order = [];
+        const passthrough = [];
+
+        for (const raw of baseComponents || []) {
+          const component = normalizeComponent(raw);
+          if (!component || typeof component !== "object") continue;
+          const id = typeof component.id === "string" ? component.id.trim() : "";
+          if (!id) {
+            passthrough.push(component);
+            continue;
+          }
+          if (!(id in byId)) {
+            order.push(id);
+          }
+          byId[id] = component;
+        }
+
+        for (const raw of incomingComponents || []) {
+          const component = normalizeComponent(raw);
+          if (!component || typeof component !== "object") continue;
+          const id = typeof component.id === "string" ? component.id.trim() : "";
+          if (!id) {
+            passthrough.push(component);
+            continue;
+          }
+          if (id in byId) {
+            byId[id] = normalizeComponent(mergeObjects(byId[id], component));
+          } else {
+            byId[id] = component;
+            order.push(id);
+          }
+        }
+
+        const merged = [];
+        for (const id of order) {
+          if (byId[id]) merged.push(byId[id]);
+        }
+        return merged.concat(passthrough);
+      }
+
+      function resolveStatePath(source, path) {
+        let key = String(path || "").trim();
+        if (!key) return undefined;
+        if (key.startsWith("$state.")) key = key.slice(7);
+        if (key.startsWith("state.")) key = key.slice(6);
+        const parts = key.split(".").filter(Boolean);
+        let cursor = source;
+        for (const part of parts) {
+          if (!cursor || typeof cursor !== "object" || !(part in cursor)) {
+            return undefined;
+          }
+          cursor = cursor[part];
+        }
+        return cursor;
+      }
+
+      function resolveBindingValue(binding, state) {
+        if (typeof binding === "string") {
+          return resolveStatePath(state, binding);
+        }
+        if (!binding || typeof binding !== "object") return undefined;
+        if (Array.isArray(binding.paths)) {
+          for (const path of binding.paths) {
+            const value = resolveStatePath(state, path);
+            if (value !== undefined && value !== null) return value;
+          }
+          return binding.default;
+        }
+        if (typeof binding.path === "string") {
+          const value = resolveStatePath(state, binding.path);
+          return value === undefined ? binding.default : value;
+        }
+        return undefined;
+      }
+
+      function applyStateBindings(spec, state) {
+        const bindings = spec && spec.state_bindings;
+        const next = mergeObjects({}, spec || {});
+        next.components = (next.components || []).map((item) => normalizeComponent(item));
+        if (!bindings || typeof bindings !== "object") {
+          return applyImplicitBindings(next, state || {});
+        }
+        const index = {};
+        for (const component of next.components) {
+          index[component.id] = component;
+        }
+        for (const [componentId, mapping] of Object.entries(bindings)) {
+          const target = index[componentId];
+          if (!target || !mapping || typeof mapping !== "object") continue;
+          target.props = mergeObjects({}, target.props || {});
+          for (const [propName, descriptor] of Object.entries(mapping)) {
+            const resolved = resolveBindingValue(descriptor, state || {});
+            if (resolved !== undefined) {
+              target.props[propName] = resolved;
+            }
+          }
+          index[componentId] = normalizeComponent(target);
+        }
+        next.components = Object.values(index);
+        return applyImplicitBindings(next, state || {});
+      }
+
+      function firstComponentByType(spec, type) {
+        if (!spec || !Array.isArray(spec.components)) return null;
+        for (const component of spec.components) {
+          if (component && component.type === type) return component;
+        }
+        return null;
+      }
+
+      function applyImplicitBindings(spec, state) {
+        const next = mergeObjects({}, spec || {});
+        next.components = (next.components || []).map((item) => normalizeComponent(item));
+        if (!state || typeof state !== "object") return next;
+
+        const chartState = state.currentChart || state.chart || state.chartData || null;
+        const chartComponent = firstComponentByType(next, "chart");
+        if (chartComponent && chartState && typeof chartState === "object") {
+          const chartPatch = {};
+          if (chartState.chart_type !== undefined || chartState.type !== undefined || chartState.kind !== undefined) {
+            chartPatch.chart_type = chartState.chart_type ?? chartState.type ?? chartState.kind;
+          }
+          if (chartState.labels !== undefined || chartState.x !== undefined) {
+            chartPatch.labels = chartState.labels ?? chartState.x;
+          }
+          if (chartState.values !== undefined || chartState.y !== undefined || chartState.data !== undefined) {
+            chartPatch.values = chartState.values ?? chartState.y ?? chartState.data;
+          }
+          chartComponent.props = normalizeChartProps(
+            mergeObjects(chartComponent.props || {}, chartPatch),
+            null,
+          );
+        }
+
+        const tableState = state.currentTable || state.table || state.dataset || null;
+        const tableComponent = firstComponentByType(next, "data_table");
+        if (tableComponent) {
+          let tablePatch = null;
+          if (Array.isArray(tableState)) {
+            tablePatch = { rows: tableState };
+          } else if (tableState && typeof tableState === "object") {
+            tablePatch = {
+              rows: tableState.rows ?? tableState.data,
+              columns: tableState.columns,
+            };
+          }
+          if (tablePatch) {
+            tableComponent.props = normalizeTableProps(
+              mergeObjects(tableComponent.props || {}, tablePatch),
+            );
+          }
+        }
+
+        const chatState = state.currentChat || state.chat || state.conversation || null;
+        const chatComponent = firstComponentByType(next, "chat_panel");
+        if (chatComponent) {
+          let chatPatch = null;
+          if (Array.isArray(chatState)) {
+            chatPatch = { messages: chatState };
+          } else if (chatState && typeof chatState === "object") {
+            chatPatch = {
+              messages: chatState.messages,
+              placeholder: chatState.placeholder,
+              send_label: chatState.send_label,
+              empty_text: chatState.empty_text,
+            };
+          }
+          if (chatPatch) {
+            chatComponent.props = normalizeChatProps(
+              mergeObjects(chatComponent.props || {}, chatPatch),
+            );
+          }
+        }
+
+        const progressState = state.currentProgress || state.progress || null;
+        const progressComponent = firstComponentByType(next, "progress_panel");
+        if (progressComponent) {
+          const items = Array.isArray(progressState)
+            ? progressState
+            : (progressState && Array.isArray(progressState.items) ? progressState.items : null);
+          if (items) {
+            progressComponent.props = mergeObjects(progressComponent.props || {}, { items });
+          }
+        }
+
+        const exportState = state.currentResult || state.result || null;
+        const exportComponent = firstComponentByType(next, "result_export");
+        if (exportComponent && exportState !== null && exportState !== undefined) {
+          exportComponent.props = mergeObjects(exportComponent.props || {}, { data: exportState });
+        }
+
+        return next;
+      }
+
+      function getComponent(componentId) {
+        return appState.componentById[componentId] || null;
+      }
+
+      function shouldSendDataModelForCurrentSurface() {
+        if (!appState.spec) return false;
+        const uiId = String(appState.spec.ui_id || "").trim();
+        if (!uiId) return false;
+        const meta = appState.surfaceMeta[uiId];
+        if (meta && typeof meta === "object" && typeof meta.sendDataModel === "boolean") {
+          return Boolean(meta.sendDataModel);
+        }
+        if (appState.spec.send_data_model !== undefined) {
+          return Boolean(appState.spec.send_data_model);
+        }
+        if (appState.spec.sendDataModel !== undefined) {
+          return Boolean(appState.spec.sendDataModel);
+        }
+        return false;
+      }
+
+      function currentSurfaceDataModelSnapshot() {
+        if (!appState.spec) return {};
+        const uiId = String(appState.spec.ui_id || "").trim();
+        if (!uiId) return mergeObjects({}, appState.state || {});
+        const fromSurface = appState.dataModelStore[uiId];
+        if (fromSurface && typeof fromSurface === "object") {
+          return mergeObjects({}, fromSurface);
+        }
+        return mergeObjects({}, appState.state || {});
+      }
+
+      function emitEvent(eventType, componentId, payload) {
+        if (!appState.ws || appState.ws.readyState !== WebSocket.OPEN || !appState.spec) {
+          return;
+        }
+        const msg = {
+          type: "event",
+          event_version: "1.0",
+          ui_id: appState.spec.ui_id || "unknown",
+          session_id: appState.spec.session_id || null,
+          component_id: componentId || null,
+          event_type: eventType,
+          payload: payload || {},
+          ts: Date.now() / 1000.0,
+        };
+        if (shouldSendDataModelForCurrentSurface()) {
+          msg.metadata = mergeObjects(msg.metadata || {}, {
+            a2uiClientDataModel: currentSurfaceDataModelSnapshot(),
+          });
+        }
+        appState.ws.send(JSON.stringify(msg));
+      }
+
+      function appendChatMessage(componentId, message) {
+        if (!componentId || !message || !appState.spec) return;
+        const component = getComponent(componentId);
+        if (!component || component.type !== "chat_panel") return;
+
+        const roleRaw = String((message && message.role) || "user").toLowerCase();
+        const role = ["assistant", "system"].includes(roleRaw) ? "assistant" : "user";
+        const content = String((message && (message.content ?? message.text)) || "").trim();
+        if (!content) return;
+
+        const props = mergeObjects({}, component.props || {});
+        const existing = Array.isArray(props.messages) ? props.messages.slice() : [];
+        existing.push({ role, content });
+        props.messages = existing;
+        component.props = normalizeChatProps(props);
+        appState.componentById[componentId] = component;
+
+        appState.state = mergeObjects(appState.state || {}, {
+          currentChat: mergeObjects((appState.state || {}).currentChat || {}, {
+            messages: existing,
+          }),
+        });
+        renderSpec(appState.spec);
+      }
+
+      function buildField(field, form) {
+        const wrap = document.createElement("div");
+        wrap.className = "field";
+        const label = document.createElement("label");
+        label.textContent = field.label || field.id;
+        wrap.appendChild(label);
+
+        const id = field.id;
+        const type = (field.type || "text").toLowerCase();
+        let input;
+        if (type === "textarea") {
+          input = document.createElement("textarea");
+        } else if (type === "select") {
+          input = document.createElement("select");
+          for (const option of field.options || []) {
+            const opt = document.createElement("option");
+            if (typeof option === "object") {
+              opt.value = String(option.value || "");
+              opt.textContent = String(option.label || option.value || "");
+            } else {
+              opt.value = String(option);
+              opt.textContent = String(option);
+            }
+            input.appendChild(opt);
+          }
+        } else if (type === "checkbox") {
+          input = document.createElement("input");
+          input.type = "checkbox";
+        } else {
+          input = document.createElement("input");
+          input.type = type === "number" ? "number" : (type === "date" ? "date" : "text");
+        }
+
+        input.name = id;
+        if (field.placeholder) input.placeholder = field.placeholder;
+        if (field.required) input.required = true;
+        if (field.min !== undefined && input.type === "number") input.min = String(field.min);
+        if (field.max !== undefined && input.type === "number") input.max = String(field.max);
+        if (field.step !== undefined && input.type === "number") input.step = String(field.step);
+        if (field.default !== undefined) {
+          if (input.type === "checkbox") {
+            input.checked = Boolean(field.default);
+          } else {
+            input.value = String(field.default);
+          }
+        }
+
+        wrap.appendChild(input);
+        return wrap;
+      }
+
+      function collectFormValues(form) {
+        const out = {};
+        for (const element of form.elements) {
+          if (!element.name) continue;
+          if (element.type === "checkbox") {
+            out[element.name] = Boolean(element.checked);
+          } else {
+            out[element.name] = element.value;
+          }
+        }
+        return out;
+      }
+
+      function toCsv(data) {
+        if (Array.isArray(data) && data.length > 0 && typeof data[0] === "object") {
+          const cols = Object.keys(data[0]);
+          const lines = [cols.join(",")];
+          for (const row of data) {
+            const values = cols.map((key) => JSON.stringify(row[key] ?? ""));
+            lines.push(values.join(","));
+          }
+          return lines.join("\\n");
+        }
+        if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
+          return data.map((row) => row.map((item) => JSON.stringify(item ?? "")).join(",")).join("\\n");
+        }
+        return JSON.stringify(data, null, 2);
+      }
+
+      function downloadText(filename, content, mime) {
+        const blob = new Blob([content], { type: mime || "text/plain" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(a.href), 500);
+      }
+
+      function drawBarChart(ctx, labels, values, title) {
+        const w = ctx.canvas.width;
+        const h = ctx.canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "14px sans-serif";
+        ctx.fillText(title || "Chart", 14, 24);
+
+        const max = Math.max(1, ...values);
+        const left = 40;
+        const top = 40;
+        const chartW = w - 60;
+        const chartH = h - 70;
+        const barW = Math.max(12, chartW / Math.max(1, values.length) * 0.7);
+        const gap = chartW / Math.max(1, values.length);
+
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.beginPath();
+        ctx.moveTo(left, top);
+        ctx.lineTo(left, top + chartH);
+        ctx.lineTo(left + chartW, top + chartH);
+        ctx.stroke();
+
+        ctx.fillStyle = "#0f766e";
+        ctx.font = "11px sans-serif";
+        values.forEach((value, idx) => {
+          const height = chartH * (value / max);
+          const x = left + idx * gap + (gap - barW) / 2;
+          const y = top + chartH - height;
+          ctx.fillRect(x, y, barW, height);
+          const label = String(labels[idx] ?? idx + 1);
+          ctx.fillStyle = "#334155";
+          ctx.fillText(label, x, top + chartH + 14);
+          ctx.fillStyle = "#0f766e";
+        });
+      }
+
+      function drawLineChart(ctx, labels, values, title) {
+        const w = ctx.canvas.width;
+        const h = ctx.canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "14px sans-serif";
+        ctx.fillText(title || "Chart", 14, 24);
+
+        const max = Math.max(1, ...values);
+        const left = 40;
+        const top = 40;
+        const chartW = w - 60;
+        const chartH = h - 70;
+
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.beginPath();
+        ctx.moveTo(left, top);
+        ctx.lineTo(left, top + chartH);
+        ctx.lineTo(left + chartW, top + chartH);
+        ctx.stroke();
+
+        if (values.length === 0) return;
+
+        ctx.strokeStyle = "#0f766e";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        values.forEach((value, idx) => {
+          const ratio = values.length <= 1 ? 0 : idx / (values.length - 1);
+          const x = left + ratio * chartW;
+          const y = top + chartH - chartH * (value / max);
+          if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        ctx.fillStyle = "#334155";
+        ctx.font = "11px sans-serif";
+        labels.forEach((label, idx) => {
+          const ratio = labels.length <= 1 ? 0 : idx / (labels.length - 1);
+          const x = left + ratio * chartW;
+          ctx.fillText(String(label), x - 10, top + chartH + 14);
+        });
+      }
+
+      async function readFilesWithBase64(fileList, maxBytes) {
+        const out = [];
+        for (const file of Array.from(fileList || [])) {
+          if (file.size > maxBytes) {
+            out.push({
+              name: file.name,
+              mime: file.type || "application/octet-stream",
+              size: file.size,
+              too_large: true,
+            });
+            continue;
+          }
+          const buf = await file.arrayBuffer();
+          let binary = "";
+          const bytes = new Uint8Array(buf);
+          const chunk = 0x8000;
+          for (let i = 0; i < bytes.length; i += chunk) {
+            const part = bytes.subarray(i, i + chunk);
+            binary += String.fromCharCode.apply(null, part);
+          }
+          out.push({
+            name: file.name,
+            mime: file.type || "application/octet-stream",
+            size: file.size,
+            content_base64: btoa(binary),
+          });
+        }
+        return out;
+      }
+
+      function renderComponent(componentId) {
+        const component = normalizeComponent(getComponent(componentId));
+        if (!component) {
+          const missing = document.createElement("div");
+          missing.className = "component card error";
+          missing.textContent = "Missing component: " + componentId;
+          return missing;
+        }
+
+        const type = component.type;
+        const props = component.props || {};
+        const wrap = document.createElement("div");
+        wrap.className = "component";
+        wrap.dataset.componentId = component.id;
+
+        if (props.card) wrap.classList.add("card");
+
+        if (props.title) {
+          const title = document.createElement("div");
+          title.className = "component-title";
+          title.textContent = String(props.title);
+          wrap.appendChild(title);
+        }
+
+        if (type === "text") {
+          const p = document.createElement("div");
+          p.className = "text";
+          p.textContent = String(props.text || "");
+          wrap.appendChild(p);
+          return wrap;
+        }
+
+        if (type === "markdown") {
+          const md = document.createElement("div");
+          md.className = "markdown";
+          md.innerHTML = encodeHtml(String(props.text || ""));
+          wrap.appendChild(md);
+          return wrap;
+        }
+
+        if (type === "container") {
+          const container = document.createElement("div");
+          container.className = "container " + (props.direction === "row" ? "row" : "column");
+          if (props.gap !== undefined) container.style.gap = String(props.gap) + "px";
+          for (const childId of props.children || []) {
+            container.appendChild(renderComponent(childId));
+          }
+          wrap.appendChild(container);
+          return wrap;
+        }
+
+        if (type === "tabs") {
+          const tabs = Array.isArray(props.tabs) ? props.tabs : [];
+          const tabBar = document.createElement("div");
+          tabBar.className = "action-bar";
+          const body = document.createElement("div");
+          let activeTab = String(props.active_tab || (tabs[0] && tabs[0].id) || "");
+          const tabButtons = [];
+
+          const renderTabBody = () => {
+            body.innerHTML = "";
+            const current = tabs.find((item) => item && item.id === activeTab) || tabs[0];
+            if (!current) return;
+            for (const childId of Array.isArray(current.children) ? current.children : []) {
+              body.appendChild(renderComponent(String(childId)));
+            }
+          };
+
+          for (const tab of tabs) {
+            if (!tab || typeof tab !== "object") continue;
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = String(tab.id || "") === activeTab ? "primary" : "secondary";
+            btn.textContent = String(tab.label || tab.id || "Tab");
+            btn.addEventListener("click", () => {
+              activeTab = String(tab.id || activeTab);
+              emitEvent("change", component.id, { active_tab: activeTab });
+              for (const item of tabButtons) {
+                item.className = item.dataset.tabId === activeTab ? "primary" : "secondary";
+              }
+              renderTabBody();
+            });
+            btn.dataset.tabId = String(tab.id || "");
+            tabButtons.push(btn);
+            tabBar.appendChild(btn);
+          }
+
+          wrap.appendChild(tabBar);
+          wrap.appendChild(body);
+          renderTabBody();
+          return wrap;
+        }
+
+        if (type === "accordion") {
+          const sections = Array.isArray(props.sections) ? props.sections : [];
+          let openSection = String(props.open_section || (sections[0] && sections[0].id) || "");
+          for (const section of sections) {
+            if (!section || typeof section !== "object") continue;
+            const block = document.createElement("details");
+            block.open = String(section.id || "") === openSection;
+            const summary = document.createElement("summary");
+            summary.textContent = String(section.title || section.id || "Section");
+            block.appendChild(summary);
+            const body = document.createElement("div");
+            body.className = "container column";
+            body.style.marginTop = "8px";
+            for (const childId of Array.isArray(section.children) ? section.children : []) {
+              body.appendChild(renderComponent(String(childId)));
+            }
+            block.appendChild(body);
+            block.addEventListener("toggle", () => {
+              if (!block.open) return;
+              openSection = String(section.id || openSection);
+              emitEvent("change", component.id, { open_section: openSection });
+            });
+            wrap.appendChild(block);
+          }
+          return wrap;
+        }
+
+        if (type === "divider") {
+          const hrWrap = document.createElement("div");
+          const hr = document.createElement("hr");
+          hr.style.border = "none";
+          hr.style.borderTop = "1px solid var(--line)";
+          hr.style.margin = "8px 0";
+          hrWrap.appendChild(hr);
+          if (props.label) {
+            const label = document.createElement("div");
+            label.className = "small";
+            label.textContent = String(props.label);
+            hrWrap.appendChild(label);
+          }
+          wrap.appendChild(hrWrap);
+          return wrap;
+        }
+
+        if (type === "badge") {
+          const badge = document.createElement("span");
+          badge.className = "small";
+          badge.style.display = "inline-block";
+          badge.style.padding = "3px 10px";
+          badge.style.borderRadius = "999px";
+          badge.style.border = "1px solid var(--line)";
+          const tone = String(props.tone || "info").toLowerCase();
+          if (tone === "success") {
+            badge.style.background = "#e8f8ef";
+            badge.style.borderColor = "#87d2a3";
+          } else if (tone === "warn") {
+            badge.style.background = "#fff6e8";
+            badge.style.borderColor = "#f1cb8a";
+          } else if (tone === "error") {
+            badge.style.background = "#fdecec";
+            badge.style.borderColor = "#f0b0b0";
+          }
+          badge.textContent = String(props.text || "badge");
+          wrap.appendChild(badge);
+          return wrap;
+        }
+
+        if (type === "metric_card") {
+          const label = document.createElement("div");
+          label.className = "small";
+          label.textContent = String(props.label || "Metric");
+          const value = document.createElement("div");
+          value.style.fontSize = "24px";
+          value.style.fontWeight = "700";
+          value.textContent = String(props.value !== undefined ? props.value : "--");
+          wrap.appendChild(label);
+          wrap.appendChild(value);
+          if (props.delta !== undefined) {
+            const delta = document.createElement("div");
+            delta.className = "small";
+            delta.textContent = "Delta: " + String(props.delta);
+            wrap.appendChild(delta);
+          }
+          if (props.description) {
+            const desc = document.createElement("div");
+            desc.className = "small";
+            desc.textContent = String(props.description);
+            wrap.appendChild(desc);
+          }
+          return wrap;
+        }
+
+        if (type === "list_view") {
+          const items = Array.isArray(props.items) ? props.items : [];
+          const list = document.createElement("ul");
+          list.style.margin = "0";
+          list.style.paddingLeft = "20px";
+          for (const item of items) {
+            const li = document.createElement("li");
+            if (item && typeof item === "object") {
+              li.textContent = JSON.stringify(item);
+            } else {
+              li.textContent = String(item ?? "");
+            }
+            list.appendChild(li);
+          }
+          wrap.appendChild(list);
+          return wrap;
+        }
+
+        if (type === "code_block") {
+          const pre = document.createElement("pre");
+          pre.style.margin = "0";
+          pre.style.padding = "10px";
+          pre.style.background = "#f4f6fb";
+          pre.style.border = "1px solid var(--line)";
+          pre.style.borderRadius = "8px";
+          pre.style.overflowX = "auto";
+          pre.textContent = String(props.code || props.text || "");
+          wrap.appendChild(pre);
+          return wrap;
+        }
+
+        if (type === "image") {
+          const img = document.createElement("img");
+          img.src = String(props.src || props.url || "");
+          img.alt = String(props.alt || "");
+          if (props.width !== undefined) img.width = Number(props.width);
+          if (props.height !== undefined) img.height = Number(props.height);
+          img.style.maxWidth = "100%";
+          img.style.objectFit = String(props.fit || "contain");
+          img.style.borderRadius = "8px";
+          wrap.appendChild(img);
+          return wrap;
+        }
+
+        if (type === "iframe") {
+          const frame = document.createElement("iframe");
+          frame.src = String(props.src || props.url || "");
+          frame.style.width = "100%";
+          frame.style.height = String(Number(props.height || 420)) + "px";
+          frame.style.border = "1px solid var(--line)";
+          frame.style.borderRadius = "8px";
+          frame.referrerPolicy = "no-referrer";
+          frame.setAttribute("sandbox", resolveIframeSandbox(props));
+          wrap.appendChild(frame);
+          return wrap;
+        }
+
+        if (type === "button") {
+          const button = document.createElement("button");
+          button.type = "button";
+          const variant = String(props.variant || "").toLowerCase();
+          button.className = variant === "primary" ? "primary" : "secondary";
+          button.textContent = String(props.label || props.text || "Action");
+          button.addEventListener("click", () => {
+            emitEvent(String(props.event_type || "action"), component.id, {
+              payload: props.payload && typeof props.payload === "object" ? props.payload : {},
+            });
+          });
+          wrap.appendChild(button);
+          return wrap;
+        }
+
+        if (type === "input") {
+          const field = document.createElement("div");
+          field.className = "field";
+          const label = document.createElement("label");
+          label.textContent = String(props.label || props.name || "Input");
+          field.appendChild(label);
+          const input = document.createElement("input");
+          input.type = String(props.input_type || "text");
+          input.name = String(props.name || "input");
+          input.value = props.value === undefined || props.value === null ? "" : String(props.value);
+          if (props.placeholder) input.placeholder = String(props.placeholder);
+          if (props.required) input.required = true;
+          if (props.min !== undefined) input.min = String(props.min);
+          if (props.max !== undefined) input.max = String(props.max);
+          if (props.step !== undefined) input.step = String(props.step);
+          input.addEventListener("change", () => {
+            emitEvent("change", component.id, { name: input.name, value: input.value });
+          });
+          input.addEventListener("keydown", (evt) => {
+            if (evt.key === "Enter" && props.submit_on_enter) {
+              emitEvent("submit", component.id, { name: input.name, value: input.value });
+            }
+          });
+          field.appendChild(input);
+          wrap.appendChild(field);
+          return wrap;
+        }
+
+        if (type === "textarea") {
+          const field = document.createElement("div");
+          field.className = "field";
+          const label = document.createElement("label");
+          label.textContent = String(props.label || props.name || "Text");
+          field.appendChild(label);
+          const textarea = document.createElement("textarea");
+          textarea.name = String(props.name || "textarea");
+          textarea.rows = Number(props.rows || 4);
+          textarea.value = props.value === undefined || props.value === null ? "" : String(props.value);
+          if (props.placeholder) textarea.placeholder = String(props.placeholder);
+          textarea.addEventListener("change", () => {
+            emitEvent("change", component.id, { name: textarea.name, value: textarea.value });
+          });
+          field.appendChild(textarea);
+          wrap.appendChild(field);
+          return wrap;
+        }
+
+        if (type === "select") {
+          const field = document.createElement("div");
+          field.className = "field";
+          const label = document.createElement("label");
+          label.textContent = String(props.label || props.name || "Select");
+          field.appendChild(label);
+          const select = document.createElement("select");
+          select.name = String(props.name || "select");
+          const options = normalizeOptionList(props.options);
+          for (const option of options) {
+            const opt = document.createElement("option");
+            opt.value = option.value;
+            opt.textContent = option.label;
+            if (String(props.value || "") === option.value) opt.selected = true;
+            select.appendChild(opt);
+          }
+          select.addEventListener("change", () => {
+            emitEvent("change", component.id, { name: select.name, value: select.value });
+          });
+          field.appendChild(select);
+          wrap.appendChild(field);
+          return wrap;
+        }
+
+        if (type === "checkbox") {
+          const row = document.createElement("label");
+          row.style.display = "flex";
+          row.style.alignItems = "center";
+          row.style.gap = "8px";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.name = String(props.name || "checkbox");
+          checkbox.checked = Boolean(props.checked ?? props.value ?? false);
+          checkbox.addEventListener("change", () => {
+            emitEvent("change", component.id, { name: checkbox.name, checked: checkbox.checked });
+          });
+          row.appendChild(checkbox);
+          const text = document.createElement("span");
+          text.textContent = String(props.label || props.name || "Option");
+          row.appendChild(text);
+          wrap.appendChild(row);
+          return wrap;
+        }
+
+        if (type === "radio_group") {
+          const field = document.createElement("div");
+          field.className = "field";
+          const label = document.createElement("label");
+          label.textContent = String(props.label || props.name || "Options");
+          field.appendChild(label);
+          const groupName = String(props.name || "radio_group");
+          const options = normalizeOptionList(props.options);
+          const selected = String(props.value || "");
+          for (const option of options) {
+            const row = document.createElement("label");
+            row.style.display = "flex";
+            row.style.alignItems = "center";
+            row.style.gap = "8px";
+            const radio = document.createElement("input");
+            radio.type = "radio";
+            radio.name = groupName;
+            radio.value = option.value;
+            radio.checked = option.value === selected;
+            radio.addEventListener("change", () => {
+              if (!radio.checked) return;
+              emitEvent("change", component.id, { name: groupName, value: radio.value });
+            });
+            row.appendChild(radio);
+            const text = document.createElement("span");
+            text.textContent = option.label;
+            row.appendChild(text);
+            field.appendChild(row);
+          }
+          wrap.appendChild(field);
+          return wrap;
+        }
+
+        if (type === "slider") {
+          const field = document.createElement("div");
+          field.className = "field";
+          const label = document.createElement("label");
+          label.textContent = String(props.label || props.name || "Value");
+          field.appendChild(label);
+          const input = document.createElement("input");
+          input.type = "range";
+          input.name = String(props.name || "slider");
+          input.min = String(props.min !== undefined ? props.min : 0);
+          input.max = String(props.max !== undefined ? props.max : 100);
+          input.step = String(props.step !== undefined ? props.step : 1);
+          input.value = String(props.value !== undefined ? props.value : input.min);
+          const readout = document.createElement("div");
+          readout.className = "small";
+          readout.textContent = input.value;
+          input.addEventListener("input", () => {
+            readout.textContent = input.value;
+          });
+          input.addEventListener("change", () => {
+            emitEvent("change", component.id, { name: input.name, value: Number(input.value) });
+          });
+          field.appendChild(input);
+          field.appendChild(readout);
+          wrap.appendChild(field);
+          return wrap;
+        }
+
+        if (type === "file_uploader") {
+          const hint = document.createElement("div");
+          hint.className = "small";
+          hint.textContent = props.label || "Choose files to upload.";
+          wrap.appendChild(hint);
+
+          const input = document.createElement("input");
+          input.type = "file";
+          if (props.accept) input.accept = props.accept;
+          if (props.multiple !== false) input.multiple = true;
+          input.addEventListener("change", async () => {
+            const maxBytes = Number(props.max_bytes || 8 * 1024 * 1024);
+            const files = await readFilesWithBase64(input.files, maxBytes);
+            emitEvent("upload", component.id, { files });
+            showToast("Uploaded " + files.length + " file(s).", "info");
+          });
+          wrap.appendChild(input);
+          return wrap;
+        }
+
+        if (type === "data_table") {
+          const table = document.createElement("table");
+          const rows = props.rows || [];
+          let columns = props.columns || [];
+          if (!columns.length && rows.length && typeof rows[0] === "object" && !Array.isArray(rows[0])) {
+            columns = Object.keys(rows[0]);
+          }
+          const thead = document.createElement("thead");
+          const trHead = document.createElement("tr");
+          for (const col of columns) {
+            const th = document.createElement("th");
+            th.textContent = String(col);
+            trHead.appendChild(th);
+          }
+          thead.appendChild(trHead);
+          table.appendChild(thead);
+
+          const tbody = document.createElement("tbody");
+          for (const row of rows) {
+            const tr = document.createElement("tr");
+            if (Array.isArray(row)) {
+              for (const value of row) {
+                const td = document.createElement("td");
+                td.textContent = String(value ?? "");
+                tr.appendChild(td);
+              }
+            } else {
+              for (const col of columns) {
+                const td = document.createElement("td");
+                td.textContent = String((row || {})[col] ?? "");
+                tr.appendChild(td);
+              }
+            }
+            tbody.appendChild(tr);
+          }
+          table.appendChild(tbody);
+          wrap.appendChild(table);
+          return wrap;
+        }
+
+        if (type === "chart") {
+          const canvas = document.createElement("canvas");
+          canvas.width = Number(props.width || 720);
+          canvas.height = Number(props.height || 260);
+          wrap.appendChild(canvas);
+          const ctx = canvas.getContext("2d");
+          const labels = props.labels || [];
+          const values = props.values || [];
+          if ((props.chart_type || "bar") === "line") {
+            drawLineChart(ctx, labels, values, props.title || "");
+          } else {
+            drawBarChart(ctx, labels, values, props.title || "");
+          }
+          return wrap;
+        }
+
+        if (type === "form") {
+          const form = document.createElement("form");
+          for (const field of props.fields || []) {
+            form.appendChild(buildField(field, form));
+          }
+          const submit = document.createElement("button");
+          submit.className = "primary";
+          submit.type = "submit";
+          submit.textContent = props.submit_label || "Submit";
+          form.appendChild(submit);
+          form.addEventListener("submit", (evt) => {
+            evt.preventDefault();
+            emitEvent("submit", component.id, { values: collectFormValues(form) });
+          });
+          wrap.appendChild(form);
+          return wrap;
+        }
+
+        if (type === "chat_panel") {
+          const chatPanel = document.createElement("div");
+          chatPanel.className = "chat-panel";
+
+          const stream = document.createElement("div");
+          stream.className = "chat-stream";
+          const messages = Array.isArray(props.messages) ? props.messages : [];
+          if (!messages.length) {
+            const empty = document.createElement("div");
+            empty.className = "small";
+            empty.textContent = props.empty_text || "No messages yet.";
+            stream.appendChild(empty);
+          } else {
+            for (const message of messages) {
+              const roleRaw = String((message && message.role) || "assistant").toLowerCase();
+              const role = ["user", "human", "client"].includes(roleRaw) ? "user" : "assistant";
+              const row = document.createElement("div");
+              row.className = "chat-row " + role;
+
+              const bubble = document.createElement("div");
+              bubble.className = "chat-bubble";
+              const roleLabel = document.createElement("div");
+              roleLabel.className = "chat-role";
+              roleLabel.textContent = role === "user" ? "You" : "Assistant";
+              bubble.appendChild(roleLabel);
+              const content = document.createElement("div");
+              content.textContent = String((message && (message.content ?? message.text)) || "");
+              bubble.appendChild(content);
+              row.appendChild(bubble);
+              stream.appendChild(row);
+            }
+          }
+          chatPanel.appendChild(stream);
+
+          const form = document.createElement("form");
+          form.className = "chat-input-row";
+          const input = document.createElement("input");
+          input.type = "text";
+          input.placeholder = props.placeholder || "Type a message...";
+          form.appendChild(input);
+          const send = document.createElement("button");
+          send.className = "primary";
+          send.type = "submit";
+          send.textContent = props.send_label || "Send";
+          form.appendChild(send);
+          form.addEventListener("submit", (evt) => {
+            evt.preventDefault();
+            const text = String(input.value || "").trim();
+            if (!text) return;
+            appendChatMessage(component.id, { role: "user", content: text });
+            emitEvent("submit", component.id, {
+              text,
+              message: { role: "user", content: text },
+            });
+            input.value = "";
+          });
+          chatPanel.appendChild(form);
+
+          wrap.appendChild(chatPanel);
+          return wrap;
+        }
+
+        if (type === "form_step") {
+          const steps = Array.isArray(props.steps) ? props.steps : [];
+          let currentIndex = 0;
+          const stepContainer = document.createElement("div");
+          const renderStep = () => {
+            stepContainer.innerHTML = "";
+            if (!steps.length) return;
+            const step = steps[currentIndex];
+            const stepTitle = document.createElement("div");
+            stepTitle.className = "component-title";
+            stepTitle.textContent = (step.title || "Step") + " (" + (currentIndex + 1) + "/" + steps.length + ")";
+            stepContainer.appendChild(stepTitle);
+            const form = document.createElement("form");
+            for (const field of step.fields || []) {
+              form.appendChild(buildField(field, form));
+            }
+            const nav = document.createElement("div");
+            const back = document.createElement("button");
+            back.type = "button";
+            back.className = "secondary";
+            back.textContent = "Back";
+            back.disabled = currentIndex <= 0;
+            back.addEventListener("click", () => {
+              if (currentIndex > 0) {
+                currentIndex -= 1;
+                renderStep();
+                emitEvent("change", component.id, { step_index: currentIndex });
+              }
+            });
+            nav.appendChild(back);
+            const next = document.createElement("button");
+            next.type = "submit";
+            next.className = "primary";
+            next.textContent = currentIndex === steps.length - 1 ? "Submit" : "Next";
+            nav.appendChild(next);
+            form.appendChild(nav);
+            form.addEventListener("submit", (evt) => {
+              evt.preventDefault();
+              const values = collectFormValues(form);
+              if (currentIndex < steps.length - 1) {
+                emitEvent("change", component.id, { step_index: currentIndex, values });
+                currentIndex += 1;
+                renderStep();
+              } else {
+                emitEvent("submit", component.id, { step_index: currentIndex, values });
+              }
+            });
+            stepContainer.appendChild(form);
+          };
+          renderStep();
+          wrap.appendChild(stepContainer);
+          return wrap;
+        }
+
+        if (type === "progress_panel") {
+          for (const item of props.items || []) {
+            const row = document.createElement("div");
+            row.className = "progress-row";
+
+            const label = document.createElement("div");
+            label.className = "progress-label";
+            const left = document.createElement("span");
+            left.textContent = item.label || "task";
+            const right = document.createElement("span");
+            right.textContent = Math.round(Number(item.value || 0) * 100) + "%";
+            label.appendChild(left);
+            label.appendChild(right);
+            row.appendChild(label);
+
+            const track = document.createElement("div");
+            track.className = "progress-track";
+            const bar = document.createElement("div");
+            bar.className = "progress-bar";
+            bar.style.width = Math.max(0, Math.min(100, Number(item.value || 0) * 100)) + "%";
+            track.appendChild(bar);
+            row.appendChild(track);
+            wrap.appendChild(row);
+          }
+          return wrap;
+        }
+
+        if (type === "result_export") {
+          const data = props.data || appState.state.result || {};
+          const filename = (props.filename || "result").replace(/\\s+/g, "_");
+          const jsonButton = document.createElement("button");
+          jsonButton.className = "secondary";
+          jsonButton.textContent = "Export JSON";
+          jsonButton.addEventListener("click", () => {
+            downloadText(filename + ".json", JSON.stringify(data, null, 2), "application/json");
+            emitEvent("export", component.id, { format: "json" });
+          });
+          wrap.appendChild(jsonButton);
+          const csvButton = document.createElement("button");
+          csvButton.className = "secondary";
+          csvButton.textContent = "Export CSV";
+          csvButton.addEventListener("click", () => {
+            downloadText(filename + ".csv", toCsv(data.rows || data), "text/csv");
+            emitEvent("export", component.id, { format: "csv" });
+          });
+          wrap.appendChild(csvButton);
+          return wrap;
+        }
+
+        const fallback = document.createElement("div");
+        fallback.className = "fallback";
+        const hint = document.createElement("div");
+        hint.className = "small";
+        hint.textContent = "Unsupported component type: " + String(type || "unknown");
+        fallback.appendChild(hint);
+        const details = document.createElement("pre");
+        details.textContent = JSON.stringify(component, null, 2);
+        fallback.appendChild(details);
+        wrap.appendChild(fallback);
+        return wrap;
+      }
+
+      function renderActions(actions) {
+        if (!Array.isArray(actions) || !actions.length) return;
+        const bar = document.createElement("div");
+        bar.className = "action-bar";
+        for (const action of actions) {
+          const btn = document.createElement("button");
+          btn.className = action.primary ? "primary" : "secondary";
+          btn.textContent = action.label || action.id || "Action";
+          btn.addEventListener("click", () => {
+            emitEvent(action.event_type || "action", action.id || "action", action.payload || {});
+          });
+          bar.appendChild(btn);
+        }
+        contentEl.appendChild(bar);
+      }
+
+      function sanitizeSpecForRender(spec) {
+        const next = mergeObjects({}, spec || {});
+        next.components = Array.isArray(next.components)
+          ? next.components.map((component) => normalizeComponent(component))
+          : [];
+        const ids = new Set();
+        for (const component of next.components) {
+          if (component && typeof component.id === "string" && component.id.trim()) {
+            ids.add(component.id.trim());
+          }
+        }
+        const rawRoot = Array.isArray(next.root) ? next.root : [];
+        const root = [];
+        for (const id of rawRoot) {
+          if (ids.has(id) && !root.includes(id)) root.push(id);
+        }
+        if (!root.length) {
+          for (const component of next.components) {
+            if (component && component.id && !root.includes(component.id)) {
+              root.push(component.id);
+            }
+          }
+        }
+        next.root = root;
+        return next;
+      }
+
+      function rebuildComponentIndex(spec) {
+        appState.componentById = {};
+        for (const component of spec.components || []) {
+          appState.componentById[component.id] = component;
+        }
+      }
+
+      function renderSpec(spec) {
+        const sanitizedSpec = sanitizeSpecForRender(spec);
+        appState.spec = sanitizedSpec;
+        const resolvedSpec = applyStateBindings(sanitizedSpec, appState.state);
+        applyTheme(resolvedSpec.theme || {});
+        titleEl.textContent = resolvedSpec.title || "MetaUI";
+        rebuildComponentIndex(resolvedSpec);
+        contentEl.innerHTML = "";
+        for (const rootId of resolvedSpec.root || []) {
+          contentEl.appendChild(renderComponent(rootId));
+        }
+        renderActions(resolvedSpec.actions || []);
+      }
+
+      function applyPatch(patch) {
+        if (!appState.spec || !patch || typeof patch !== "object") return;
+        const op = patch.op || "merge_spec";
+        if (op === "replace_spec" && patch.spec) {
+          renderSpec(patch.spec);
+          return;
+        }
+        if (op === "merge_spec" && patch.spec) {
+          const nextSpec = mergeObjects(appState.spec, patch.spec);
+          if (Array.isArray((appState.spec || {}).components) && Array.isArray((patch.spec || {}).components)) {
+            nextSpec.components = mergeComponentList(
+              (appState.spec || {}).components || [],
+              (patch.spec || {}).components || [],
+            );
+          }
+          appState.spec = nextSpec;
+          renderSpec(appState.spec);
+          return;
+        }
+        if (op === "update_component") {
+          let targetId = patch.id;
+          if (!targetId) {
+            const explicitType = patch.type
+              || (patch.component && patch.component.type)
+              || (patch.props && patch.props.type)
+              || "";
+            const normalized = normalizeComponentType(explicitType).type;
+            if (normalized && normalized !== "text") {
+              const candidate = firstComponentByType(appState.spec, normalized);
+              if (candidate && candidate.id) {
+                targetId = candidate.id;
+              }
+            } else if (patch.props && (
+              patch.props.chart_type !== undefined
+              || patch.props.labels !== undefined
+              || patch.props.values !== undefined
+            )) {
+              const chartCandidate = firstComponentByType(appState.spec, "chart");
+              if (chartCandidate && chartCandidate.id) {
+                targetId = chartCandidate.id;
+              }
+            }
+          }
+          const component = getComponent(targetId);
+          if (component) {
+            if (patch.type) {
+              const typeInfo = normalizeComponentType(patch.type);
+              component.type = typeInfo.type;
+              if (component.type === "chart") {
+                component.props = normalizeChartProps(component.props || {}, typeInfo.chartType || null);
+              }
+            }
+            component.props = mergeObjects(component.props || {}, patch.props || {});
+            if (component.type === "chart") {
+              component.props = normalizeChartProps(component.props || {}, null);
+            } else if (component.type === "data_table") {
+              component.props = normalizeTableProps(component.props || {});
+            }
+            renderSpec(appState.spec);
+          }
+          return;
+        }
+        if (op === "append_component" && patch.component) {
+          const component = normalizeComponent(patch.component);
+          appState.spec.components = (appState.spec.components || []).concat([component]);
+          renderSpec(appState.spec);
+          return;
+        }
+        if (op === "remove_component" && patch.id) {
+          appState.spec.components = (appState.spec.components || []).filter((item) => item.id !== patch.id);
+          appState.spec.root = (appState.spec.root || []).filter((item) => item !== patch.id);
+          renderSpec(appState.spec);
+          return;
+        }
+        if (op === "set_root" && Array.isArray(patch.root)) {
+          appState.spec.root = patch.root;
+          renderSpec(appState.spec);
+          return;
+        }
+        if (op === "set_title" && patch.title) {
+          appState.spec.title = patch.title;
+          renderSpec(appState.spec);
+          return;
+        }
+        if (!patch.op) {
+          appState.spec = mergeObjects(appState.spec, patch);
+          renderSpec(appState.spec);
+        }
+      }
+
+      function applyStatePatch(statePatch) {
+        appState.state = mergeObjects(appState.state || {}, statePatch || {});
+        if (appState.spec) {
+          renderSpec(appState.spec);
+        }
+      }
+
+      function decodeTypedValue(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        if (entry.valueString !== undefined && entry.valueString !== null) return String(entry.valueString);
+        if (entry.valueNumber !== undefined && entry.valueNumber !== null) return Number(entry.valueNumber);
+        if (entry.valueBoolean !== undefined && entry.valueBoolean !== null) return Boolean(entry.valueBoolean);
+        if (entry.valueNull === true) return null;
+        if (Array.isArray(entry.valueList)) {
+          return entry.valueList.map((item) => decodeTypedValue(item));
+        }
+        if (Array.isArray(entry.valueMap)) {
+          const out = {};
+          for (const child of entry.valueMap) {
+            if (!child || typeof child !== "object") continue;
+            const key = String(child.key || "").trim();
+            if (!key) continue;
+            out[key] = decodeTypedValue(child);
+          }
+          return out;
+        }
+        return null;
+      }
+
+      function decodeDataModelContents(contents) {
+        const out = {};
+        if (!Array.isArray(contents)) return out;
+        for (const entry of contents) {
+          if (!entry || typeof entry !== "object") continue;
+          const key = String(entry.key || "").trim();
+          if (!key) continue;
+          out[key] = decodeTypedValue(entry);
+        }
+        return out;
+      }
+
+      function jsonPointerToPath(path) {
+        const raw = String(path || "/").trim();
+        if (!raw || raw === "/") return [];
+        return raw
+          .replace(/^\//, "")
+          .split("/")
+          .filter(Boolean)
+          .map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"));
+      }
+
+      function setNestedAtPath(baseObject, path, patchObject) {
+        if (!path.length) {
+          if (patchObject && typeof patchObject === "object" && !Array.isArray(patchObject)) {
+            return mergeObjects(baseObject || {}, patchObject);
+          }
+          return patchObject;
+        }
+        const root = mergeObjects(baseObject || {}, {});
+        let current = root;
+        for (let index = 0; index < path.length - 1; index += 1) {
+          const key = path[index];
+          const value = current[key];
+          if (!value || typeof value !== "object" || Array.isArray(value)) {
+            current[key] = {};
+          }
+          current = current[key];
+        }
+        const leaf = path[path.length - 1];
+        const previous = current[leaf];
+        if (patchObject && typeof patchObject === "object" && !Array.isArray(patchObject)) {
+          current[leaf] = mergeObjects(previous || {}, patchObject);
+        } else {
+          current[leaf] = patchObject;
+        }
+        return root;
+      }
+
+      function extractSurfaceComponentPayload(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        const wrapper = entry.component;
+        if (!wrapper || typeof wrapper !== "object") return null;
+        if (wrapper.MetaUI && typeof wrapper.MetaUI === "object") return wrapper.MetaUI;
+        if (wrapper.metaui && typeof wrapper.metaui === "object") return wrapper.metaui;
+        const keys = Object.keys(wrapper);
+        if (!keys.length) return null;
+        const first = wrapper[keys[0]];
+        return first && typeof first === "object" ? first : null;
+      }
+
+      function applySurfaceUpdateMessage(message) {
+        const surfaceId = String(message.surfaceId || "").trim();
+        if (!surfaceId) return false;
+        const componentById = {};
+        for (const item of (message.components || [])) {
+          const componentId = String(item && item.id ? item.id : "").trim();
+          if (!componentId) continue;
+          const payload = extractSurfaceComponentPayload(item);
+          const componentType = payload && payload.type ? payload.type : "text";
+          const componentProps = payload && payload.props && typeof payload.props === "object" ? payload.props : {};
+          componentById[componentId] = normalizeComponent({
+            id: componentId,
+            type: componentType,
+            props: componentProps,
+          });
+        }
+        appState.surfaceStore[surfaceId] = { componentById };
+        return true;
+      }
+
+      function buildSpecFromSurface(surfaceId, rootId) {
+        const surface = appState.surfaceStore[surfaceId];
+        if (!surface || !surface.componentById) return null;
+        const components = Object.values(surface.componentById);
+        if (!components.length) return null;
+        const resolvedRoot = String(rootId || "").trim() || String(components[0].id || "");
+        if (!resolvedRoot) return null;
+        const rootComponent = surface.componentById[resolvedRoot];
+        const title =
+          rootComponent &&
+          rootComponent.props &&
+          typeof rootComponent.props.title === "string" &&
+          rootComponent.props.title.trim()
+            ? rootComponent.props.title.trim()
+            : "MetaUI Workspace";
+        const styles =
+          appState.surfaceMeta[surfaceId] && typeof appState.surfaceMeta[surfaceId].styles === "object"
+            ? appState.surfaceMeta[surfaceId].styles
+            : {};
+        return sanitizeSpecForRender({
+          spec_version: "1.0",
+          ui_id: surfaceId,
+          title,
+          send_data_model: Boolean(
+            appState.surfaceMeta[surfaceId] && appState.surfaceMeta[surfaceId].sendDataModel
+          ),
+          theme: styles.theme || {},
+          components,
+          root: [resolvedRoot],
+          actions: [],
+          state_bindings: {},
+        });
+      }
+
+      function applyDataModelUpdateMessage(message) {
+        const surfaceId = String(message.surfaceId || "").trim();
+        if (!surfaceId) return false;
+        const path = jsonPointerToPath(message.path || "/");
+        const patchObject = decodeDataModelContents(message.contents || []);
+        const current = appState.dataModelStore[surfaceId] || {};
+        appState.dataModelStore[surfaceId] = setNestedAtPath(current, path, patchObject);
+        if (appState.spec && String(appState.spec.ui_id || "") === surfaceId) {
+          appState.state = appState.dataModelStore[surfaceId];
+          renderSpec(appState.spec);
+        }
+        return true;
+      }
+
+      function applyBeginRenderingMessage(message) {
+        const surfaceId = String(message.surfaceId || "").trim();
+        if (!surfaceId) return false;
+        appState.surfaceMeta[surfaceId] = mergeObjects(
+          appState.surfaceMeta[surfaceId] || {},
+          { sendDataModel: Boolean(message.sendDataModel), styles: message.styles || {} },
+        );
+        const spec = buildSpecFromSurface(surfaceId, message.root);
+        if (!spec) return false;
+        appState.state = appState.dataModelStore[surfaceId] || {};
+        renderSpec(spec);
+        return true;
+      }
+
+      function applyDeleteSurfaceMessage(message) {
+        const surfaceId = String(message.surfaceId || "").trim();
+        if (!surfaceId) return false;
+        delete appState.surfaceStore[surfaceId];
+        delete appState.dataModelStore[surfaceId];
+        delete appState.surfaceMeta[surfaceId];
+        if (appState.spec && String(appState.spec.ui_id || "") === surfaceId) {
+          appState.spec = null;
+          appState.state = {};
+          contentEl.innerHTML = "<div class='small'>UI session closed.</div>";
+        }
+        return true;
+      }
+
+      function handleLifecycleMessage(msg) {
+        if (msg.surfaceUpdate) {
+          return applySurfaceUpdateMessage(msg.surfaceUpdate);
+        }
+        if (msg.dataModelUpdate) {
+          return applyDataModelUpdateMessage(msg.dataModelUpdate);
+        }
+        if (msg.beginRendering) {
+          return applyBeginRenderingMessage(msg.beginRendering);
+        }
+        if (msg.deleteSurface) {
+          return applyDeleteSurfaceMessage(msg.deleteSurface);
+        }
+        return false;
+      }
+
+      function handleCommand(msg) {
+        if (handleLifecycleMessage(msg)) {
+          if (msg.command_id && appState.ws && appState.ws.readyState === WebSocket.OPEN) {
+            appState.ws.send(JSON.stringify({ type: "ack", command_id: msg.command_id }));
+          }
+          return;
+        }
+
+        const command = msg.command;
+        if (!command) return;
+        const payload = msg.payload || {};
+        const targetUiId = String(msg.ui_id || payload.ui_id || "").trim();
+        const currentUiId = appState.spec && appState.spec.ui_id ? String(appState.spec.ui_id) : "";
+        const targetMismatch = Boolean(targetUiId && currentUiId && targetUiId !== currentUiId);
+        if (command === "render_full") {
+          appState.state = {};
+          if (payload && typeof payload === "object") {
+            const uiId = String(payload.ui_id || payload.uiId || "").trim();
+            if (uiId) {
+              appState.surfaceMeta[uiId] = mergeObjects(
+                appState.surfaceMeta[uiId] || {},
+                {
+                  sendDataModel: Boolean(
+                    payload.send_data_model !== undefined
+                      ? payload.send_data_model
+                      : payload.sendDataModel
+                  ),
+                },
+              );
+            }
+          }
+          renderSpec(payload);
+        } else if (command === "patch") {
+          if (!targetMismatch) {
+            applyPatch(payload.patch || payload || {});
+          }
+        } else if (command === "set_state") {
+          if (!targetMismatch) {
+            applyStatePatch(payload.state || payload || {});
+          }
+        } else if (command === "notify") {
+          showToast(payload.message || "Notification", payload.level || "info");
+        } else if (command === "close") {
+          if (!targetMismatch) {
+            appState.spec = null;
+            contentEl.innerHTML = "<div class='small'>UI session closed.</div>";
+          }
+        }
+
+        if (msg.command_id && appState.ws && appState.ws.readyState === WebSocket.OPEN) {
+          appState.ws.send(JSON.stringify({ type: "ack", command_id: msg.command_id }));
+        }
+      }
+
+      function openSocket() {
+        const ws = new WebSocket(WS_URL);
+        appState.ws = ws;
+        ws.onopen = () => {
+          setStatus("Connected");
+          ws.send(JSON.stringify({
+            type: "hello",
+            client_id: CLIENT_ID,
+            token: TOKEN || null,
+            protocol_versions: SUPPORTED_PROTOCOL_VERSIONS,
+            supported_components: SUPPORTED_COMPONENTS,
+            supported_commands: SUPPORTED_COMMANDS,
+            features: SUPPORTED_FEATURES,
+          }));
+        };
+        ws.onmessage = (evt) => {
+          let msg;
+          try {
+            msg = JSON.parse(evt.data);
+          } catch {
+            return;
+          }
+          if (msg.type === "hello_ack") {
+            setStatus("Connected (" + (msg.client_id || CLIENT_ID) + ")");
+            appState.catalog = msg.catalog || null;
+            if (msg.auto_ui !== undefined) {
+              showToast("auto_ui: " + (msg.auto_ui ? "on" : "off"), "info");
+            }
+            return;
+          }
+          handleCommand(msg);
+        };
+        ws.onclose = () => {
+          setStatus("Disconnected, reconnecting...");
+          window.setTimeout(openSocket, 1200);
+        };
+        ws.onerror = () => {
+          setStatus("Socket error, retrying...");
+        };
+      }
+
+      openSocket();
+    </script>
+  </body>
+</html>

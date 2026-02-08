@@ -35,6 +35,7 @@ Optional extras:
 pip install -e ".[realtime]"   # Realtime audio/text UI
 pip install -e ".[slack]"      # Slack gateway
 pip install -e ".[media]"      # Media utilities
+pip install -e ".[metaui]"     # Desktop MetaUI runtime
 ```
 
 ### 2) Configure
@@ -80,7 +81,18 @@ aeiva-server --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --ver
 Logs default to:
 - `~/.aeiva/logs/`
 
-### 4) Channel Notes
+### 4) MetaUI (Desktop UI)
+
+MetaUI lets the assistant open/update a local desktop UI for forms, uploads, tables, charts, and progress panels.
+
+```bash
+aeiva-metaui-desktop --ws-url ws://127.0.0.1:8765/metaui
+```
+
+`metaui` is also available as a tool in `action_config.tools`.
+By default `aeiva-gateway` does not auto-start the desktop window. It is launched lazily when the assistant uses `metaui` and `ensure_visible=true`, or you can enable eager startup via `metaui_config.auto_start_desktop`.
+
+### 5) Channel Notes
 
 Slack usage:
 - install Slack extra: `pip install -e '.[slack]'`

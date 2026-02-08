@@ -38,6 +38,10 @@ realtime-openai = [
     "soundfile>=0.13.1,<1.0",
     "websockets>=12,<14",
 ]
+metaui = [
+    "websockets>=12,<14",
+    "PySide6>=6.8,<7",
+]
 realtime-gemini = [
     "google-genai==0.8.0",
 ]
@@ -92,6 +96,7 @@ media = [
     "proglog==0.1.12",
 ]
 dev = [
+    "pytest-asyncio>=0.24,<1",
     "pytest==8.3.3",
 ]
 docs = [
@@ -108,6 +113,7 @@ aeiva-gateway = "aeiva.command.aeiva_gateway:run"
 aeiva-server = "aeiva.command.aeiva_server:run"
 maid-chat = "aeiva.command.maid_chat:run"
 aeiva-host = "aeiva.host.host_cli:run"
+aeiva-metaui-desktop = "aeiva.metaui.desktop_client:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -8,6 +8,9 @@ reference for the technical implementation of the
 
 ## Aeiva API references
 
+- Browser Tool API: `docs/reference/browser-tool-api.md`
+- MetaUI Tool API: `docs/reference/metaui-tool-api.md`
+
 ::: src.aeiva
     options:
       show_submodules: true

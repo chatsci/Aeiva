@@ -136,6 +136,64 @@ def normalize_realtime_config(config_dict: Dict[str, Any]) -> None:
 def normalize_runtime_config(config_dict: Dict[str, Any]) -> None:
     normalize_action_tools(config_dict)
     normalize_realtime_config(config_dict)
+    normalize_metaui_config(config_dict)
+
+
+def _as_positive_int(value: Any, *, path: str) -> int:
+    if not isinstance(value, int):
+        raise ConfigValidationError(f"{path} must be an integer")
+    if value <= 0:
+        raise ConfigValidationError(f"{path} must be > 0")
+    return value
+
+
+def normalize_metaui_config(config_dict: Dict[str, Any]) -> None:
+    metaui_cfg = _as_dict(config_dict.get("metaui_config"))
+    if not metaui_cfg:
+        return
+
+    enabled = metaui_cfg.get("enabled")
+    if enabled is not None:
+        metaui_cfg["enabled"] = bool(enabled)
+
+    for key in ("auto_ui", "auto_start_desktop"):
+        if key in metaui_cfg and metaui_cfg[key] is not None:
+            metaui_cfg[key] = bool(metaui_cfg[key])
+
+    host = metaui_cfg.get("host")
+    if host is not None:
+        if not isinstance(host, str) or not host.strip():
+            raise ConfigValidationError("metaui_config.host must be a non-empty string")
+        metaui_cfg["host"] = host.strip()
+
+    for key in (
+        "port",
+        "upload_max_file_bytes",
+        "upload_max_total_bytes",
+        "upload_max_files_per_event",
+        "event_history_limit",
+    ):
+        if key in metaui_cfg:
+            metaui_cfg[key] = _as_positive_int(metaui_cfg[key], path=f"metaui_config.{key}")
+
+    for key in ("hello_timeout_seconds", "send_timeout_seconds", "wait_ack_seconds"):
+        if key in metaui_cfg:
+            try:
+                value = float(metaui_cfg[key])
+            except Exception as exc:
+                raise ConfigValidationError(f"metaui_config.{key} must be a number") from exc
+            if value < 0:
+                raise ConfigValidationError(f"metaui_config.{key} must be >= 0")
+            metaui_cfg[key] = value
+
+    for key in ("token", "token_env_var", "upload_base_dir", "desktop_log_file"):
+        if key in metaui_cfg and metaui_cfg[key] is not None:
+            value = metaui_cfg[key]
+            if not isinstance(value, str) or not value.strip():
+                raise ConfigValidationError(f"metaui_config.{key} must be a non-empty string")
+            metaui_cfg[key] = value.strip()
+
+    config_dict["metaui_config"] = metaui_cfg
 
 
 def validate_action_tools(config_dict: Dict[str, Any]) -> None:

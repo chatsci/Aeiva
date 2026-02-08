@@ -6,12 +6,14 @@ Unified Gateway: run multiple channels against shared or dedicated gateway conte
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import os
 import secrets
 import signal
 import socket
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -27,9 +29,7 @@ from aeiva.command.command_utils import (
     setup_command_logger,
 )
 from aeiva.command.gateway_registry import GatewayRegistry
-from aeiva.interface.slack_gateway import SlackGateway
 from aeiva.interface.terminal_gateway import TerminalGateway
-from aeiva.interface.whatsapp_gateway import WhatsAppGateway
 from aeiva.event.event_names import EventNames
 from aeiva.util.file_utils import from_json_or_yaml
 
@@ -41,6 +41,8 @@ DEFAULT_CONFIG_PATH = _json_config if _json_config.exists() else _yaml_config
 LOGS_DIR = get_log_dir()
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_HOST_DAEMON_TOKEN_ENV = "AEIVA_HOST_DAEMON_TOKEN"
+DEFAULT_METAUI_TOKEN_ENV = "AEIVA_METAUI_TOKEN"
+DEFAULT_METAUI_DESKTOP_PENDING_ENV = "AEIVA_METAUI_DESKTOP_PENDING_UNTIL_MONO"
 
 
 def _suppress_gradio_routes_print() -> None:
@@ -49,6 +51,13 @@ def _suppress_gradio_routes_print() -> None:
         gr_routes.print = lambda *args, **kwargs: None
     except Exception:
         pass
+
+
+def _realtime_dependencies_available() -> bool:
+    """
+    Turn-based realtime gateway requires FastRTC at runtime.
+    """
+    return importlib.util.find_spec("fastrtc") is not None
 
 
 def _as_non_empty_str(value: Any) -> Optional[str]:
@@ -221,6 +230,27 @@ def _resolve_autostart_daemon_port(
     return new_port
 
 
+def _build_metaui_ws_url(*, host: str, port: int) -> str:
+    normalized_host = host.strip() or "127.0.0.1"
+    if ":" in normalized_host and not normalized_host.startswith("["):
+        normalized_host = f"[{normalized_host}]"
+    return f"ws://{normalized_host}:{int(port)}/metaui"
+
+
+def _resolve_metaui_token(
+    metaui_cfg: Dict[str, Any],
+    *,
+    startup_env: Dict[str, str],
+) -> tuple[Optional[str], str]:
+    token = _as_non_empty_str(metaui_cfg.get("token"))
+    token_env_var = _as_non_empty_str(metaui_cfg.get("token_env_var")) or DEFAULT_METAUI_TOKEN_ENV
+    if token is None:
+        token = _as_non_empty_str(startup_env.get(token_env_var))
+    if token is None:
+        token = _as_non_empty_str(os.environ.get(token_env_var))
+    return token, token_env_var
+
+
 @dataclass
 class UvicornHandle:
     server: Any
@@ -285,6 +315,74 @@ def _try_start_host(logger, config_dict, log_dir: Path, config_path: Optional[Pa
         return None
 
 
+def _try_start_metaui_desktop(logger, config_dict, log_dir: Path):
+    metaui_cfg = config_dict.get("metaui_config") or {}
+    if not metaui_cfg.get("enabled"):
+        return None
+
+    auto_start_desktop_raw = metaui_cfg.get("auto_start_desktop")
+    auto_start_desktop = False if auto_start_desktop_raw is None else bool(auto_start_desktop_raw)
+    if not auto_start_desktop:
+        return None
+
+    host = _as_non_empty_str(metaui_cfg.get("host")) or "127.0.0.1"
+    try:
+        port = int(metaui_cfg.get("port") or 8765)
+    except Exception:
+        logger.warning("Invalid metaui_config.port '%s'; fallback to 8765.", metaui_cfg.get("port"))
+        port = 8765
+    if port <= 0:
+        logger.warning("Invalid metaui_config.port '%s'; fallback to 8765.", metaui_cfg.get("port"))
+        port = 8765
+
+    startup_env = os.environ.copy()
+    token, token_env_var = _resolve_metaui_token(metaui_cfg, startup_env=startup_env)
+    if token:
+        startup_env[token_env_var] = token
+
+    try:
+        from aeiva.metaui.desktop_runtime import resolve_desktop_python
+
+        python_exec = resolve_desktop_python(current_executable=sys.executable)
+    except Exception as exc:
+        logger.warning("Failed to resolve MetaUI desktop interpreter: %s", exc)
+        return None
+    if not python_exec:
+        logger.warning(
+            "MetaUI desktop auto-start skipped: no Python runtime with PySide6 + QtWebEngine found."
+        )
+        return None
+
+    ws_url = _build_metaui_ws_url(host=host, port=port)
+    cmd = [python_exec, "-m", "aeiva.metaui.desktop_client", "--ws-url", ws_url]
+    if token:
+        cmd.extend(["--token", token])
+
+    log_path = metaui_cfg.get("desktop_log_file")
+    if log_path:
+        log_path = Path(os.path.expanduser(str(log_path)))
+    else:
+        log_path = log_dir / "aeiva-metaui-desktop.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        log_handle = open(log_path, "a", encoding="utf-8")
+        process = subprocess.Popen(
+            cmd,
+            stdout=log_handle,
+            stderr=log_handle,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            env=startup_env,
+        )
+        os.environ[DEFAULT_METAUI_DESKTOP_PENDING_ENV] = f"{(time.monotonic() + 45.0):.6f}"
+        logger.info("MetaUI desktop started (pid=%s, ws=%s, log=%s).", process.pid, ws_url, log_path)
+        return process
+    except Exception as exc:
+        logger.warning("Failed to start MetaUI desktop: %s", exc)
+        return None
+
+
 def _try_stop_host(logger, host_process):
     if host_process is None:
         return
@@ -304,6 +402,30 @@ def _try_stop_host(logger, host_process):
             logger.warning("Failed to kill host daemon: %s", exc)
     except Exception as exc:
         logger.warning("Host daemon stop failed: %s", exc)
+
+
+def _try_stop_metaui_desktop(logger, metaui_process):
+    if metaui_process is None:
+        return
+    try:
+        if metaui_process.poll() is None:
+            metaui_process.terminate()
+            metaui_process.wait(timeout=10)
+            logger.info("MetaUI desktop stopped.")
+            os.environ.pop(DEFAULT_METAUI_DESKTOP_PENDING_ENV, None)
+        else:
+            logger.info("MetaUI desktop already stopped.")
+            os.environ.pop(DEFAULT_METAUI_DESKTOP_PENDING_ENV, None)
+    except subprocess.TimeoutExpired:
+        logger.warning("MetaUI desktop did not terminate in time; killing.")
+        try:
+            metaui_process.kill()
+            metaui_process.wait(timeout=5)
+            os.environ.pop(DEFAULT_METAUI_DESKTOP_PENDING_ENV, None)
+        except Exception as exc:
+            logger.warning("Failed to kill MetaUI desktop: %s", exc)
+    except Exception as exc:
+        logger.warning("MetaUI desktop stop failed: %s", exc)
 
 
 @click.command(name="aeiva-gateway")
@@ -347,6 +469,7 @@ def run(config, verbose):
     realtime_mode = (config_dict.get("realtime_config") or {}).get("mode", "turn_based")
 
     host_process = _try_start_host(logger, config_dict, LOGS_DIR, config_path)
+    metaui_desktop_process = _try_start_metaui_desktop(logger, config_dict, LOGS_DIR)
 
     gateways: List[Any] = []
     runtime_tasks: List[asyncio.Task] = []
@@ -380,6 +503,11 @@ def run(config, verbose):
         if realtime_cfg.get("enabled"):
             if realtime_mode != "turn_based":
                 logger.warning("Realtime mode '%s' not supported in unified gateway. Skipping.", realtime_mode)
+            elif not _realtime_dependencies_available():
+                logger.warning(
+                    "Realtime channel enabled but FastRTC is unavailable. "
+                    "Skipping realtime gateway. Install with: `uv sync --extra realtime`."
+                )
             else:
                 ctx = await registry.get_context_async("realtime", realtime_cfg)
                 pending_gateways.append(("realtime", ctx, realtime_cfg))
@@ -405,6 +533,13 @@ def run(config, verbose):
 
         for name, ctx, cfg in pending_gateways:
             if name == "slack":
+                try:
+                    from aeiva.interface.slack_gateway import SlackGateway
+                except ModuleNotFoundError as exc:
+                    raise RuntimeError(
+                        "Slack gateway requires optional dependency `slack-sdk`. "
+                        "Install with `uv sync --extra slack`."
+                    ) from exc
                 slack_gateway = SlackGateway(cfg, ctx.agent.event_bus)
                 await slack_gateway.setup()
                 gateways.append(slack_gateway)
@@ -417,6 +552,13 @@ def run(config, verbose):
                 gateway_tasks.append(asyncio.create_task(terminal_gateway.run()))
                 logger.info("Terminal gateway started (scope=%s).", cfg.get("gateway_scope"))
             elif name == "whatsapp":
+                try:
+                    from aeiva.interface.whatsapp_gateway import WhatsAppGateway
+                except ModuleNotFoundError as exc:
+                    raise RuntimeError(
+                        "WhatsApp gateway requires optional web dependencies. "
+                        "Install with `uv sync --extra ui`."
+                    ) from exc
                 wa_gateway = WhatsAppGateway(cfg, ctx.agent.event_bus)
                 await wa_gateway.setup()
                 gateways.append(wa_gateway)
@@ -549,6 +691,12 @@ def run(config, verbose):
     try:
         asyncio.run(_main())
     finally:
+        try:
+            from aeiva.tool.meta.metaui import _cleanup_launched_desktops
+            _cleanup_launched_desktops()
+        except Exception:
+            pass
+        _try_stop_metaui_desktop(logger, metaui_desktop_process)
         _try_stop_host(logger, host_process)
         logger.info("Gateway shutdown complete.")
 
