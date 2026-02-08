@@ -81,7 +81,17 @@ aeiva-server --config configs/agent_config.yaml --host 0.0.0.0 --port 8000 --ver
 日志默认路径：
 - `~/.aeiva/logs/`
 
-### 4）MetaUI（桌面 UI）
+### 4）Browser 工具（网页自动化）
+
+AEIVA 内置本地浏览器自动化工具，可用于真实网页任务：
+- 跨站点搜索与导航
+- 表单交互（输入/选择/点击/提交）
+- 多步骤浏览流程与失败重试恢复
+- 提取结构化页面结果用于助手回复
+
+在 `action_config.tools` 中启用 `browser` 即可使用。
+
+### 5）MetaUI（桌面 UI）
 
 MetaUI 支持助手在本地桌面打开/更新结构化界面（表单、上传、表格、图表、进度面板）。
 
@@ -92,7 +102,7 @@ aeiva-metaui-desktop --ws-url ws://127.0.0.1:8765/metaui
 `metaui` 工具已可在 `action_config.tools` 中使用。
 默认情况下 `aeiva-gateway` 不会在启动时立即拉起 MetaUI 窗口；当助手实际调用 `metaui`（且 `ensure_visible=true`）时才按需启动。若需要开机即启动，可设置 `metaui_config.auto_start_desktop: true`。
 
-### 5）通道说明
+### 6）通道说明
 
 Slack：
 - 安装依赖：`pip install -e '.[slack]'`

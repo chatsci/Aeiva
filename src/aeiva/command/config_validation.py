@@ -156,7 +156,7 @@ def normalize_metaui_config(config_dict: Dict[str, Any]) -> None:
     if enabled is not None:
         metaui_cfg["enabled"] = bool(enabled)
 
-    for key in ("auto_ui", "auto_start_desktop"):
+    for key in ("auto_ui", "auto_start_desktop", "strict_component_types"):
         if key in metaui_cfg and metaui_cfg[key] is not None:
             metaui_cfg[key] = bool(metaui_cfg[key])
 
@@ -176,7 +176,7 @@ def normalize_metaui_config(config_dict: Dict[str, Any]) -> None:
         if key in metaui_cfg:
             metaui_cfg[key] = _as_positive_int(metaui_cfg[key], path=f"metaui_config.{key}")
 
-    for key in ("hello_timeout_seconds", "send_timeout_seconds", "wait_ack_seconds"):
+    for key in ("hello_timeout_seconds", "start_timeout_seconds", "send_timeout_seconds", "wait_ack_seconds"):
         if key in metaui_cfg:
             try:
                 value = float(metaui_cfg[key])

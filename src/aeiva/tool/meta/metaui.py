@@ -365,6 +365,8 @@ async def metaui(
                     f"Valid operations: {_KNOWN_OPERATIONS}."
                 ),
             }
+        settings = get_metaui_runtime_settings()
+        strict_component_types = bool(getattr(settings, "strict_component_types", True))
 
         if operation_key == "compose":
             composed = build_intent_spec(intent or "", session_id=session_id)
@@ -372,7 +374,12 @@ async def metaui(
             if spec and isinstance(spec, dict):
                 composed, diagnostics = _merge_scaffold_overrides(composed, spec)
             try:
-                normalized = MetaUISpec.model_validate(normalize_metaui_spec(composed)).model_dump(mode="json")
+                normalized = MetaUISpec.model_validate(
+                    normalize_metaui_spec(
+                        composed,
+                        strict_component_types=strict_component_types,
+                    )
+                ).model_dump(mode="json")
             except Exception as exc:
                 return {"success": False, "error": f"invalid composed spec: {exc}"}
             response: Dict[str, Any] = {"success": True, "spec": normalized, "session_id": session_id}
@@ -388,7 +395,10 @@ async def metaui(
                 return {"success": False, "error": "`spec` is required for validate_spec."}
             try:
                 normalized = MetaUISpec.model_validate(
-                    normalize_metaui_spec(spec, strict_component_types=True)
+                    normalize_metaui_spec(
+                        spec,
+                        strict_component_types=strict_component_types,
+                    )
                 ).model_dump(mode="json")
             except Exception as exc:
                 return {"success": False, "error": f"invalid spec: {exc}"}
@@ -427,7 +437,6 @@ async def metaui(
             evaluation = evaluate_server_messages(messages)
             return {"success": True, "evaluation": evaluation}
 
-        settings = get_metaui_runtime_settings()
         if not settings.enabled:
             return {"success": False, "error": "metaui is disabled by configuration"}
 
@@ -609,12 +618,16 @@ async def metaui(
                     return error_payload
 
                 rendered_spec: Optional[Dict[str, Any]] = None
-                session_snapshot = await orchestrator.get_session(resolved_ui_id)
-                if session_snapshot.get("success") and isinstance(session_snapshot.get("spec"), dict):
-                    rendered_spec = apply_structural_patch_to_spec(session_snapshot["spec"], patch)
-
-                if rendered_spec is None and routing.intent_text:
+                if routing.reason == "intent_signals_structure_switch" and routing.intent_text:
+                    # Intent-driven view switch should re-compose from intent directly,
+                    # instead of mutating the previous surface spec.
                     rendered_spec = build_intent_spec(routing.intent_text, session_id=session_id)
+                else:
+                    session_snapshot = await orchestrator.get_session(resolved_ui_id)
+                    if session_snapshot.get("success") and isinstance(session_snapshot.get("spec"), dict):
+                        rendered_spec = apply_structural_patch_to_spec(session_snapshot["spec"], patch)
+                    if rendered_spec is None and routing.intent_text:
+                        rendered_spec = build_intent_spec(routing.intent_text, session_id=session_id)
 
                 if rendered_spec is None:
                     return {

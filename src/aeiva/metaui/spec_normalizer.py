@@ -323,6 +323,7 @@ def _normalize_chat_props(props: Mapping[str, Any]) -> Dict[str, Any]:
         messages = []
 
     parsed_messages: list[Dict[str, str]] = []
+    content_trimmed_count = 0
     for item in messages:
         if isinstance(item, Mapping):
             role = str(item.get("role") or item.get("speaker") or "assistant").strip().lower()
@@ -331,19 +332,35 @@ def _normalize_chat_props(props: Mapping[str, Any]) -> Dict[str, Any]:
                 content = item.get("text")
             if content is None:
                 continue
+            text = str(content)
+            if len(text) > _MAX_CHAT_MESSAGE_CHARS:
+                text = text[:_MAX_CHAT_MESSAGE_CHARS]
+                content_trimmed_count += 1
             parsed_messages.append(
                 {
                     "role": "user" if role in {"user", "human", "client"} else "assistant",
-                    "content": str(content)[:_MAX_CHAT_MESSAGE_CHARS],
+                    "content": text,
                 }
             )
             continue
         if isinstance(item, str) and item.strip():
-            parsed_messages.append({"role": "assistant", "content": item.strip()[:_MAX_CHAT_MESSAGE_CHARS]})
+            text = item.strip()
+            if len(text) > _MAX_CHAT_MESSAGE_CHARS:
+                text = text[:_MAX_CHAT_MESSAGE_CHARS]
+                content_trimmed_count += 1
+            parsed_messages.append({"role": "assistant", "content": text})
 
+    dropped_count = 0
     if len(parsed_messages) > _MAX_CHAT_MESSAGES:
+        dropped_count = len(parsed_messages) - _MAX_CHAT_MESSAGES
         parsed_messages = parsed_messages[-_MAX_CHAT_MESSAGES:]
     normalized["messages"] = parsed_messages
+    if dropped_count > 0:
+        normalized["messages_truncated"] = True
+        normalized["messages_truncated_count"] = dropped_count
+    if content_trimmed_count > 0:
+        normalized["message_content_truncated"] = True
+        normalized["message_content_truncated_count"] = content_trimmed_count
     if "placeholder" in normalized and normalized["placeholder"] is not None:
         normalized["placeholder"] = str(normalized["placeholder"])
     if "send_label" in normalized and normalized["send_label"] is not None:
@@ -853,7 +870,11 @@ def normalize_metaui_spec(
     return normalized
 
 
-def normalize_metaui_patch(patch: Mapping[str, Any]) -> Dict[str, Any]:
+def normalize_metaui_patch(
+    patch: Mapping[str, Any],
+    *,
+    strict_component_types: bool = False,
+) -> Dict[str, Any]:
     normalized = deepcopy(dict(patch))
     op_raw = normalized.get("op")
     op = _norm_token(op_raw) if op_raw is not None else ""
@@ -861,17 +882,26 @@ def normalize_metaui_patch(patch: Mapping[str, Any]) -> Dict[str, Any]:
         normalized["op"] = op
 
     if op in {"replace_spec", "merge_spec"} and isinstance(normalized.get("spec"), Mapping):
-        normalized["spec"] = normalize_metaui_spec(normalized["spec"])
+        normalized["spec"] = normalize_metaui_spec(
+            normalized["spec"],
+            strict_component_types=strict_component_types,
+        )
         return normalized
 
     if op == "append_component" and isinstance(normalized.get("component"), Mapping):
-        normalized["component"] = normalize_component(normalized["component"])
+        normalized["component"] = normalize_component(
+            normalized["component"],
+            strict_component_types=strict_component_types,
+        )
         return normalized
 
     if op == "update_component":
         component_patch = normalized.get("component")
         if isinstance(component_patch, Mapping):
-            component_payload = normalize_component(component_patch)
+            component_payload = normalize_component(
+                component_patch,
+                strict_component_types=strict_component_types,
+            )
             normalized.setdefault("id", component_payload.get("id"))
             merged_props = dict(component_payload.get("props") or {})
             if isinstance(normalized.get("props"), Mapping):
@@ -883,6 +913,10 @@ def normalize_metaui_patch(patch: Mapping[str, Any]) -> Dict[str, Any]:
         raw_type = normalized.get("type")
         if raw_type is not None:
             component_type, inferred_chart_type = _normalize_component_type(raw_type)
+            if strict_component_types and component_type not in UI_COMPONENT_TYPES:
+                raise ValueError(
+                    f"Unsupported component type: {component_type}. Allowed: {sorted(UI_COMPONENT_TYPES)}"
+                )
             normalized["type"] = component_type
             if component_type == "chart":
                 props = normalized.get("props") if isinstance(normalized.get("props"), Mapping) else {}
@@ -893,5 +927,8 @@ def normalize_metaui_patch(patch: Mapping[str, Any]) -> Dict[str, Any]:
         return normalized
 
     if "components" in normalized and isinstance(normalized.get("components"), list):
-        return normalize_metaui_spec(normalized)
+        return normalize_metaui_spec(
+            normalized,
+            strict_component_types=strict_component_types,
+        )
     return normalized

@@ -61,9 +61,11 @@ class MetaUIRuntimeSettings:
     upload_max_total_bytes: int = 24 * 1024 * 1024
     upload_max_files_per_event: int = 12
     hello_timeout_seconds: float = 2.0
+    start_timeout_seconds: float = 5.0
     send_timeout_seconds: float = 1.0
     wait_ack_seconds: float = 0.3
     event_history_limit: int = 4096
+    strict_component_types: bool = True
 
 
 @dataclass
@@ -104,9 +106,11 @@ class MetaUIOrchestrator:
         token: Optional[str] = None,
         auto_ui: bool = True,
         hello_timeout_seconds: float = 5.0,
+        start_timeout_seconds: float = 5.0,
         send_timeout_seconds: float = 2.5,
         wait_ack_seconds: float = 0.9,
         event_history_limit: int = 4096,
+        strict_component_types: bool = True,
         upload_store: Optional[UploadStore] = None,
     ) -> None:
         self.host = host
@@ -114,9 +118,11 @@ class MetaUIOrchestrator:
         self.token = (token or "").strip() or None
         self._auto_ui = bool(auto_ui)
         self.hello_timeout_seconds = max(0.5, float(hello_timeout_seconds))
+        self.start_timeout_seconds = max(0.2, float(start_timeout_seconds))
         self.send_timeout_seconds = max(0.2, float(send_timeout_seconds))
         self.wait_ack_seconds = max(0.0, float(wait_ack_seconds))
         self.event_history_limit = max(64, int(event_history_limit))
+        self.strict_component_types = bool(strict_component_types)
 
         self._server: Any = None
         self._endpoint: Optional[MetaUIEndpoint] = None
@@ -147,7 +153,15 @@ class MetaUIOrchestrator:
                 "MetaUI requires the `websockets` package. Install optional dependencies with `metaui` extra."
             )
 
-        self._server = await serve(self._handle_connection, self.host, self.port)
+        try:
+            self._server = await asyncio.wait_for(
+                serve(self._handle_connection, self.host, self.port),
+                timeout=self.start_timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError(
+                f"MetaUI orchestrator start timed out after {self.start_timeout_seconds:.2f}s."
+            ) from exc
         sockets = getattr(self._server, "sockets", None) or []
         if not sockets:
             raise RuntimeError("MetaUI server started without any bound socket.")
@@ -339,7 +353,12 @@ class MetaUIOrchestrator:
         validated = (
             spec
             if isinstance(spec, MetaUISpec)
-            else MetaUISpec.model_validate(normalize_metaui_spec(spec, strict_component_types=True))
+            else MetaUISpec.model_validate(
+                normalize_metaui_spec(
+                    spec,
+                    strict_component_types=self.strict_component_types,
+                )
+            )
         )
         if ui_id:
             validated.ui_id = ui_id
@@ -373,7 +392,10 @@ class MetaUIOrchestrator:
         patch: Dict[str, Any],
         session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        normalized_patch = normalize_metaui_patch(patch)
+        normalized_patch = normalize_metaui_patch(
+            patch,
+            strict_component_types=self.strict_component_types,
+        )
         async with self._state_lock:
             session = self._sessions.get(ui_id)
             if session is None:
@@ -403,16 +425,19 @@ class MetaUIOrchestrator:
         state: Dict[str, Any],
         session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        if not isinstance(state, Mapping):
+            return {"success": False, "error": "`state` must be a JSON object."}
+        state_patch = deepcopy(dict(state))
         async with self._state_lock:
             session = self._sessions.get(ui_id)
             if session is None:
                 return {"success": False, "error": f"unknown ui_id: {ui_id}"}
-            session.state = self._deep_merge_dicts(session.state, state)
+            session.state = self._deep_merge_dicts(session.state, state_patch)
             session.bump_version()
         return await self._broadcast_state_update(
             ui_id=ui_id,
             session_id=session_id,
-            state_patch=state,
+            state_patch=state_patch,
         )
 
     async def notify(
@@ -505,6 +530,9 @@ class MetaUIOrchestrator:
             await asyncio.wait_for(waiter.future, timeout=self.wait_ack_seconds)
         except asyncio.TimeoutError:
             pass
+        except asyncio.CancelledError:
+            # Gracefully degrade when waiter is cancelled by shutdown/race.
+            return self._ack_count(command_id)
         finally:
             async with self._state_lock:
                 self._ack_waiters.pop(command_id, None)
@@ -821,6 +849,19 @@ class MetaUIOrchestrator:
                     session.session_id,
                     exc,
                 )
+                await self._record_event(
+                    {
+                        "ui_id": session.ui_id,
+                        "session_id": session.session_id,
+                        "event_type": "error",
+                        "payload": {
+                            "code": "REPLAY_SEND_FAILED",
+                            "message": f"Replay failed for UI '{session.ui_id}': {exc}",
+                            "stage": "replay",
+                        },
+                        "metadata": {"source": "metaui_orchestrator"},
+                    }
+                )
                 return
 
     async def _record_ack(self, command_id: str) -> None:
@@ -1114,6 +1155,11 @@ def configure_metaui_runtime(config_dict: Dict[str, Any]) -> None:
             _RUNTIME_SETTINGS.hello_timeout_seconds,
             minimum=0.2,
         ),
+        start_timeout_seconds=_normalize_float(
+            block.get("start_timeout_seconds"),
+            _RUNTIME_SETTINGS.start_timeout_seconds,
+            minimum=0.2,
+        ),
         send_timeout_seconds=_normalize_float(
             block.get("send_timeout_seconds"),
             _RUNTIME_SETTINGS.send_timeout_seconds,
@@ -1128,6 +1174,9 @@ def configure_metaui_runtime(config_dict: Dict[str, Any]) -> None:
             block.get("event_history_limit"),
             _RUNTIME_SETTINGS.event_history_limit,
             minimum=64,
+        ),
+        strict_component_types=bool(
+            block.get("strict_component_types", _RUNTIME_SETTINGS.strict_component_types)
         ),
     )
 
@@ -1144,6 +1193,7 @@ def get_metaui_orchestrator(
     host: Optional[str] = None,
     port: Optional[int] = None,
     token: Optional[str] = None,
+    strict_component_types: Optional[bool] = None,
 ) -> MetaUIOrchestrator:
     global _ORCHESTRATOR
 
@@ -1151,6 +1201,7 @@ def get_metaui_orchestrator(
     resolved_host = host or settings.host
     resolved_port = settings.port if port is None else int(port)
     resolved_token = token if token is not None else settings.token
+    resolved_strict = settings.strict_component_types if strict_component_types is None else bool(strict_component_types)
 
     if _ORCHESTRATOR is None:
         upload_store = UploadStore(
@@ -1167,9 +1218,11 @@ def get_metaui_orchestrator(
             token=resolved_token,
             auto_ui=settings.auto_ui,
             hello_timeout_seconds=settings.hello_timeout_seconds,
+            start_timeout_seconds=settings.start_timeout_seconds,
             send_timeout_seconds=settings.send_timeout_seconds,
             wait_ack_seconds=settings.wait_ack_seconds,
             event_history_limit=settings.event_history_limit,
+            strict_component_types=resolved_strict,
             upload_store=upload_store,
         )
         return _ORCHESTRATOR
@@ -1178,9 +1231,15 @@ def get_metaui_orchestrator(
         _ORCHESTRATOR.host == resolved_host
         and _ORCHESTRATOR.port == resolved_port
         and _ORCHESTRATOR.token == ((resolved_token or "").strip() or None)
+        and _ORCHESTRATOR.strict_component_types == resolved_strict
     )
     if same_endpoint:
         return _ORCHESTRATOR
 
     _ORCHESTRATOR = None
-    return get_metaui_orchestrator(host=resolved_host, port=resolved_port, token=resolved_token)
+    return get_metaui_orchestrator(
+        host=resolved_host,
+        port=resolved_port,
+        token=resolved_token,
+        strict_component_types=resolved_strict,
+    )
