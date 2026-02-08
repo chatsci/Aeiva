@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 import re
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,9 @@ class _IntentProfile:
     wants_timeline: bool
     wants_calendar: bool
     wants_media: bool
+    wants_chat_clear_action: bool
+    wants_chat_help_action: bool
+    theme_mode: Optional[str]
     requested_order: tuple[str, ...]
     chart_values: tuple[float, ...]
 
@@ -56,16 +59,21 @@ def _is_ascii_token(token: str) -> bool:
 _INTENT_TOKENS: Dict[str, Set[str]] = {
     "chat": {
         "chat",
+        "chat window",
         "conversation",
         "dialog",
         "assistant",
         "message",
         "messaging",
+        "qq",
+        "im",
         "聊天",
+        "聊天窗口",
         "对话",
         "会话",
         "问答",
         "客服",
+        "即时通讯",
     },
     "upload": {
         "upload",
@@ -80,7 +88,7 @@ _INTENT_TOKENS: Dict[str, Set[str]] = {
         "上传文件",
         "拖拽上传",
     },
-    "table": {"table", "grid", "sheet", "rows", "表格", "清单"},
+    "table": {"table", "grid", "sheet", "rows", "表格", "清单", "数据表", "明细表"},
     "chart": {
         "chart",
         "plot",
@@ -96,7 +104,32 @@ _INTENT_TOKENS: Dict[str, Set[str]] = {
         "分析",
     },
     "line_chart": {"line", "trend", "timeseries", "折线"},
-    "form": {"form", "intake", "input", "collect", "填写", "收集", "表单"},
+    "form": {
+        "form",
+        "intake",
+        "input",
+        "collect",
+        "registration",
+        "onboarding",
+        "application form",
+        "questionnaire",
+        "填写",
+        "收集",
+        "表单",
+        "登记",
+        "登记表",
+        "申请",
+        "申请表",
+        "录入",
+        "问卷",
+        "填表",
+        "入职登记",
+        "员工入职",
+        "入职表",
+        "员工登记",
+        "信息采集",
+        "入职",
+    },
     "wizard": {"multi-step", "wizard", "step", "流程", "多步"},
     "progress": {"progress", "status", "pipeline", "进度", "状态"},
     "export": {"export", "download", "report", "导出", "下载", "报告"},
@@ -105,6 +138,20 @@ _INTENT_TOKENS: Dict[str, Set[str]] = {
     "timeline": {"timeline", "roadmap", "milestone", "时间线", "路线图", "里程碑"},
     "calendar": {"calendar", "schedule", "agenda", "日历", "排期", "日程"},
     "media": {"media", "audio", "video", "podcast", "music", "媒体", "音频", "视频", "音乐", "播放"},
+    "clear_action": {
+        "clear",
+        "clear message",
+        "clear chat",
+        "reset",
+        "wipe",
+        "清空",
+        "清空消息",
+        "清空聊天",
+        "重置",
+    },
+    "help_action": {"help", "usage", "guide", "说明", "帮助", "使用说明"},
+    "theme_dark": {"dark", "dark mode", "dark theme", "night", "深色", "暗色", "黑色"},
+    "theme_light": {"light", "light mode", "light theme", "day", "浅色", "亮色", "白色"},
 }
 
 _COMPONENT_HINT_KEYS: tuple[str, ...] = (
@@ -213,6 +260,22 @@ def _extract_chart_values(text: str) -> tuple[float, ...]:
     return ()
 
 
+def _detect_chat_actions(signal_text: str, *, wants_chat: bool) -> tuple[bool, bool]:
+    if not wants_chat:
+        return False, False
+    wants_clear = _token_hit(signal_text, _tokens("clear_action"))
+    wants_help = _token_hit(signal_text, _tokens("help_action"))
+    return wants_clear, wants_help
+
+
+def _detect_theme_mode(signal_text: str) -> Optional[str]:
+    if _token_hit(signal_text, _tokens("theme_dark")):
+        return "dark"
+    if _token_hit(signal_text, _tokens("theme_light")):
+        return "light"
+    return None
+
+
 def _analyze_intent(intent: str) -> _IntentProfile:
     text = (intent or "").strip().lower()
     focused = _extract_focus_text(text)
@@ -232,6 +295,9 @@ def _analyze_intent(intent: str) -> _IntentProfile:
             wants_timeline=False,
             wants_calendar=False,
             wants_media=False,
+            wants_chat_clear_action=False,
+            wants_chat_help_action=False,
+            theme_mode=None,
             requested_order=(),
             chart_values=(),
         )
@@ -250,6 +316,11 @@ def _analyze_intent(intent: str) -> _IntentProfile:
     wants_timeline = _token_hit(signal_text, _tokens("timeline"))
     wants_calendar = _token_hit(signal_text, _tokens("calendar"))
     wants_media = _token_hit(signal_text, _tokens("media"))
+    wants_chat_clear_action, wants_chat_help_action = _detect_chat_actions(
+        signal_text,
+        wants_chat=wants_chat,
+    )
+    theme_mode = _detect_theme_mode(signal_text)
 
     if (wants_upload and wants_chart) or (wants_dashboard and (wants_upload or wants_chart)):
         wants_table = True
@@ -282,6 +353,9 @@ def _analyze_intent(intent: str) -> _IntentProfile:
         wants_timeline=wants_timeline,
         wants_calendar=wants_calendar,
         wants_media=wants_media,
+        wants_chat_clear_action=wants_chat_clear_action,
+        wants_chat_help_action=wants_chat_help_action,
+        theme_mode=theme_mode,
         requested_order=_extract_requested_order(signal_text),
         chart_values=_extract_chart_values(signal_text),
     )
@@ -735,6 +809,10 @@ def _export_component() -> Dict[str, Any]:
 
 def _default_actions(profile: _IntentProfile) -> List[Dict[str, Any]]:
     actions: List[Dict[str, Any]] = []
+    if profile.wants_chat and profile.wants_chat_clear_action:
+        actions.append(_chat_toolbar_action(action_id="chat_clear", label="Clear Messages", action_name="clear_chat"))
+    if profile.wants_chat and profile.wants_chat_help_action:
+        actions.append(_chat_toolbar_action(action_id="chat_help", label="Usage", action_name="show_help"))
     if profile.wants_export:
         actions.append(
             {"id": "export_now", "label": "Export", "event_type": "action", "payload": {"action": "export"}}
@@ -748,6 +826,32 @@ def _default_actions(profile: _IntentProfile) -> List[Dict[str, Any]]:
             {"id": "today", "label": "Today", "event_type": "action", "payload": {"action": "today"}}
         )
     return actions
+
+
+def _chat_toolbar_action(*, action_id: str, label: str, action_name: str) -> Dict[str, Any]:
+    effects: List[Dict[str, Any]] = []
+    if action_name == "clear_chat":
+        effects.append({"op": "clear_chat", "component_id": "chat_main"})
+    elif action_name == "show_help":
+        effects.append(
+            {
+                "op": "append_chat_message",
+                "component_id": "chat_main",
+                "value": {
+                    "role": "assistant",
+                    "content": "Use the input box to send messages. Use Clear to reset the conversation.",
+                },
+            }
+        )
+    return {
+        "id": action_id,
+        "label": label,
+        "event_type": "action",
+        "emit_event": True,
+        "target_component_id": "chat_main",
+        "payload": {"action": action_name},
+        "effects": effects,
+    }
 
 
 def _default_state_bindings(profile: _IntentProfile) -> Dict[str, Dict[str, object]]:
@@ -933,6 +1037,7 @@ def build_intent_spec(intent: str, session_id: str | None) -> Dict[str, Any]:
         "session_id": session_id,
         "components": components,
         "root": root,
+        "theme": {"mode": profile.theme_mode} if profile.theme_mode else {},
         "actions": _default_actions(profile),
         "state_bindings": _default_state_bindings(profile),
     }

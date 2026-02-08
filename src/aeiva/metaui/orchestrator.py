@@ -9,10 +9,11 @@ from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Deque, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Deque, Dict, Mapping, Optional, Sequence
 from uuid import uuid4
 
 from .spec_normalizer import normalize_metaui_patch, normalize_metaui_spec
+from .update_strategy import apply_structural_patch_to_spec
 from .protocol import MetaUICommand, MetaUIEvent, MetaUISpec, new_command_id
 from .session import MetaUIPhase, MetaUISession
 from .upload_store import UploadStore, UploadStoreConfig
@@ -413,6 +414,17 @@ class MetaUIOrchestrator:
             session = self._sessions.get(ui_id)
             if session:
                 if result["success"]:
+                    try:
+                        patched_dict = apply_structural_patch_to_spec(
+                            session.spec.model_dump(mode="json"),
+                            normalized_patch,
+                        )
+                        session.spec = MetaUISpec.model_validate(patched_dict)
+                    except Exception as exc:
+                        logger.warning(
+                            "patch sync to session.spec failed (ui_id=%s): %s",
+                            ui_id, exc,
+                        )
                     session.update_phase(MetaUIPhase.INTERACTIVE)
                 else:
                     session.update_phase(MetaUIPhase.RECOVERING, error=result.get("error"))
@@ -475,15 +487,16 @@ class MetaUIOrchestrator:
             clients = list(self._clients.items())
 
         if not clients:
-            return {
-                "success": False,
-                "error": "no_connected_clients",
-                "command_id": command.command_id,
-                "ui_id": command.ui_id,
-                "ws_url": endpoint.ws_url,
-                "sent": 0,
-                "acks": 0,
-            }
+            return self._build_delivery_result(
+                command_id=command.command_id,
+                ui_id=command.ui_id,
+                session_id=command.session_id,
+                ws_url=endpoint.ws_url,
+                sent=0,
+                connected_clients=0,
+                ack_count=0,
+                expect_ack=expect_ack,
+            )
 
         sent = 0
         stale_clients: list[str] = []
@@ -503,17 +516,16 @@ class MetaUIOrchestrator:
                     self._client_ready.clear()
 
         ack_count = await self._await_ack(command_id=command.command_id, sent=sent, expect_ack=expect_ack)
-
-        return {
-            "success": sent > 0,
-            "command_id": command.command_id,
-            "ui_id": command.ui_id,
-            "session_id": command.session_id,
-            "ws_url": endpoint.ws_url,
-            "sent": sent,
-            "connected_clients": len(clients) - len(stale_clients),
-            "acks": ack_count,
-        }
+        return self._build_delivery_result(
+            command_id=command.command_id,
+            ui_id=command.ui_id,
+            session_id=command.session_id,
+            ws_url=endpoint.ws_url,
+            sent=sent,
+            connected_clients=len(clients) - len(stale_clients),
+            ack_count=ack_count,
+            expect_ack=expect_ack,
+        )
 
     async def _await_ack(self, *, command_id: str, sent: int, expect_ack: bool) -> int:
         ack_count = self._ack_count(command_id)
@@ -564,16 +576,16 @@ class MetaUIOrchestrator:
             clients = list(self._clients.items())
 
         if not clients:
-            return {
-                "success": False,
-                "error": "no_connected_clients",
-                "command_id": command_id,
-                "ui_id": ui_id,
-                "session_id": session_id,
-                "ws_url": endpoint.ws_url,
-                "sent": 0,
-                "acks": 0,
-            }
+            return self._build_delivery_result(
+                command_id=command_id,
+                ui_id=ui_id,
+                session_id=session_id,
+                ws_url=endpoint.ws_url,
+                sent=0,
+                connected_clients=0,
+                ack_count=0,
+                expect_ack=expect_ack,
+            )
 
         sent = 0
         stale_clients: list[str] = []
@@ -600,16 +612,48 @@ class MetaUIOrchestrator:
                     self._client_ready.clear()
 
         ack_count = await self._await_ack(command_id=command_id, sent=sent, expect_ack=expect_ack)
-        return {
-            "success": sent > 0,
+        return self._build_delivery_result(
+            command_id=command_id,
+            ui_id=ui_id,
+            session_id=session_id,
+            ws_url=endpoint.ws_url,
+            sent=sent,
+            connected_clients=len(clients) - len(stale_clients),
+            ack_count=ack_count,
+            expect_ack=expect_ack,
+        )
+
+    def _build_delivery_result(
+        self,
+        *,
+        command_id: str,
+        ui_id: Optional[str],
+        session_id: Optional[str],
+        ws_url: str,
+        sent: int,
+        connected_clients: int,
+        ack_count: int,
+        expect_ack: bool,
+    ) -> Dict[str, Any]:
+        ack_required = bool(expect_ack and sent > 0 and self.wait_ack_seconds > 0)
+        ack_satisfied = (not ack_required) or ack_count > 0
+        success = sent > 0 and ack_satisfied
+        result: Dict[str, Any] = {
+            "success": success,
             "command_id": command_id,
             "ui_id": ui_id,
             "session_id": session_id,
-            "ws_url": endpoint.ws_url,
+            "ws_url": ws_url,
             "sent": sent,
-            "connected_clients": len(clients) - len(stale_clients),
+            "connected_clients": connected_clients,
             "acks": ack_count,
+            "ack_required": ack_required,
         }
+        if sent <= 0:
+            result["error"] = "no_connected_clients"
+        elif ack_required and ack_count <= 0:
+            result["error"] = "ack_timeout"
+        return result
 
     def _build_render_payloads_for_client(
         self,
@@ -917,6 +961,8 @@ class MetaUIOrchestrator:
         except Exception:
             return
 
+        validation_component: Optional[Mapping[str, Any]] = None
+        validation_state: Dict[str, Any] = {}
         async with self._state_lock:
             if event.event_id in self._recent_event_id_set:
                 return
@@ -925,6 +971,16 @@ class MetaUIOrchestrator:
                 self._recent_event_id_set.discard(dropped)
             self._recent_event_ids.append(event.event_id)
             self._recent_event_id_set.add(event.event_id)
+            session_for_validation = self._sessions.get(event.ui_id)
+            if session_for_validation:
+                component = self._find_component_by_id(
+                    session_for_validation.spec,
+                    event.component_id or "",
+                )
+                if component is not None:
+                    validation_component = deepcopy(dict(component))
+                    if isinstance(session_for_validation.state, Mapping):
+                        validation_state = deepcopy(dict(session_for_validation.state))
 
         if event.event_type == "upload":
             session_id = event.session_id or "default"
@@ -937,16 +993,25 @@ class MetaUIOrchestrator:
             event.payload = dict(event.payload)
             event.payload["upload_result"] = upload_result
 
-        async with self._state_lock:
-            session = self._sessions.get(event.ui_id)
-            if session:
-                validation_errors = self._validate_event_checks(session=session, event=event)
-                if validation_errors:
-                    event.event_type = "error"
-                    event.payload = dict(event.payload)
-                    event.payload["code"] = "VALIDATION_FAILED"
-                    event.payload["validation_errors"] = validation_errors
+        validation_errors: list[str] = []
+        if validation_component is not None:
+            payload = event.payload if isinstance(event.payload, Mapping) else {}
+            validation_errors = self._validate_event_checks_for_component(
+                component=validation_component,
+                payload=payload,
+                state=validation_state,
+            )
 
+        async with self._state_lock:
+            if validation_errors:
+                event.event_type = "error"
+                event.payload = dict(event.payload)
+                event.payload["code"] = "VALIDATION_FAILED"
+                event.payload["validation_errors"] = validation_errors
+
+            session = self._sessions.get(event.ui_id)
+            if session and session.session_id and event.session_id and session.session_id != event.session_id:
+                session = None
             self._event_history.append(event)
             if session:
                 if event.event_type in {"submit", "action", "confirm", "retry"}:
@@ -1040,14 +1105,25 @@ class MetaUIOrchestrator:
         component = self._find_component_by_id(session.spec, event.component_id or "")
         if component is None:
             return []
+        payload = event.payload if isinstance(event.payload, Mapping) else {}
+        state = session.state if isinstance(session.state, Mapping) else {}
+        return self._validate_event_checks_for_component(
+            component=component,
+            payload=payload,
+            state=state,
+        )
 
+    def _validate_event_checks_for_component(
+        self,
+        *,
+        component: Mapping[str, Any],
+        payload: Mapping[str, Any],
+        state: Mapping[str, Any],
+    ) -> list[str]:
         component_type = str(component.get("type") or "")
         props = component.get("props")
         if not isinstance(props, Mapping):
             return []
-        payload = event.payload if isinstance(event.payload, Mapping) else {}
-        state = session.state if isinstance(session.state, Mapping) else {}
-
         if component_type in {"input", "textarea", "select", "radio_group", "checkbox", "slider"}:
             return self._validate_input_component_checks(
                 component_props=props,

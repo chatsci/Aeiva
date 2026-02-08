@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from copy import deepcopy
-from typing import Any, Dict, Mapping, Optional
-
-from .intent_spec import intent_has_component_signals
+from typing import Any, Dict, Mapping
 
 
 _STRUCTURAL_OPS = frozenset(
@@ -22,7 +20,8 @@ _STRUCTURAL_OPS = frozenset(
 class PatchRoutingDecision:
     route_to_render_full: bool
     reason: str
-    intent_text: Optional[str] = None
+    intent_text: str | None = None
+    theme_mode: str | None = None
 
 
 def _merge_dicts(base: Mapping[str, Any], incoming: Mapping[str, Any]) -> Dict[str, Any]:
@@ -90,49 +89,12 @@ def _patch_has_structural_payload(patch: Mapping[str, Any]) -> bool:
     return False
 
 
-def extract_structural_intent_text(patch: Mapping[str, Any]) -> Optional[str]:
-    candidates: list[str] = []
-
-    def _append(value: Any) -> None:
-        text = str(value or "").strip()
-        if text:
-            candidates.append(text)
-
-    def _append_text_fields(block: Any) -> None:
-        if not isinstance(block, Mapping):
-            return
-        for key in ("title", "text", "description", "label", "placeholder", "message", "prompt", "intent"):
-            _append(block.get(key))
-
-    _append_text_fields(patch)
-    _append_text_fields(patch.get("props"))
-    _append_text_fields(patch.get("component"))
-    component = patch.get("component")
-    if isinstance(component, Mapping):
-        _append_text_fields(component.get("props"))
-    if str(patch.get("op") or "").strip().lower() == "merge_spec":
-        _append_text_fields(patch.get("spec"))
-
-    for text in candidates:
-        if intent_has_component_signals(text):
-            return text
-    return None
-
-
 def decide_patch_routing(patch: Mapping[str, Any]) -> PatchRoutingDecision:
     if _patch_has_structural_payload(patch):
         return PatchRoutingDecision(
             route_to_render_full=True,
             reason="patch_contains_structural_payload",
             intent_text=None,
-        )
-
-    intent_text = extract_structural_intent_text(patch)
-    if intent_text:
-        return PatchRoutingDecision(
-            route_to_render_full=True,
-            reason="intent_signals_structure_switch",
-            intent_text=intent_text,
         )
 
     return PatchRoutingDecision(

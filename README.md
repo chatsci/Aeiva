@@ -26,16 +26,22 @@ It is intended for:
 ### 1) Install
 
 ```bash
-pip install -e .
+uv sync
 ```
 
-Optional extras:
+Install all optional capabilities (recommended for local development):
 
 ```bash
-pip install -e ".[realtime]"   # Realtime audio/text UI
-pip install -e ".[slack]"      # Slack gateway
-pip install -e ".[media]"      # Media utilities
-pip install -e ".[metaui]"     # Desktop MetaUI runtime
+uv sync --all-extras
+```
+
+Or install specific extras only:
+
+```bash
+uv sync --extra realtime   # Realtime audio/text UI
+uv sync --extra slack      # Slack gateway
+uv sync --extra media      # Media utilities
+uv sync --extra metaui     # Desktop MetaUI runtime
 ```
 
 ### 2) Configure
@@ -100,7 +106,12 @@ aeiva-metaui-desktop --ws-url ws://127.0.0.1:8765/metaui
 ```
 
 `metaui` is also available as a tool in `action_config.tools`.
-By default `aeiva-gateway` does not auto-start the desktop window. It is launched lazily when the assistant uses `metaui` and `ensure_visible=true`, or you can enable eager startup via `metaui_config.auto_start_desktop`.
+By default `aeiva-gateway` does not auto-start the desktop window. It is launched lazily when the assistant uses `metaui` with `ensure_visible=true`.
+
+MetaUI is renderer-only on the main path:
+- AI generates explicit UI spec (`components`, `root`, `actions`, `state_bindings`).
+- MetaUI validates, renders, and returns interaction/file events.
+- For deterministic behavior, use `metaui.catalog` + `metaui.render_full(spec=...)` + `metaui.patch/set_state`.
 
 ### 6) Channel Notes
 

@@ -21,6 +21,7 @@
         --shadow-soft: 0 10px 24px rgba(15, 23, 42, 0.08);
         --shadow-panel: 0 18px 44px rgba(15, 23, 42, 0.12);
         --danger: #b91c1c;
+        --warn: #d97706;
         --radius-md: 14px;
       }
       * { box-sizing: border-box; }
@@ -62,12 +63,12 @@
         letter-spacing: 0.01em;
       }
       #status {
-        color: #28585d;
+        color: var(--accent-strong);
         font-size: 11px;
         font-weight: 700;
         letter-spacing: 0.01em;
         background: var(--accent-soft);
-        border: 1px solid rgba(15, 118, 110, 0.26);
+        border: 1px solid var(--accent);
         border-radius: 999px;
         padding: 4px 9px;
       }
@@ -81,7 +82,7 @@
         width: 8px;
       }
       #content::-webkit-scrollbar-thumb {
-        background: #c7d4e3;
+        background: var(--border-strong);
         border-radius: 999px;
       }
       #content::-webkit-scrollbar-track {
@@ -98,15 +99,15 @@
       }
       .toast {
         border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.96);
+        background: var(--panel);
         padding: 9px 11px;
         border-radius: 10px;
         min-width: 220px;
         box-shadow: var(--shadow-soft);
         font-size: 12px;
       }
-      .toast.info { border-left: 4px solid #0f766e; }
-      .toast.warn { border-left: 4px solid #d97706; }
+      .toast.info { border-left: 4px solid var(--accent); }
+      .toast.warn { border-left: 4px solid var(--warn); }
       .toast.error { border-left: 4px solid var(--danger); }
 
       .component {
@@ -115,7 +116,7 @@
       .component.card {
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
-        background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+        background: var(--panel);
         box-shadow: var(--shadow-soft);
         padding: 12px;
         transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
@@ -123,7 +124,7 @@
       .component.card:hover {
         border-color: var(--border-strong);
         transform: translateY(-1px);
-        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.09);
+        box-shadow: var(--shadow-soft);
       }
       .component-title {
         font-weight: 750;
@@ -152,14 +153,14 @@
       .chat-panel {
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: #fff;
+        background: var(--panel);
         overflow: hidden;
       }
       .chat-stream {
         max-height: 360px;
         overflow: auto;
         padding: 10px;
-        background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+        background: var(--panel);
       }
       .chat-row {
         display: flex;
@@ -185,7 +186,7 @@
         border-color: rgba(15, 118, 110, 0.25);
       }
       .chat-row.assistant .chat-bubble {
-        background: #fff;
+        background: var(--panel);
       }
       .chat-role {
         font-size: 11px;
@@ -197,7 +198,7 @@
         gap: 8px;
         padding: 10px;
         border-top: 1px solid var(--border);
-        background: #fcfeff;
+        background: var(--panel);
       }
       .chat-input-row input[type="text"] {
         flex: 1;
@@ -208,7 +209,7 @@
         border-radius: 10px;
         overflow: hidden;
         font-size: 12px;
-        background: #fff;
+        background: var(--panel);
       }
       th, td {
         border: 1px solid var(--border);
@@ -216,17 +217,17 @@
         text-align: left;
       }
       th {
-        background: #eef4fb;
+        background: var(--accent-soft);
         font-weight: 650;
         position: sticky;
         top: 0;
         z-index: 1;
       }
       tbody tr:nth-child(even) {
-        background: #fafcff;
+        background: var(--bg-bottom);
       }
       tbody tr:hover {
-        background: #f2f7fc;
+        background: var(--accent-soft);
       }
       input, select, textarea, button {
         font: inherit;
@@ -236,11 +237,12 @@
         border: 1px solid var(--border);
         border-radius: 10px;
         padding: 8px 9px;
-        background: #fff;
+        background: var(--panel);
+        color: var(--text);
       }
       input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus, textarea:focus {
         outline: none;
-        border-color: rgba(15, 118, 110, 0.45);
+        border-color: var(--accent);
         box-shadow: 0 0 0 3px var(--focus-ring);
       }
       .field {
@@ -255,26 +257,26 @@
       button {
         border: 1px solid var(--border);
         border-radius: 10px;
-        background: #fff;
+        background: var(--panel);
         padding: 7px 11px;
         cursor: pointer;
         transition: all 130ms ease;
         box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
       }
       button.primary {
-        background: linear-gradient(180deg, #13887f 0%, var(--accent) 100%);
-        color: #fff;
+        background: var(--accent);
+        color: #ffffff;
         border-color: var(--accent);
       }
       button.primary:hover {
-        background: linear-gradient(180deg, #12786f 0%, var(--accent-strong) 100%);
+        background: var(--accent-strong);
       }
       button.secondary {
-        background: #fff;
+        background: var(--panel);
       }
       button.secondary:hover {
-        border-color: #c5d2df;
-        background: #f7fafc;
+        border-color: var(--border-strong);
+        background: var(--bg-bottom);
       }
       button:active {
         transform: translateY(1px);
@@ -295,12 +297,12 @@
         width: 100%;
         height: 10px;
         border-radius: 999px;
-        background: #e4edf6;
+        background: var(--border);
         overflow: hidden;
       }
       .progress-bar {
         height: 100%;
-        background: linear-gradient(90deg, #0f766e 0%, #14b8a6 100%);
+        background: linear-gradient(90deg, var(--accent) 0%, var(--accent-strong) 100%);
       }
       .small {
         font-size: 12px;
@@ -312,7 +314,7 @@
         height: 260px;
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+        background: var(--panel);
       }
       .action-bar {
         margin-top: 8px;
@@ -320,15 +322,15 @@
         border-top: 1px solid var(--border);
         position: sticky;
         bottom: 0;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0), #f9fcff 42%);
+        background: var(--panel);
       }
       .error {
         color: var(--danger);
       }
       .fallback {
-        border: 1px dashed #d7e1ea;
+        border: 1px dashed var(--border-strong);
         border-radius: 10px;
-        background: #f8fbfd;
+        background: var(--panel);
         padding: 10px;
       }
       .fallback pre {
@@ -363,6 +365,7 @@
         ws: null,
         spec: null,
         componentById: {},
+        actionById: {},
         state: {},
         surfaceStore: {},
         dataModelStore: {},
@@ -455,7 +458,48 @@
           .replace(/^_+|_+$/g, "");
       }
 
+      const THEME_PRESETS = Object.freeze({
+        light: Object.freeze({
+          color_bg_top: "#f4f8ff",
+          color_bg_bottom: "#edf2f8",
+          color_surface: "#ffffff",
+          color_text: "#0f172a",
+          color_muted: "#64748b",
+          color_border: "#d6dde8",
+          color_border_strong: "#c2cedd",
+          color_primary: "#0f766e",
+          color_primary_hover: "#0b5f59",
+          color_primary_soft: "#dff6f4",
+          color_warn: "#d97706",
+          color_focus_ring: "rgba(15, 118, 110, 0.25)",
+        }),
+        dark: Object.freeze({
+          color_bg_top: "#0f172a",
+          color_bg_bottom: "#111827",
+          color_surface: "#1f2937",
+          color_text: "#e5e7eb",
+          color_muted: "#9ca3af",
+          color_border: "#334155",
+          color_border_strong: "#475569",
+          color_primary: "#22d3ee",
+          color_primary_hover: "#06b6d4",
+          color_primary_soft: "#164e63",
+          color_warn: "#f59e0b",
+          color_focus_ring: "rgba(34, 211, 238, 0.35)",
+        }),
+      });
+
+      function themePresetFor(value) {
+        const token = normalizeToken(value);
+        if (token === "dark" || token === "night") return mergeObjects({}, THEME_PRESETS.dark);
+        if (token === "light" || token === "day") return mergeObjects({}, THEME_PRESETS.light);
+        return {};
+      }
+
       function normalizeTheme(theme) {
+        if (typeof theme === "string") {
+          return themePresetFor(theme);
+        }
         if (!theme || typeof theme !== "object") return {};
         const aliases = {
           primary: "color_primary",
@@ -466,12 +510,16 @@
           bg_top: "color_bg_top",
           bg_bottom: "color_bg_bottom",
           border: "color_border",
+          warn: "color_warn",
+          panel_border: "color_panel_border",
           radius: "radius_md",
         };
-        const out = {};
+        const mode = theme.mode ?? theme.scheme ?? theme.appearance;
+        const out = themePresetFor(mode);
         for (const [rawKey, rawValue] of Object.entries(theme)) {
           const token = aliases[normalizeToken(rawKey)] || normalizeToken(rawKey);
           if (!token) continue;
+          if (token === "mode" || token === "scheme" || token === "appearance") continue;
           if (rawValue === null || rawValue === undefined) continue;
           if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
             out[token] = rawValue;
@@ -498,6 +546,8 @@
           shadow_soft: "--shadow-soft",
           shadow_panel: "--shadow-panel",
           color_danger: "--danger",
+          color_warn: "--warn",
+          color_panel_border: "--panel-border",
           radius_md: "--radius-md",
         };
         const normalized = normalizeTheme(theme);
@@ -762,6 +812,36 @@
         return out;
       }
 
+      function normalizeComponentRef(value) {
+        if (value === undefined || value === null) return null;
+        if (typeof value === "object") return null;
+        const token = String(value).trim();
+        return token || null;
+      }
+
+      function normalizeComponentRefList(values) {
+        if (!Array.isArray(values)) return [];
+        const out = [];
+        for (const item of values) {
+          const ref = normalizeComponentRef(item);
+          if (ref) out.push(ref);
+        }
+        return out;
+      }
+
+      function normalizeContainerProps(props) {
+        const out = mergeObjects({}, props || {});
+        const direction = normalizeToken(out.direction || "column");
+        out.direction = direction === "row" ? "row" : "column";
+        out.children = normalizeComponentRefList(out.children);
+        if (out.title !== undefined && out.title !== null) out.title = String(out.title);
+        if (out.justify !== undefined && out.justify !== null) out.justify = String(out.justify);
+        if (out.align !== undefined && out.align !== null) out.align = String(out.align);
+        if (out.card !== undefined) out.card = Boolean(out.card);
+        if (out.modal !== undefined) out.modal = Boolean(out.modal);
+        return out;
+      }
+
       function normalizeTabsProps(props) {
         const out = mergeObjects({}, props || {});
         const tabs = [];
@@ -770,7 +850,7 @@
           const id = String(item.id || "").trim();
           if (!id) continue;
           const label = String(item.label || id);
-          const children = Array.isArray(item.children) ? item.children.map((child) => String(child)) : [];
+          const children = normalizeComponentRefList(item.children);
           tabs.push({ id, label, children });
         }
         out.tabs = tabs;
@@ -787,7 +867,7 @@
           const id = String(item.id || "").trim();
           if (!id) continue;
           const title = String(item.title || id);
-          const children = Array.isArray(item.children) ? item.children.map((child) => String(child)) : [];
+          const children = normalizeComponentRefList(item.children);
           sections.push({ id, title, children });
         }
         out.sections = sections;
@@ -844,25 +924,25 @@
         if (token === "row") {
           normalized.props.direction = "row";
           if (!Array.isArray(normalized.props.children)) {
-            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+            normalized.props.children = normalized.props.child ? [normalized.props.child] : [];
           }
         } else if (token === "column") {
           normalized.props.direction = "column";
           if (!Array.isArray(normalized.props.children)) {
-            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+            normalized.props.children = normalized.props.child ? [normalized.props.child] : [];
           }
         } else if (token === "card") {
           normalized.props.direction = "column";
           normalized.props.card = true;
           if (!Array.isArray(normalized.props.children)) {
-            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+            normalized.props.children = normalized.props.child ? [normalized.props.child] : [];
           }
         } else if (token === "modal") {
           normalized.props.direction = "column";
           normalized.props.card = true;
           normalized.props.modal = true;
           if (!Array.isArray(normalized.props.children)) {
-            normalized.props.children = normalized.props.child ? [String(normalized.props.child)] : [];
+            normalized.props.children = normalized.props.child ? [normalized.props.child] : [];
           }
         } else if (["textfield", "text_field"].includes(token)) {
           normalized.type = "input";
@@ -908,6 +988,8 @@
           normalized.props = normalizeTableProps(normalized.props);
         } else if (normalized.type === "chat_panel") {
           normalized.props = normalizeChatProps(normalized.props);
+        } else if (normalized.type === "container") {
+          normalized.props = normalizeContainerProps(normalized.props);
         } else if (normalized.type === "tabs") {
           normalized.props = normalizeTabsProps(normalized.props);
         } else if (normalized.type === "accordion") {
@@ -1001,7 +1083,7 @@
         const next = mergeObjects({}, spec || {});
         next.components = (next.components || []).map((item) => normalizeComponent(item));
         if (!bindings || typeof bindings !== "object") {
-          return applyImplicitBindings(next, state || {});
+          return next;
         }
         const index = {};
         for (const component of next.components) {
@@ -1020,98 +1102,6 @@
           index[componentId] = normalizeComponent(target);
         }
         next.components = Object.values(index);
-        return applyImplicitBindings(next, state || {});
-      }
-
-      function firstComponentByType(spec, type) {
-        if (!spec || !Array.isArray(spec.components)) return null;
-        for (const component of spec.components) {
-          if (component && component.type === type) return component;
-        }
-        return null;
-      }
-
-      function applyImplicitBindings(spec, state) {
-        const next = mergeObjects({}, spec || {});
-        next.components = (next.components || []).map((item) => normalizeComponent(item));
-        if (!state || typeof state !== "object") return next;
-
-        const chartState = state.currentChart || state.chart || state.chartData || null;
-        const chartComponent = firstComponentByType(next, "chart");
-        if (chartComponent && chartState && typeof chartState === "object") {
-          const chartPatch = {};
-          if (chartState.chart_type !== undefined || chartState.type !== undefined || chartState.kind !== undefined) {
-            chartPatch.chart_type = chartState.chart_type ?? chartState.type ?? chartState.kind;
-          }
-          if (chartState.labels !== undefined || chartState.x !== undefined) {
-            chartPatch.labels = chartState.labels ?? chartState.x;
-          }
-          if (chartState.values !== undefined || chartState.y !== undefined || chartState.data !== undefined) {
-            chartPatch.values = chartState.values ?? chartState.y ?? chartState.data;
-          }
-          chartComponent.props = normalizeChartProps(
-            mergeObjects(chartComponent.props || {}, chartPatch),
-            null,
-          );
-        }
-
-        const tableState = state.currentTable || state.table || state.dataset || null;
-        const tableComponent = firstComponentByType(next, "data_table");
-        if (tableComponent) {
-          let tablePatch = null;
-          if (Array.isArray(tableState)) {
-            tablePatch = { rows: tableState };
-          } else if (tableState && typeof tableState === "object") {
-            tablePatch = {
-              rows: tableState.rows ?? tableState.data,
-              columns: tableState.columns,
-            };
-          }
-          if (tablePatch) {
-            tableComponent.props = normalizeTableProps(
-              mergeObjects(tableComponent.props || {}, tablePatch),
-            );
-          }
-        }
-
-        const chatState = state.currentChat || state.chat || state.conversation || null;
-        const chatComponent = firstComponentByType(next, "chat_panel");
-        if (chatComponent) {
-          let chatPatch = null;
-          if (Array.isArray(chatState)) {
-            chatPatch = { messages: chatState };
-          } else if (chatState && typeof chatState === "object") {
-            chatPatch = {
-              messages: chatState.messages,
-              placeholder: chatState.placeholder,
-              send_label: chatState.send_label,
-              empty_text: chatState.empty_text,
-            };
-          }
-          if (chatPatch) {
-            chatComponent.props = normalizeChatProps(
-              mergeObjects(chatComponent.props || {}, chatPatch),
-            );
-          }
-        }
-
-        const progressState = state.currentProgress || state.progress || null;
-        const progressComponent = firstComponentByType(next, "progress_panel");
-        if (progressComponent) {
-          const items = Array.isArray(progressState)
-            ? progressState
-            : (progressState && Array.isArray(progressState.items) ? progressState.items : null);
-          if (items) {
-            progressComponent.props = mergeObjects(progressComponent.props || {}, { items });
-          }
-        }
-
-        const exportState = state.currentResult || state.result || null;
-        const exportComponent = firstComponentByType(next, "result_export");
-        if (exportComponent && exportState !== null && exportState !== undefined) {
-          exportComponent.props = mergeObjects(exportComponent.props || {}, { data: exportState });
-        }
-
         return next;
       }
 
@@ -1149,6 +1139,7 @@
 
       function emitEvent(eventType, componentId, payload) {
         if (!appState.ws || appState.ws.readyState !== WebSocket.OPEN || !appState.spec) {
+          showToast("Connection lost. Reconnecting...", "warning");
           return;
         }
         const msg = {
@@ -1169,6 +1160,261 @@
         appState.ws.send(JSON.stringify(msg));
       }
 
+      function normalizeEventName(value, fallback) {
+        const text = String(value || "").trim();
+        if (text) return text;
+        const fallbackText = String(fallback || "").trim();
+        return fallbackText || "action";
+      }
+
+      function normalizeOnEventKey(rawKey) {
+        const token = normalizeToken(rawKey);
+        if (!token) return "";
+        if (token === "*") return "*";
+        if (token.startsWith("on_")) return token.slice(3);
+        if (token.startsWith("on") && token.length > 2) {
+          return token.slice(2).replace(/^_+/, "");
+        }
+        return token;
+      }
+
+      function eventAliasTokens(eventType, componentType) {
+        const aliases = [];
+        const normalized = normalizeToken(eventType);
+        if (normalized) aliases.push(normalized);
+        if (normalized === "click") aliases.push("action");
+        if (normalized === "action") aliases.push("click");
+        if (String(componentType || "") === "button") {
+          if (!aliases.includes("click")) aliases.push("click");
+          if (!aliases.includes("action")) aliases.push("action");
+        }
+        return Array.from(new Set(aliases));
+      }
+
+      function isObjectRecord(value) {
+        return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+      }
+
+      function normalizeEventConfigBlock(raw) {
+        if (typeof raw === "string") {
+          const action = raw.trim();
+          return action ? { action } : {};
+        }
+        if (Array.isArray(raw)) {
+          const steps = raw.filter((item) => item && typeof item === "object");
+          return steps.length ? { steps } : {};
+        }
+        if (!isObjectRecord(raw)) return {};
+        const out = {};
+        const actionRaw = raw.action ?? raw.action_id ?? raw.handler ?? raw.command;
+        if (actionRaw !== undefined && actionRaw !== null) {
+          const action = String(actionRaw).trim();
+          if (action) out.action = action;
+        }
+        if (raw.event_type !== undefined) {
+          out.event_type = normalizeEventName(raw.event_type, "");
+        }
+        const steps = Array.isArray(raw.steps)
+          ? raw.steps.filter((item) => item && typeof item === "object")
+          : Array.isArray(raw.actions)
+          ? raw.actions.filter((item) => item && typeof item === "object")
+          : [];
+        if (steps.length) out.steps = steps;
+        if (raw.emit_event !== undefined) {
+          if (typeof raw.emit_event === "boolean") {
+            out.emit_event = raw.emit_event;
+          } else if (typeof raw.emit_event === "string" && raw.emit_event.trim()) {
+            out.emit_event = true;
+            if (!out.event_type) out.event_type = raw.emit_event.trim();
+          } else if (Array.isArray(raw.emit_event)) {
+            const first = raw.emit_event
+              .map((item) => String(item || "").trim())
+              .find((item) => item);
+            if (first) {
+              out.emit_event = true;
+              if (!out.event_type) out.event_type = first;
+            }
+          } else {
+            out.emit_event = Boolean(raw.emit_event);
+          }
+        }
+        if (raw.target_component_id !== undefined && raw.target_component_id !== null) {
+          out.target_component_id = String(raw.target_component_id);
+        }
+        if (isObjectRecord(raw.payload)) {
+          out.payload = mergeObjects({}, raw.payload);
+        }
+        if (raw.effects !== undefined) {
+          out.effects = raw.effects;
+        }
+        return out;
+      }
+
+      function resolveEventConfig(component, eventType) {
+        const config = {};
+        const props = isObjectRecord(component && component.props) ? component.props : {};
+        if (!isObjectRecord(props)) return config;
+        const aliases = eventAliasTokens(eventType, component && component.type);
+
+        const events = props.events;
+        if (isObjectRecord(events)) {
+          Object.assign(config, normalizeEventConfigBlock(events["*"]));
+          for (const alias of aliases) {
+            Object.assign(config, normalizeEventConfigBlock(events[alias]));
+            Object.assign(config, normalizeEventConfigBlock(events["on_" + alias]));
+          }
+          for (const [rawKey, rawValue] of Object.entries(events)) {
+            const normalizedKey = normalizeOnEventKey(rawKey);
+            if (!normalizedKey || normalizedKey === "*" || !aliases.includes(normalizedKey)) continue;
+            Object.assign(config, normalizeEventConfigBlock(rawValue));
+          }
+        }
+
+        for (const alias of aliases) {
+          Object.assign(config, normalizeEventConfigBlock(props["on_" + alias]));
+        }
+        for (const [rawKey, rawValue] of Object.entries(props)) {
+          const normalizedKey = normalizeOnEventKey(rawKey);
+          if (!normalizedKey || !aliases.includes(normalizedKey)) continue;
+          Object.assign(config, normalizeEventConfigBlock(rawValue));
+        }
+
+        if (config.event_type === undefined && props.event_type !== undefined) {
+          config.event_type = normalizeEventName(props.event_type, eventType);
+        }
+        if (config.emit_event === undefined && props.emit_event !== undefined) {
+          config.emit_event = Boolean(props.emit_event);
+        }
+        if (config.target_component_id === undefined && props.target_component_id !== undefined && props.target_component_id !== null) {
+          config.target_component_id = String(props.target_component_id);
+        }
+        if (config.payload === undefined && isObjectRecord(props.payload)) {
+          config.payload = mergeObjects({}, props.payload);
+        } else if (
+          config.payload === undefined &&
+          (props.action !== undefined || props.command !== undefined || props.local_action !== undefined)
+        ) {
+          const actionValue = props.action !== undefined
+            ? props.action
+            : props.command !== undefined
+            ? props.command
+            : props.local_action;
+          config.payload = { action: actionValue };
+        }
+        if (config.effects === undefined && props.effects !== undefined) {
+          config.effects = props.effects;
+        }
+        if (config.action === undefined && props.action !== undefined && props.action !== null) {
+          const action = String(props.action).trim();
+          if (action) config.action = action;
+        }
+        return config;
+      }
+
+      function sendEvent(eventType, componentId, payload) {
+        emitEvent(eventType, componentId, payload);
+      }
+
+      function resolveChatComponentId(preferredId) {
+        const preferred = String(preferredId || "").trim();
+        if (!preferred) return null;
+        const component = getComponent(preferred);
+        if (component && component.type === "chat_panel") {
+          return preferred;
+        }
+        return null;
+      }
+
+      function resolveInlineStatePath(binding) {
+        if (!binding || typeof binding !== "object" || Array.isArray(binding)) return "";
+        let path = "";
+        if (typeof binding.$state === "string") path = binding.$state;
+        else if (typeof binding.$ref === "string") path = binding.$ref;
+        else if (typeof binding.path === "string") path = binding.path;
+        path = String(path || "").trim();
+        if (!path) return "";
+        if (path.startsWith("$state.")) path = path.slice(7);
+        if (path.startsWith("state.")) path = path.slice(6);
+        if (path.startsWith("/")) path = path.slice(1).replaceAll("/", ".");
+        return path;
+      }
+
+      function getStateValueAtPath(path) {
+        const key = String(path || "").trim();
+        if (!key) return appState.state;
+        const parts = key.split(".").filter(Boolean);
+        let cursor = appState.state;
+        for (const part of parts) {
+          if (!cursor || typeof cursor !== "object" || !(part in cursor)) return undefined;
+          cursor = cursor[part];
+        }
+        return cursor;
+      }
+
+      function setStateValueAtPath(path, value, operation) {
+        const key = String(path || "").trim();
+        const op = normalizeToken(operation || "set");
+        if (!key) {
+          if ((op === "merge" || op === "merge_state") && value && typeof value === "object" && !Array.isArray(value)) {
+            appState.state = mergeObjects(appState.state || {}, value);
+          } else {
+            appState.state = value;
+          }
+          return;
+        }
+
+        const parts = key.split(".").filter(Boolean);
+        const nextState = mergeObjects({}, appState.state || {});
+        let cursor = nextState;
+        for (let i = 0; i < parts.length - 1; i += 1) {
+          const part = parts[i];
+          const existing = cursor[part];
+          if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+            cursor[part] = {};
+          } else {
+            cursor[part] = mergeObjects({}, existing);
+          }
+          cursor = cursor[part];
+        }
+        const leaf = parts[parts.length - 1];
+        const current = cursor[leaf];
+        if (op === "append") {
+          const arr = Array.isArray(current) ? current.slice() : [];
+          arr.push(value);
+          cursor[leaf] = arr;
+        } else if (op === "prepend") {
+          const arr = Array.isArray(current) ? current.slice() : [];
+          arr.unshift(value);
+          cursor[leaf] = arr;
+        } else if (op === "merge" || op === "merge_state") {
+          if (current && typeof current === "object" && !Array.isArray(current) && value && typeof value === "object" && !Array.isArray(value)) {
+            cursor[leaf] = mergeObjects(current, value);
+          } else {
+            cursor[leaf] = value;
+          }
+        } else if (op === "delete" || op === "remove") {
+          delete cursor[leaf];
+        } else {
+          cursor[leaf] = value;
+        }
+        appState.state = nextState;
+      }
+
+      function updateSpecComponent(componentId, updater) {
+        if (!appState.spec || !Array.isArray(appState.spec.components)) return null;
+        let updated = null;
+        const nextComponents = appState.spec.components.map((raw) => {
+          if (!raw || typeof raw !== "object") return raw;
+          if (String(raw.id || "") !== String(componentId || "")) return raw;
+          const next = updater(mergeObjects({}, raw));
+          const normalized = normalizeComponent(next || raw);
+          updated = normalized;
+          return normalized;
+        });
+        appState.spec.components = nextComponents;
+        return updated;
+      }
+
       function appendChatMessage(componentId, message) {
         if (!componentId || !message || !appState.spec) return;
         const component = getComponent(componentId);
@@ -1179,19 +1425,400 @@
         const content = String((message && (message.content ?? message.text)) || "").trim();
         if (!content) return;
 
-        const props = mergeObjects({}, component.props || {});
-        const existing = Array.isArray(props.messages) ? props.messages.slice() : [];
-        existing.push({ role, content });
-        props.messages = existing;
-        component.props = normalizeChatProps(props);
-        appState.componentById[componentId] = component;
-
-        appState.state = mergeObjects(appState.state || {}, {
-          currentChat: mergeObjects((appState.state || {}).currentChat || {}, {
-            messages: existing,
-          }),
-        });
+        const statePath = resolveInlineStatePath(component.props && component.props.messages);
+        if (statePath) {
+          setStateValueAtPath(statePath, { role, content }, "append");
+        } else {
+          updateSpecComponent(componentId, (raw) => {
+            const props = mergeObjects({}, raw.props || {});
+            const existing = Array.isArray(props.messages) ? props.messages.slice() : [];
+            existing.push({ role, content });
+            props.messages = existing;
+            raw.props = normalizeChatProps(props);
+            return raw;
+          });
+        }
         renderSpec(appState.spec);
+      }
+
+      function clearChatMessages(componentId) {
+        if (!componentId || !appState.spec) return;
+        const component = getComponent(componentId);
+        if (!component || component.type !== "chat_panel") return;
+        const statePath = resolveInlineStatePath(component.props && component.props.messages);
+        if (statePath) {
+          setStateValueAtPath(statePath, [], "set");
+        } else {
+          updateSpecComponent(componentId, (raw) => {
+            const props = mergeObjects({}, raw.props || {});
+            props.messages = [];
+            raw.props = normalizeChatProps(props);
+            return raw;
+          });
+        }
+        renderSpec(appState.spec);
+      }
+
+      function toEffectList(effects) {
+        if (Array.isArray(effects)) {
+          return effects.filter((item) => item && typeof item === "object");
+        }
+        if (effects && typeof effects === "object") {
+          return [effects];
+        }
+        return [];
+      }
+
+      function collectExplicitEffects(config, options) {
+        const out = [];
+        if (config && config.effects !== undefined) {
+          out.push(...toEffectList(config.effects));
+        }
+        if (options && options.effects !== undefined) {
+          out.push(...toEffectList(options.effects));
+        }
+        return out;
+      }
+
+      function resolvePathFromObject(source, path) {
+        if (!source || typeof source !== "object") return undefined;
+        const key = String(path || "").trim();
+        if (!key) return undefined;
+        const parts = key.split(".").filter(Boolean);
+        let cursor = source;
+        for (const part of parts) {
+          if (!cursor || typeof cursor !== "object" || !(part in cursor)) {
+            return undefined;
+          }
+          cursor = cursor[part];
+        }
+        return cursor;
+      }
+
+      function resolveTemplateToken(path, context) {
+        const key = String(path || "").trim();
+        if (!key) return undefined;
+        if (key.startsWith("state.")) {
+          return resolvePathFromObject(context.state || {}, key.slice(6));
+        }
+        if (key.startsWith("payload.")) {
+          return resolvePathFromObject(context.payload || {}, key.slice(8));
+        }
+        if (key.startsWith("event.")) {
+          return resolvePathFromObject(context.event || {}, key.slice(6));
+        }
+        const direct = resolvePathFromObject(context, key);
+        if (direct !== undefined) return direct;
+        const payloadValue = resolvePathFromObject(context.payload || {}, key);
+        if (payloadValue !== undefined) return payloadValue;
+        return resolvePathFromObject(context.state || {}, key);
+      }
+
+      function resolveTemplateValue(value, context) {
+        if (typeof value === "string") {
+          const exact = value.match(/^\s*(?:\$\{([^}]+)\}|\{\{([^}]+)\}\})\s*$/);
+          if (exact) {
+            const token = (exact[1] || exact[2] || "").trim();
+            const resolved = resolveTemplateToken(token, context);
+            return resolved === undefined ? value : resolved;
+          }
+          return value.replace(/\$\{([^}]+)\}|\{\{([^}]+)\}\}/g, (_match, p1, p2) => {
+            const token = String(p1 || p2 || "").trim();
+            const resolved = resolveTemplateToken(token, context);
+            if (resolved === undefined || resolved === null) return "";
+            if (typeof resolved === "object") return JSON.stringify(resolved);
+            return String(resolved);
+          });
+        }
+        if (Array.isArray(value)) {
+          return value.map((item) => resolveTemplateValue(item, context));
+        }
+        if (value && typeof value === "object") {
+          const out = {};
+          for (const [key, item] of Object.entries(value)) {
+            out[key] = resolveTemplateValue(item, context);
+          }
+          return out;
+        }
+        return value;
+      }
+
+      function readActionArgument(step, key) {
+        if (!step || typeof step !== "object") return undefined;
+        if (step[key] !== undefined) return step[key];
+        if (step.params && typeof step.params === "object" && step.params[key] !== undefined) {
+          return step.params[key];
+        }
+        return undefined;
+      }
+
+      function normalizeActionRegistry(rawActions) {
+        const byId = {};
+        if (Array.isArray(rawActions)) {
+          for (const action of rawActions) {
+            if (!action || typeof action !== "object") continue;
+            const id = String(action.id || action.name || "").trim();
+            if (!id) continue;
+            byId[id] = mergeObjects({}, action);
+          }
+          return byId;
+        }
+        if (!rawActions || typeof rawActions !== "object") return byId;
+        for (const [rawId, rawAction] of Object.entries(rawActions)) {
+          const id = String(rawId || "").trim();
+          if (!id || !rawAction || typeof rawAction !== "object") continue;
+          const action = mergeObjects({}, rawAction);
+          if (!action.id) action.id = id;
+          byId[id] = action;
+        }
+        return byId;
+      }
+
+      function actionDefinitionSteps(action) {
+        if (Array.isArray(action)) {
+          return action.filter((item) => item && typeof item === "object");
+        }
+        if (!action || typeof action !== "object") return [];
+        if (Array.isArray(action.steps)) {
+          return action.steps.filter((item) => item && typeof item === "object");
+        }
+        const token = normalizeToken(action.type || action.op || action.action || "");
+        if (token === "sequence" && Array.isArray(action.steps)) {
+          return action.steps.filter((item) => item && typeof item === "object");
+        }
+        return [action];
+      }
+
+      function executeNamedAction(actionId, context, depth) {
+        const level = Number(depth || 0);
+        if (level > 6) return false;
+        const name = String(actionId || "").trim();
+        if (!name) return false;
+        const action = appState.actionById[name];
+        if (!action) return false;
+        const steps = actionDefinitionSteps(action);
+        if (!steps.length) return false;
+        executeActionSteps(steps, context, level + 1);
+        return true;
+      }
+
+      function executeActionStep(step, context, depth) {
+        if (!step || typeof step !== "object") return;
+        const token = normalizeToken(step.type || step.op || step.action || step.kind || "");
+        if (!token) return;
+
+        if (token === "sequence") {
+          executeActionSteps(actionDefinitionSteps(step), context, depth);
+          return;
+        }
+
+        if (token === "set_state" || token === "merge_state" || token === "append_state" || token === "mutate") {
+          const path = String(
+            readActionArgument(step, "path")
+            || readActionArgument(step, "state_path")
+            || readActionArgument(step, "target")
+            || ""
+          ).trim();
+          const valueRaw = readActionArgument(step, "value") !== undefined
+            ? readActionArgument(step, "value")
+            : readActionArgument(step, "state");
+          const value = resolveTemplateValue(valueRaw, context);
+          let operation = token;
+          if (token === "set_state") operation = "set";
+          if (token === "append_state") operation = "append";
+          if (token === "mutate") {
+            operation = String(readActionArgument(step, "operation") || readActionArgument(step, "op") || "set");
+          }
+          if (!path) {
+            if ((operation === "merge" || operation === "merge_state") && value && typeof value === "object" && !Array.isArray(value)) {
+              applyStatePatch(value);
+            } else if (value && typeof value === "object" && !Array.isArray(value)) {
+              applyStatePatch(value);
+            } else {
+              appState.state = value;
+              if (appState.spec) renderSpec(appState.spec);
+            }
+            return;
+          }
+          setStateValueAtPath(path, value, operation);
+          if (appState.spec) renderSpec(appState.spec);
+          return;
+        }
+
+        if (token === "emit_event" || token === "emit") {
+          const eventType = String(
+            readActionArgument(step, "event_type")
+            || readActionArgument(step, "event")
+            || context.eventType
+            || "action"
+          ).trim();
+          const payloadRaw = readActionArgument(step, "payload");
+          const payload = isObjectRecord(payloadRaw)
+            ? resolveTemplateValue(payloadRaw, context)
+            : (isObjectRecord(context.payload) ? context.payload : {});
+          sendEvent(eventType || "action", context.sourceComponentId || context.componentId, payload || {});
+          return;
+        }
+
+        if (token === "notify" || token === "toast") {
+          const message = resolveTemplateValue(
+            readActionArgument(step, "message") ?? readActionArgument(step, "title") ?? "Done",
+            context,
+          );
+          const levelName = String(readActionArgument(step, "level") || "info");
+          showToast(String(message || "Done"), levelName);
+          return;
+        }
+
+        if (token === "spec_patch" || token === "apply_patch" || token === "patch") {
+          const patchRaw = readActionArgument(step, "patch") !== undefined
+            ? readActionArgument(step, "patch")
+            : readActionArgument(step, "value");
+          const patch = resolveTemplateValue(patchRaw, context);
+          if (patch && typeof patch === "object") {
+            try {
+              applyPatch(patch);
+            } catch (err) {
+              showToast("Patch failed: " + (err.message || err), "error");
+            }
+          }
+          return;
+        }
+
+        if (token === "run_action" || token === "call_action") {
+          const nested = String(readActionArgument(step, "action_id") || readActionArgument(step, "name") || "").trim();
+          if (nested) {
+            executeNamedAction(nested, context, depth);
+          }
+          return;
+        }
+
+        if (!executeNamedAction(token, context, depth)) {
+          applyLocalEffect(step, context);
+        }
+      }
+
+      function executeActionSteps(steps, context, depth) {
+        for (const step of actionDefinitionSteps(steps)) {
+          executeActionStep(step, context, depth);
+        }
+      }
+
+      function applyLocalEffect(effect, context) {
+        if (!effect || typeof effect !== "object") return;
+        const op = normalizeToken(effect.op || effect.type || effect.action || "");
+        if (!op) return;
+
+        if (op === "set_state" || op === "merge_state") {
+          const statePatch = effect.value && typeof effect.value === "object" ? effect.value : effect.state_patch;
+          if (statePatch && typeof statePatch === "object") {
+            applyStatePatch(statePatch);
+          }
+          return;
+        }
+
+        if (op === "merge_theme" || op === "set_theme") {
+          if (!appState.spec) return;
+          const base = op === "set_theme" ? {} : (appState.spec.theme || {});
+          const patch = normalizeTheme(effect.value !== undefined ? effect.value : effect.theme);
+          appState.spec.theme = mergeObjects(base, patch);
+          renderSpec(appState.spec);
+          return;
+        }
+
+        if (op === "spec_patch" || op === "apply_patch") {
+          const patch = effect.patch && typeof effect.patch === "object" ? effect.patch : effect.value;
+          if (patch && typeof patch === "object") {
+            try {
+              applyPatch(patch);
+            } catch (err) {
+              showToast("Patch failed: " + (err.message || err), "error");
+            }
+          }
+          return;
+        }
+
+        if (op === "append_chat_message" || op === "chat_append" || op === "add_message") {
+          const chatId = resolveChatComponentId(effect.component_id || context.componentId);
+          if (!chatId) return;
+          const value = effect.value !== undefined ? effect.value : effect.message;
+          const message = value && typeof value === "object" ? value : { role: "assistant", content: String(value || "") };
+          appendChatMessage(chatId, message);
+          return;
+        }
+
+        if (op === "clear_chat" || op === "chat_clear" || op === "clear_messages") {
+          const chatId = resolveChatComponentId(effect.component_id || context.componentId);
+          if (!chatId) return;
+          clearChatMessages(chatId);
+        }
+      }
+
+      function applyLocalEffects(effects, context) {
+        const list = toEffectList(effects);
+        for (const effect of list) {
+          applyLocalEffect(effect, context || {});
+        }
+      }
+
+      function dispatchComponentEvent(component, eventType, basePayload, options) {
+        if (!component || typeof component !== "object") return;
+        const config = resolveEventConfig(component, eventType);
+        const props = isObjectRecord(component.props) ? component.props : {};
+        const configPayload = isObjectRecord(config.payload) ? config.payload : {};
+        const payload = mergeObjects(
+          configPayload,
+          isObjectRecord(basePayload) ? basePayload : {},
+        );
+
+        const effects = collectExplicitEffects(config, options);
+        const localTargetId = (
+          (options && options.componentId) ||
+          config.target_component_id ||
+          component.id
+        );
+        applyLocalEffects(effects, {
+          componentId: localTargetId,
+          sourceComponentId: component.id,
+          eventType,
+          payload,
+        });
+
+        const actionContext = {
+          componentId: localTargetId,
+          sourceComponentId: component.id,
+          eventType,
+          payload,
+          state: appState.state || {},
+          event: {
+            type: eventType,
+            component_id: component.id,
+            payload,
+          },
+          text: payload.text,
+          values: payload.values,
+          item: payload.item,
+          files: payload.files,
+          file: payload.file,
+        };
+        if (typeof config.action === "string" && config.action.trim()) {
+          const executedNamedAction = executeNamedAction(config.action, actionContext, 0);
+          if (!executedNamedAction) {
+            executeActionStep({ action: config.action }, actionContext, 0);
+          }
+        }
+        if (Array.isArray(config.steps) && config.steps.length) {
+          executeActionSteps(config.steps, actionContext, 0);
+        }
+
+        if (config.emit_event === false || payload.emit_event === false) {
+          return;
+        }
+        sendEvent(
+          normalizeEventName(config.event_type, eventType),
+          component.id,
+          payload,
+        );
       }
 
       function buildField(field, form) {
@@ -1266,10 +1893,10 @@
             const values = cols.map((key) => JSON.stringify(row[key] ?? ""));
             lines.push(values.join(","));
           }
-          return lines.join("\\n");
+          return lines.join("\n");
         }
         if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
-          return data.map((row) => row.map((item) => JSON.stringify(item ?? "")).join(",")).join("\\n");
+          return data.map((row) => row.map((item) => JSON.stringify(item ?? "")).join(",")).join("\n");
         }
         return JSON.stringify(data, null, 2);
       }
@@ -1285,11 +1912,31 @@
         window.setTimeout(() => URL.revokeObjectURL(a.href), 500);
       }
 
+      function cssColor(variableName, fallback) {
+        try {
+          const value = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+          if (value) return value;
+        } catch (_error) {
+          // ignore style lookup failures and fallback
+        }
+        return String(fallback || "");
+      }
+
+      function chartPalette() {
+        return {
+          text: cssColor("--text", "#0f172a"),
+          axis: cssColor("--border", "#cbd5e1"),
+          series: cssColor("--accent", "#0f766e"),
+          muted: cssColor("--muted", "#334155"),
+        };
+      }
+
       function drawBarChart(ctx, labels, values, title) {
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
+        const palette = chartPalette();
         ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = "#0f172a";
+        ctx.fillStyle = palette.text;
         ctx.font = "14px sans-serif";
         ctx.fillText(title || "Chart", 14, 24);
 
@@ -1301,14 +1948,14 @@
         const barW = Math.max(12, chartW / Math.max(1, values.length) * 0.7);
         const gap = chartW / Math.max(1, values.length);
 
-        ctx.strokeStyle = "#cbd5e1";
+        ctx.strokeStyle = palette.axis;
         ctx.beginPath();
         ctx.moveTo(left, top);
         ctx.lineTo(left, top + chartH);
         ctx.lineTo(left + chartW, top + chartH);
         ctx.stroke();
 
-        ctx.fillStyle = "#0f766e";
+        ctx.fillStyle = palette.series;
         ctx.font = "11px sans-serif";
         values.forEach((value, idx) => {
           const height = chartH * (value / max);
@@ -1316,17 +1963,18 @@
           const y = top + chartH - height;
           ctx.fillRect(x, y, barW, height);
           const label = String(labels[idx] ?? idx + 1);
-          ctx.fillStyle = "#334155";
+          ctx.fillStyle = palette.muted;
           ctx.fillText(label, x, top + chartH + 14);
-          ctx.fillStyle = "#0f766e";
+          ctx.fillStyle = palette.series;
         });
       }
 
       function drawLineChart(ctx, labels, values, title) {
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
+        const palette = chartPalette();
         ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = "#0f172a";
+        ctx.fillStyle = palette.text;
         ctx.font = "14px sans-serif";
         ctx.fillText(title || "Chart", 14, 24);
 
@@ -1336,7 +1984,7 @@
         const chartW = w - 60;
         const chartH = h - 70;
 
-        ctx.strokeStyle = "#cbd5e1";
+        ctx.strokeStyle = palette.axis;
         ctx.beginPath();
         ctx.moveTo(left, top);
         ctx.lineTo(left, top + chartH);
@@ -1345,7 +1993,7 @@
 
         if (values.length === 0) return;
 
-        ctx.strokeStyle = "#0f766e";
+        ctx.strokeStyle = palette.series;
         ctx.lineWidth = 2;
         ctx.beginPath();
         values.forEach((value, idx) => {
@@ -1356,7 +2004,7 @@
         });
         ctx.stroke();
 
-        ctx.fillStyle = "#334155";
+        ctx.fillStyle = palette.muted;
         ctx.font = "11px sans-serif";
         labels.forEach((label, idx) => {
           const ratio = labels.length <= 1 ? 0 : idx / (labels.length - 1);
@@ -1430,7 +2078,7 @@
         if (type === "markdown") {
           const md = document.createElement("div");
           md.className = "markdown";
-          md.innerHTML = encodeHtml(String(props.text || ""));
+          md.textContent = String(props.text || "");
           wrap.appendChild(md);
           return wrap;
         }
@@ -1471,7 +2119,12 @@
             btn.textContent = String(tab.label || tab.id || "Tab");
             btn.addEventListener("click", () => {
               activeTab = String(tab.id || activeTab);
-              emitEvent("change", component.id, { active_tab: activeTab });
+              dispatchComponentEvent(
+                component,
+                "change",
+                { active_tab: activeTab },
+                { fallbackLabel: tab.label || tab.id || "tab" },
+              );
               for (const item of tabButtons) {
                 item.className = item.dataset.tabId === activeTab ? "primary" : "secondary";
               }
@@ -1508,7 +2161,12 @@
             block.addEventListener("toggle", () => {
               if (!block.open) return;
               openSection = String(section.id || openSection);
-              emitEvent("change", component.id, { open_section: openSection });
+              dispatchComponentEvent(
+                component,
+                "change",
+                { open_section: openSection },
+                { fallbackLabel: section.title || section.id || "section" },
+              );
             });
             wrap.appendChild(block);
           }
@@ -1519,7 +2177,7 @@
           const hrWrap = document.createElement("div");
           const hr = document.createElement("hr");
           hr.style.border = "none";
-          hr.style.borderTop = "1px solid var(--line)";
+          hr.style.borderTop = "1px solid var(--border)";
           hr.style.margin = "8px 0";
           hrWrap.appendChild(hr);
           if (props.label) {
@@ -1538,17 +2196,17 @@
           badge.style.display = "inline-block";
           badge.style.padding = "3px 10px";
           badge.style.borderRadius = "999px";
-          badge.style.border = "1px solid var(--line)";
+          badge.style.border = "1px solid var(--border)";
           const tone = String(props.tone || "info").toLowerCase();
           if (tone === "success") {
-            badge.style.background = "#e8f8ef";
-            badge.style.borderColor = "#87d2a3";
+            badge.style.background = cssColor("--accent-soft", "#e8f8ef");
+            badge.style.borderColor = cssColor("--accent", "#87d2a3");
           } else if (tone === "warn") {
-            badge.style.background = "#fff6e8";
-            badge.style.borderColor = "#f1cb8a";
+            badge.style.background = cssColor("--bg-bottom", "#fff6e8");
+            badge.style.borderColor = cssColor("--warn", "#f1cb8a");
           } else if (tone === "error") {
-            badge.style.background = "#fdecec";
-            badge.style.borderColor = "#f0b0b0";
+            badge.style.background = cssColor("--bg-bottom", "#fdecec");
+            badge.style.borderColor = cssColor("--danger", "#f0b0b0");
           }
           badge.textContent = String(props.text || "badge");
           wrap.appendChild(badge);
@@ -1602,8 +2260,8 @@
           const pre = document.createElement("pre");
           pre.style.margin = "0";
           pre.style.padding = "10px";
-          pre.style.background = "#f4f6fb";
-          pre.style.border = "1px solid var(--line)";
+          pre.style.background = "var(--bg-bottom)";
+          pre.style.border = "1px solid var(--border)";
           pre.style.borderRadius = "8px";
           pre.style.overflowX = "auto";
           pre.textContent = String(props.code || props.text || "");
@@ -1629,7 +2287,7 @@
           frame.src = String(props.src || props.url || "");
           frame.style.width = "100%";
           frame.style.height = String(Number(props.height || 420)) + "px";
-          frame.style.border = "1px solid var(--line)";
+          frame.style.border = "1px solid var(--border)";
           frame.style.borderRadius = "8px";
           frame.referrerPolicy = "no-referrer";
           frame.setAttribute("sandbox", resolveIframeSandbox(props));
@@ -1644,9 +2302,12 @@
           button.className = variant === "primary" ? "primary" : "secondary";
           button.textContent = String(props.label || props.text || "Action");
           button.addEventListener("click", () => {
-            emitEvent(String(props.event_type || "action"), component.id, {
-              payload: props.payload && typeof props.payload === "object" ? props.payload : {},
-            });
+            dispatchComponentEvent(
+              component,
+              "click",
+              {},
+              { fallbackLabel: button.textContent },
+            );
           });
           wrap.appendChild(button);
           return wrap;
@@ -1668,11 +2329,21 @@
           if (props.max !== undefined) input.max = String(props.max);
           if (props.step !== undefined) input.step = String(props.step);
           input.addEventListener("change", () => {
-            emitEvent("change", component.id, { name: input.name, value: input.value });
+            dispatchComponentEvent(
+              component,
+              "change",
+              { name: input.name, value: input.value },
+              { fallbackLabel: label.textContent || input.name },
+            );
           });
           input.addEventListener("keydown", (evt) => {
             if (evt.key === "Enter" && props.submit_on_enter) {
-              emitEvent("submit", component.id, { name: input.name, value: input.value });
+              dispatchComponentEvent(
+                component,
+                "submit",
+                { name: input.name, value: input.value },
+                { fallbackLabel: label.textContent || input.name },
+              );
             }
           });
           field.appendChild(input);
@@ -1692,7 +2363,12 @@
           textarea.value = props.value === undefined || props.value === null ? "" : String(props.value);
           if (props.placeholder) textarea.placeholder = String(props.placeholder);
           textarea.addEventListener("change", () => {
-            emitEvent("change", component.id, { name: textarea.name, value: textarea.value });
+            dispatchComponentEvent(
+              component,
+              "change",
+              { name: textarea.name, value: textarea.value },
+              { fallbackLabel: label.textContent || textarea.name },
+            );
           });
           field.appendChild(textarea);
           wrap.appendChild(field);
@@ -1716,7 +2392,12 @@
             select.appendChild(opt);
           }
           select.addEventListener("change", () => {
-            emitEvent("change", component.id, { name: select.name, value: select.value });
+            dispatchComponentEvent(
+              component,
+              "change",
+              { name: select.name, value: select.value },
+              { fallbackLabel: label.textContent || select.name },
+            );
           });
           field.appendChild(select);
           wrap.appendChild(field);
@@ -1733,7 +2414,12 @@
           checkbox.name = String(props.name || "checkbox");
           checkbox.checked = Boolean(props.checked ?? props.value ?? false);
           checkbox.addEventListener("change", () => {
-            emitEvent("change", component.id, { name: checkbox.name, checked: checkbox.checked });
+            dispatchComponentEvent(
+              component,
+              "change",
+              { name: checkbox.name, checked: checkbox.checked },
+              { fallbackLabel: text.textContent || checkbox.name },
+            );
           });
           row.appendChild(checkbox);
           const text = document.createElement("span");
@@ -1764,7 +2450,12 @@
             radio.checked = option.value === selected;
             radio.addEventListener("change", () => {
               if (!radio.checked) return;
-              emitEvent("change", component.id, { name: groupName, value: radio.value });
+              dispatchComponentEvent(
+                component,
+                "change",
+                { name: groupName, value: radio.value },
+                { fallbackLabel: label.textContent || groupName },
+              );
             });
             row.appendChild(radio);
             const text = document.createElement("span");
@@ -1796,7 +2487,12 @@
             readout.textContent = input.value;
           });
           input.addEventListener("change", () => {
-            emitEvent("change", component.id, { name: input.name, value: Number(input.value) });
+            dispatchComponentEvent(
+              component,
+              "change",
+              { name: input.name, value: Number(input.value) },
+              { fallbackLabel: label.textContent || input.name },
+            );
           });
           field.appendChild(input);
           field.appendChild(readout);
@@ -1817,7 +2513,12 @@
           input.addEventListener("change", async () => {
             const maxBytes = Number(props.max_bytes || 8 * 1024 * 1024);
             const files = await readFilesWithBase64(input.files, maxBytes);
-            emitEvent("upload", component.id, { files });
+            dispatchComponentEvent(
+              component,
+              "upload",
+              { files },
+              { fallbackLabel: props.label || "upload" },
+            );
             showToast("Uploaded " + files.length + " file(s).", "info");
           });
           wrap.appendChild(input);
@@ -1892,7 +2593,12 @@
           form.appendChild(submit);
           form.addEventListener("submit", (evt) => {
             evt.preventDefault();
-            emitEvent("submit", component.id, { values: collectFormValues(form) });
+            dispatchComponentEvent(
+              component,
+              "submit",
+              { values: collectFormValues(form) },
+              { fallbackLabel: props.submit_label || "submit" },
+            );
           });
           wrap.appendChild(form);
           return wrap;
@@ -1904,7 +2610,12 @@
 
           const stream = document.createElement("div");
           stream.className = "chat-stream";
-          const messages = Array.isArray(props.messages) ? props.messages : [];
+          const boundMessages = resolveInlineStatePath(props.messages)
+            ? getStateValueAtPath(resolveInlineStatePath(props.messages))
+            : undefined;
+          const messages = Array.isArray(boundMessages)
+            ? boundMessages
+            : (Array.isArray(props.messages) ? props.messages : []);
           if (!messages.length) {
             const empty = document.createElement("div");
             empty.className = "small";
@@ -1948,10 +2659,15 @@
             const text = String(input.value || "").trim();
             if (!text) return;
             appendChatMessage(component.id, { role: "user", content: text });
-            emitEvent("submit", component.id, {
-              text,
-              message: { role: "user", content: text },
-            });
+            dispatchComponentEvent(
+              component,
+              "submit",
+              {
+                text,
+                message: { role: "user", content: text },
+              },
+              { fallbackLabel: send.textContent || "send" },
+            );
             input.value = "";
           });
           chatPanel.appendChild(form);
@@ -1986,7 +2702,12 @@
               if (currentIndex > 0) {
                 currentIndex -= 1;
                 renderStep();
-                emitEvent("change", component.id, { step_index: currentIndex });
+                dispatchComponentEvent(
+                  component,
+                  "change",
+                  { step_index: currentIndex },
+                  { fallbackLabel: "Back" },
+                );
               }
             });
             nav.appendChild(back);
@@ -2000,11 +2721,21 @@
               evt.preventDefault();
               const values = collectFormValues(form);
               if (currentIndex < steps.length - 1) {
-                emitEvent("change", component.id, { step_index: currentIndex, values });
+                dispatchComponentEvent(
+                  component,
+                  "change",
+                  { step_index: currentIndex, values },
+                  { fallbackLabel: "Next" },
+                );
                 currentIndex += 1;
                 renderStep();
               } else {
-                emitEvent("submit", component.id, { step_index: currentIndex, values });
+                dispatchComponentEvent(
+                  component,
+                  "submit",
+                  { step_index: currentIndex, values },
+                  { fallbackLabel: "Submit" },
+                );
               }
             });
             stepContainer.appendChild(form);
@@ -2049,7 +2780,12 @@
           jsonButton.textContent = "Export JSON";
           jsonButton.addEventListener("click", () => {
             downloadText(filename + ".json", JSON.stringify(data, null, 2), "application/json");
-            emitEvent("export", component.id, { format: "json" });
+            dispatchComponentEvent(
+              component,
+              "export",
+              { format: "json" },
+              { fallbackLabel: jsonButton.textContent },
+            );
           });
           wrap.appendChild(jsonButton);
           const csvButton = document.createElement("button");
@@ -2057,7 +2793,12 @@
           csvButton.textContent = "Export CSV";
           csvButton.addEventListener("click", () => {
             downloadText(filename + ".csv", toCsv(data.rows || data), "text/csv");
-            emitEvent("export", component.id, { format: "csv" });
+            dispatchComponentEvent(
+              component,
+              "export",
+              { format: "csv" },
+              { fallbackLabel: csvButton.textContent },
+            );
           });
           wrap.appendChild(csvButton);
           return wrap;
@@ -2077,15 +2818,40 @@
       }
 
       function renderActions(actions) {
-        if (!Array.isArray(actions) || !actions.length) return;
+        const actionList = Array.isArray(actions)
+          ? actions
+          : (actions && typeof actions === "object")
+          ? Object.entries(actions).map(([id, definition]) => {
+              if (definition && typeof definition === "object") {
+                const item = mergeObjects({}, definition);
+                if (!item.id) item.id = id;
+                if (!item.label) item.label = item.title || id;
+                return item;
+              }
+              return { id, label: id };
+            })
+          : [];
+        if (!Array.isArray(actionList) || !actionList.length) return;
         const bar = document.createElement("div");
         bar.className = "action-bar";
-        for (const action of actions) {
+        for (const action of actionList) {
           const btn = document.createElement("button");
           btn.className = action.primary ? "primary" : "secondary";
           btn.textContent = action.label || action.id || "Action";
           btn.addEventListener("click", () => {
-            emitEvent(action.event_type || "action", action.id || "action", action.payload || {});
+            dispatchComponentEvent(
+              {
+                id: String(action.id || "action"),
+                type: "button",
+                props: action,
+              },
+              "click",
+              {},
+              {
+                componentId: action.target_component_id || null,
+                fallbackLabel: btn.textContent,
+              },
+            );
           });
           bar.appendChild(btn);
         }
@@ -2133,19 +2899,40 @@
         applyTheme(resolvedSpec.theme || {});
         titleEl.textContent = resolvedSpec.title || "MetaUI";
         rebuildComponentIndex(resolvedSpec);
-        contentEl.innerHTML = "";
+        appState.actionById = normalizeActionRegistry(resolvedSpec.actions || {});
+        const fragment = document.createDocumentFragment();
         for (const rootId of resolvedSpec.root || []) {
-          contentEl.appendChild(renderComponent(rootId));
+          try {
+            fragment.appendChild(renderComponent(rootId));
+          } catch (err) {
+            const errDiv = document.createElement("div");
+            errDiv.className = "small";
+            errDiv.textContent = "Render error (" + rootId + "): " + String(err.message || err);
+            fragment.appendChild(errDiv);
+          }
         }
+        if (!fragment.childNodes.length) {
+          const empty = document.createElement("div");
+          empty.className = "small";
+          empty.textContent = "No renderable components in current UI spec.";
+          fragment.appendChild(empty);
+        }
+        contentEl.innerHTML = "";
+        contentEl.appendChild(fragment);
         renderActions(resolvedSpec.actions || []);
       }
 
       function applyPatch(patch) {
-        if (!appState.spec || !patch || typeof patch !== "object") return;
+        if (!appState.spec) {
+          throw new Error("No active UI session to patch.");
+        }
+        if (!patch || typeof patch !== "object") {
+          throw new Error("Invalid patch payload.");
+        }
         const op = patch.op || "merge_spec";
         if (op === "replace_spec" && patch.spec) {
           renderSpec(patch.spec);
-          return;
+          return true;
         }
         if (op === "merge_spec" && patch.spec) {
           const nextSpec = mergeObjects(appState.spec, patch.spec);
@@ -2155,33 +2942,22 @@
               (patch.spec || {}).components || [],
             );
           }
+          if (patch.spec && typeof patch.spec === "object" && patch.spec.theme !== undefined) {
+            const mergedTheme = normalizeTheme(patch.spec.theme);
+            if (Object.keys(mergedTheme).length > 0) {
+              appState.state = mergeObjects(appState.state || {}, {
+                currentTheme: mergeObjects((appState.state || {}).currentTheme || {}, mergedTheme),
+              });
+            }
+          }
           appState.spec = nextSpec;
           renderSpec(appState.spec);
-          return;
+          return true;
         }
         if (op === "update_component") {
-          let targetId = patch.id;
+          const targetId = String(patch.id || "").trim();
           if (!targetId) {
-            const explicitType = patch.type
-              || (patch.component && patch.component.type)
-              || (patch.props && patch.props.type)
-              || "";
-            const normalized = normalizeComponentType(explicitType).type;
-            if (normalized && normalized !== "text") {
-              const candidate = firstComponentByType(appState.spec, normalized);
-              if (candidate && candidate.id) {
-                targetId = candidate.id;
-              }
-            } else if (patch.props && (
-              patch.props.chart_type !== undefined
-              || patch.props.labels !== undefined
-              || patch.props.values !== undefined
-            )) {
-              const chartCandidate = firstComponentByType(appState.spec, "chart");
-              if (chartCandidate && chartCandidate.id) {
-                targetId = chartCandidate.id;
-              }
-            }
+            throw new Error("update_component requires explicit patch.id.");
           }
           const component = getComponent(targetId);
           if (component) {
@@ -2199,35 +2975,38 @@
               component.props = normalizeTableProps(component.props || {});
             }
             renderSpec(appState.spec);
+            return true;
           }
-          return;
+          throw new Error("update_component target not found.");
         }
         if (op === "append_component" && patch.component) {
           const component = normalizeComponent(patch.component);
           appState.spec.components = (appState.spec.components || []).concat([component]);
           renderSpec(appState.spec);
-          return;
+          return true;
         }
         if (op === "remove_component" && patch.id) {
           appState.spec.components = (appState.spec.components || []).filter((item) => item.id !== patch.id);
           appState.spec.root = (appState.spec.root || []).filter((item) => item !== patch.id);
           renderSpec(appState.spec);
-          return;
+          return true;
         }
         if (op === "set_root" && Array.isArray(patch.root)) {
           appState.spec.root = patch.root;
           renderSpec(appState.spec);
-          return;
+          return true;
         }
         if (op === "set_title" && patch.title) {
           appState.spec.title = patch.title;
           renderSpec(appState.spec);
-          return;
+          return true;
         }
         if (!patch.op) {
           appState.spec = mergeObjects(appState.spec, patch);
           renderSpec(appState.spec);
+          return true;
         }
+        throw new Error("Unsupported patch operation: " + String(op));
       }
 
       function applyStatePatch(statePatch) {
@@ -2446,7 +3225,9 @@
         const targetUiId = String(msg.ui_id || payload.ui_id || "").trim();
         const currentUiId = appState.spec && appState.spec.ui_id ? String(appState.spec.ui_id) : "";
         const targetMismatch = Boolean(targetUiId && currentUiId && targetUiId !== currentUiId);
+        let commandOk = true;
         if (command === "render_full") {
+          const prevState = appState.state;
           appState.state = {};
           if (payload && typeof payload === "object") {
             const uiId = String(payload.ui_id || payload.uiId || "").trim();
@@ -2463,14 +3244,38 @@
               );
             }
           }
-          renderSpec(payload);
+          try {
+            renderSpec(payload);
+          } catch (err) {
+            appState.state = prevState;
+            showToast("Render failed: " + (err.message || err), "error");
+            commandOk = false;
+          }
         } else if (command === "patch") {
-          if (!targetMismatch) {
-            applyPatch(payload.patch || payload || {});
+          if (targetMismatch) {
+            console.warn("MetaUI: patch target mismatch, expected=" + targetUiId + " current=" + currentUiId);
+            showToast("Patch skipped: UI target mismatch", "warning");
+            commandOk = false;
+          } else {
+            try {
+              applyPatch(payload.patch || payload || {});
+            } catch (err) {
+              showToast("Patch failed: " + (err.message || err), "error");
+              commandOk = false;
+            }
           }
         } else if (command === "set_state") {
           if (!targetMismatch) {
-            applyStatePatch(payload.state || payload || {});
+            try {
+              applyStatePatch(payload.state || payload || {});
+            } catch (err) {
+              showToast("set_state failed: " + (err.message || err), "error");
+              commandOk = false;
+            }
+          } else {
+            console.warn("MetaUI: set_state target mismatch, expected=" + targetUiId + " current=" + currentUiId);
+            showToast("State update skipped: UI target mismatch", "warning");
+            commandOk = false;
           }
         } else if (command === "notify") {
           showToast(payload.message || "Notification", payload.level || "info");
@@ -2478,15 +3283,22 @@
           if (!targetMismatch) {
             appState.spec = null;
             contentEl.innerHTML = "<div class='small'>UI session closed.</div>";
+          } else {
+            commandOk = false;
           }
         }
 
-        if (msg.command_id && appState.ws && appState.ws.readyState === WebSocket.OPEN) {
+        if (commandOk && msg.command_id && appState.ws && appState.ws.readyState === WebSocket.OPEN) {
           appState.ws.send(JSON.stringify({ type: "ack", command_id: msg.command_id }));
         }
       }
 
+      let _reconnectTimer = null;
       function openSocket() {
+        if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+        if (appState.ws && (appState.ws.readyState === WebSocket.OPEN || appState.ws.readyState === WebSocket.CONNECTING)) {
+          return;
+        }
         const ws = new WebSocket(WS_URL);
         appState.ws = ws;
         ws.onopen = () => {
@@ -2520,7 +3332,9 @@
         };
         ws.onclose = () => {
           setStatus("Disconnected, reconnecting...");
-          window.setTimeout(openSocket, 1200);
+          if (!_reconnectTimer) {
+            _reconnectTimer = window.setTimeout(openSocket, 1200);
+          }
         };
         ws.onerror = () => {
           setStatus("Socket error, retrying...");

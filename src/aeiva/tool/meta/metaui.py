@@ -11,10 +11,13 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from aeiva.metaui.desktop_runtime import resolve_desktop_python
-from aeiva.metaui.spec_normalizer import normalize_metaui_spec
+from aeiva.metaui.spec_normalizer import (
+    collect_interaction_contract_issues,
+    normalize_metaui_spec,
+)
 from aeiva.metaui.component_catalog import get_component_catalog
 from aeiva.metaui.a2ui_protocol import get_protocol_schema_bundle
 from aeiva.metaui.message_evaluator import evaluate_server_messages
@@ -23,12 +26,7 @@ from aeiva.metaui.orchestrator import (
     get_metaui_runtime_settings,
 )
 from aeiva.metaui.protocol import MetaUISpec
-from aeiva.metaui.intent_spec import build_intent_spec
 from aeiva.metaui.session import MetaUIPhase
-from aeiva.metaui.update_strategy import (
-    apply_structural_patch_to_spec,
-    decide_patch_routing,
-)
 
 from ..capability import Capability
 from ..decorator import tool
@@ -41,22 +39,23 @@ _desktop_launch_lock = threading.Lock()
 _last_desktop_launch_attempt_mono = 0.0
 _desktop_connect_grace_until_mono = 0.0
 _LAUNCHED_DESKTOP_PROCESSES: List[subprocess.Popen] = []
+_active_ui_lock = threading.Lock()
+_last_active_ui_id: Optional[str] = None
+_last_active_ui_by_session: Dict[str, str] = {}
 _KNOWN_OPERATIONS = (
-    "start, status, compose, validate_spec, catalog, protocol_schema, validate_messages, "
-    "launch_desktop, render_full, scaffold, patch, set_state, notify, close, "
+    "start, status, validate_spec, catalog, protocol_schema, validate_messages, "
+    "launch_desktop, render_full, patch, set_state, notify, close, "
     "set_auto_ui, list_sessions, get_session, update_phase, poll_events, wait_event"
 )
 _VALID_OPERATION_KEYS = {
     "start",
     "status",
-    "compose",
     "validate_spec",
     "catalog",
     "protocol_schema",
     "validate_messages",
     "launch_desktop",
     "render_full",
-    "scaffold",
     "patch",
     "set_state",
     "notify",
@@ -161,6 +160,10 @@ def _reset_desktop_launch_state_for_tests() -> None:
         _last_desktop_launch_attempt_mono = 0.0
         _desktop_connect_grace_until_mono = 0.0
         _LAUNCHED_DESKTOP_PROCESSES.clear()
+    with _active_ui_lock:
+        global _last_active_ui_id
+        _last_active_ui_id = None
+        _last_active_ui_by_session.clear()
     os.environ.pop(_DESKTOP_PENDING_ENV_VAR, None)
 
 
@@ -178,10 +181,75 @@ def _as_float(value: Any, default: float) -> float:
         return default
 
 
-def _soften_no_clients_result(result: Dict[str, Any], *, operation: str) -> Dict[str, Any]:
+def _is_workspace_fallback_spec(spec: Mapping[str, Any]) -> bool:
+    components = spec.get("components")
+    if not isinstance(components, list) or len(components) != 1:
+        return False
+    component = components[0]
+    if not isinstance(component, Mapping):
+        return False
+    if str(component.get("id") or "").strip() != "workspace_info":
+        return False
+    if str(component.get("type") or "").strip() != "text":
+        return False
+    props = component.get("props")
+    if not isinstance(props, Mapping):
+        return False
+    text = str(props.get("text") or "").strip().lower()
+    return text == "no renderable components were provided."
+
+
+def _remember_active_ui(*, ui_id: Optional[str], session_id: Optional[str]) -> None:
+    resolved_ui_id = str(ui_id or "").strip()
+    if not resolved_ui_id:
+        return
+    resolved_session_id = str(session_id or "").strip()
+    with _active_ui_lock:
+        global _last_active_ui_id
+        _last_active_ui_id = resolved_ui_id
+        if resolved_session_id:
+            _last_active_ui_by_session[resolved_session_id] = resolved_ui_id
+
+
+def _forget_active_ui(*, ui_id: Optional[str]) -> None:
+    target = str(ui_id or "").strip()
+    if not target:
+        return
+    with _active_ui_lock:
+        global _last_active_ui_id
+        if _last_active_ui_id == target:
+            _last_active_ui_id = None
+        stale_keys = [key for key, value in _last_active_ui_by_session.items() if value == target]
+        for key in stale_keys:
+            _last_active_ui_by_session.pop(key, None)
+
+
+def _preferred_active_ui(*, session_id: Optional[str]) -> Optional[str]:
+    resolved_session_id = str(session_id or "").strip()
+    with _active_ui_lock:
+        if resolved_session_id:
+            preferred = _last_active_ui_by_session.get(resolved_session_id)
+            if preferred:
+                return preferred
+        return _last_active_ui_id
+
+
+def _soften_no_clients_result(
+    result: Dict[str, Any],
+    *,
+    operation: str,
+    allow_pending: bool,
+) -> Dict[str, Any]:
+    """Optionally convert no_connected_clients into a soft 'pending' success.
+
+    Softening is intentionally opt-in. This prevents false-positive success
+    responses unless the caller is explicitly in a desktop-connect grace window.
+    """
     if result.get("success") is True:
         return result
     if str(result.get("error") or "") != "no_connected_clients":
+        return result
+    if not allow_pending:
         return result
     softened = dict(result)
     softened["success"] = True
@@ -193,51 +261,25 @@ def _soften_no_clients_result(result: Dict[str, Any], *, operation: str) -> Dict
     return softened
 
 
-def _merge_scaffold_overrides(
-    base_spec: Dict[str, Any],
-    override_spec: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    """
-    Merge user-provided scaffold overrides.
+def _allow_pending_client_soft_success(*, desktop_pending_connection: bool) -> bool:
+    return bool(desktop_pending_connection or _is_external_desktop_pending())
 
-    High-level keys (title/actions/state_bindings) are always allowed.
-    Structural overrides (components/root) are intentionally ignored to keep
-    scaffold intent-driven and prevent stale template carry-over.
-    """
-    merged = dict(base_spec)
-    diagnostics: Dict[str, Any] = {
-        "override_provided": bool(isinstance(override_spec, dict)),
-        "structural_override_requested": False,
-        "structural_override_applied": False,
+
+def _legacy_intent_operation_response(operation_key: str) -> Dict[str, Any]:
+    return {
+        "success": False,
+        "error": (
+            f"`{operation_key}` is no longer supported. "
+            "MetaUI is renderer-only and does not generate UI from natural language."
+        ),
+        "error_code": "legacy_intent_operation_removed",
+        "recommended_flow": [
+            "1) call metaui.catalog",
+            "2) AI builds explicit full spec (components/root/actions/state_bindings)",
+            "3) call metaui.render_full(spec=...)",
+            "4) call metaui.patch/set_state for incremental updates",
+        ],
     }
-    if not isinstance(override_spec, dict):
-        return merged, diagnostics
-
-    title = override_spec.get("title")
-    if isinstance(title, str) and title.strip():
-        merged["title"] = title.strip()
-
-    actions = override_spec.get("actions")
-    if isinstance(actions, list):
-        merged["actions"] = actions
-
-    bindings = override_spec.get("state_bindings")
-    if isinstance(bindings, dict):
-        merged["state_bindings"] = bindings
-
-    components = override_spec.get("components")
-    root = override_spec.get("root")
-    has_components_override = isinstance(components, list)
-    has_root_override = isinstance(root, list)
-    structural_override = bool(has_components_override or has_root_override)
-
-    diagnostics["structural_override_requested"] = structural_override
-    if structural_override:
-        diagnostics["structural_override_applied"] = False
-        diagnostics["warning"] = (
-            "Ignored scaffold structural override. Use render_full for structural UI changes."
-        )
-    return merged, diagnostics
 
 
 async def _resolve_target_ui_id(
@@ -256,6 +298,17 @@ async def _resolve_target_ui_id(
     sessions = sessions_resp.get("sessions")
     if not isinstance(sessions, list) or not sessions:
         return None
+
+    available_ui_ids = {
+        str(item.get("ui_id")).strip()
+        for item in sessions
+        if isinstance(item, dict) and str(item.get("ui_id") or "").strip()
+    }
+    preferred = _preferred_active_ui(session_id=session_id)
+    if preferred and preferred in available_ui_ids:
+        return preferred
+    if preferred and preferred not in available_ui_ids:
+        _forget_active_ui(ui_id=preferred)
 
     candidates = sessions
     if isinstance(session_id, str) and session_id.strip():
@@ -307,8 +360,7 @@ def _try_launch_desktop(ws_url: str, token: Optional[str]) -> Dict[str, Any]:
         "Render and manage desktop MetaUI sessions via local websocket. "
         f"Operations: {_KNOWN_OPERATIONS}. "
         "Primary path (A2UI-style): use `catalog` to inspect supported components, then send explicit `spec` via "
-        "`render_full`, and use `set_state`/`patch` for incremental updates. "
-        "For scaffold: pass natural-language `intent` only as compatibility fallback."
+        "`render_full`, and use `set_state`/`patch` for incremental updates."
     ),
     capabilities=[Capability.NETWORK, Capability.PROCESS],
 )
@@ -336,16 +388,14 @@ async def metaui(
     host: Optional[str] = None,
     port: Optional[int] = None,
     token: Optional[str] = None,
-    auto_route_structural_patch: bool = True,
 ) -> Dict[str, Any]:
     """
     MetaUI desktop operations.
 
     Args:
-        operation: The operation to perform (e.g. compose, scaffold, render_full, patch, set_state, status).
-        intent: For scaffold — the user's natural-language UI request. This drives
-            dynamic composition for common workspace patterns.
-        spec: Full MetaUI spec dict for render_full, or override dict for scaffold.
+        operation: The operation to perform (e.g. render_full, patch, set_state, status).
+        intent: Reserved for upstream AI planning context; ignored by MetaUI runtime.
+        spec: Full MetaUI spec dict for render_full.
         patch: Patch payload for the patch operation.
         state: State dict for set_state.
         ui_id: Target UI session identifier.
@@ -357,6 +407,8 @@ async def metaui(
     """
     try:
         operation_key = (operation or "").strip().lower()
+        if operation_key in {"compose", "scaffold"}:
+            return _legacy_intent_operation_response(operation_key)
         if operation_key not in _VALID_OPERATION_KEYS:
             return {
                 "success": False,
@@ -368,38 +420,23 @@ async def metaui(
         settings = get_metaui_runtime_settings()
         strict_component_types = bool(getattr(settings, "strict_component_types", True))
 
-        if operation_key == "compose":
-            composed = build_intent_spec(intent or "", session_id=session_id)
-            diagnostics: Dict[str, Any] = {}
-            if spec and isinstance(spec, dict):
-                composed, diagnostics = _merge_scaffold_overrides(composed, spec)
-            try:
-                normalized = MetaUISpec.model_validate(
-                    normalize_metaui_spec(
-                        composed,
-                        strict_component_types=strict_component_types,
-                    )
-                ).model_dump(mode="json")
-            except Exception as exc:
-                return {"success": False, "error": f"invalid composed spec: {exc}"}
-            response: Dict[str, Any] = {"success": True, "spec": normalized, "session_id": session_id}
-            if diagnostics:
-                response["diagnostics"] = diagnostics
-                warning = diagnostics.get("warning")
-                if warning:
-                    response["warning"] = warning
-            return response
-
         if operation_key == "validate_spec":
             if spec is None:
                 return {"success": False, "error": "`spec` is required for validate_spec."}
             try:
-                normalized = MetaUISpec.model_validate(
-                    normalize_metaui_spec(
-                        spec,
-                        strict_component_types=strict_component_types,
-                    )
-                ).model_dump(mode="json")
+                normalized_dict = normalize_metaui_spec(
+                    spec,
+                    strict_component_types=strict_component_types,
+                )
+                issues = collect_interaction_contract_issues(normalized_dict)
+                if issues:
+                    return {
+                        "success": False,
+                        "error": "invalid interaction contract in spec",
+                        "error_code": "interaction_contract_invalid",
+                        "issues": issues,
+                    }
+                normalized = MetaUISpec.model_validate(normalized_dict).model_dump(mode="json")
             except Exception as exc:
                 return {"success": False, "error": f"invalid spec: {exc}"}
             return {"success": True, "spec": normalized}
@@ -535,53 +572,59 @@ async def metaui(
                     _mark_desktop_connect_pending()
                     desktop_pending_connection = True
 
-        if operation_key == "scaffold":
-            scaffold_spec = build_intent_spec(intent or "", session_id=session_id)
-            diagnostics: Dict[str, Any] = {}
-            if spec and isinstance(spec, dict):
-                scaffold_spec, diagnostics = _merge_scaffold_overrides(scaffold_spec, spec)
-            resolved_ui_id = await _resolve_target_ui_id(
-                orchestrator,
-                ui_id=ui_id,
-                session_id=session_id,
-            )
-            result = await orchestrator.render_full(
-                spec=scaffold_spec,
-                session_id=session_id,
-                ui_id=resolved_ui_id,
-            )
-            softened = _soften_no_clients_result(result, operation="scaffold")
-            if resolved_ui_id and resolved_ui_id != ui_id:
-                softened["resolved_ui_id"] = resolved_ui_id
-            if diagnostics:
-                softened["diagnostics"] = diagnostics
-                warning = diagnostics.get("warning")
-                if warning:
-                    softened["warning"] = warning
-            softened["scaffold_fallback_used"] = True
-            softened.setdefault(
-                "warning",
-                "Scaffold is compatibility fallback. Prefer catalog + render_full for deterministic A2UI-style control.",
-            )
-            if desktop_pending_connection:
-                softened.setdefault(
-                    "warning",
-                    "Desktop client is still connecting; command queued and will render when ready.",
-                )
-                softened["pending_client_connection"] = True
-            return softened
-
         if operation_key == "render_full":
             if spec is None:
                 return {"success": False, "error": "`spec` is required for render_full."}
-            result = await orchestrator.render_full(spec=spec, session_id=session_id, ui_id=ui_id)
-            softened = _soften_no_clients_result(result, operation="render_full")
+            try:
+                render_spec = normalize_metaui_spec(
+                    spec,
+                    strict_component_types=strict_component_types,
+                )
+                issues = collect_interaction_contract_issues(render_spec)
+                if issues:
+                    return {
+                        "success": False,
+                        "error": "invalid interaction contract in render_full spec",
+                        "error_code": "interaction_contract_invalid",
+                        "issues": issues,
+                    }
+            except Exception as exc:
+                return {"success": False, "error": f"invalid spec: {exc}"}
+            if _is_workspace_fallback_spec(render_spec):
+                return {
+                    "success": False,
+                    "error": (
+                        "`render_full` received an empty/non-renderable spec. "
+                        "MetaUI does not infer UI from prose in render_full. "
+                        "Build explicit components/root on the AI side."
+                    ),
+                    "error_code": "render_full_empty_spec",
+                }
+
+            result = await orchestrator.render_full(spec=render_spec, session_id=session_id, ui_id=ui_id)
+            softened = _soften_no_clients_result(
+                result,
+                operation="render_full",
+                allow_pending=_allow_pending_client_soft_success(
+                    desktop_pending_connection=desktop_pending_connection
+                ),
+            )
             if desktop_pending_connection:
                 softened.setdefault(
                     "warning",
                     "Desktop client is still connecting; command queued and will render when ready.",
                 )
                 softened["pending_client_connection"] = True
+            if softened.get("success"):
+                requested_ui_id = ui_id
+                if requested_ui_id is None and isinstance(render_spec, dict):
+                    raw_ui = render_spec.get("ui_id")
+                    if isinstance(raw_ui, str) and raw_ui.strip():
+                        requested_ui_id = raw_ui.strip()
+                _remember_active_ui(
+                    ui_id=(softened.get("ui_id") or requested_ui_id),
+                    session_id=(softened.get("session_id") or session_id),
+                )
             return softened
 
         if operation_key == "patch":
@@ -594,69 +637,19 @@ async def metaui(
                 return {"success": False, "error": "`ui_id` is required for patch (no active UI session found)."}
             if patch is None:
                 return {"success": False, "error": "`patch` is required for patch."}
-            routing = decide_patch_routing(patch)
-            if routing.route_to_render_full:
-                if not auto_route_structural_patch:
-                    error_payload = {
-                        "success": False,
-                        "error": (
-                            "Structural UI intent detected in patch payload. "
-                            "Use `metaui.render_full` with an explicit spec for layout/view changes."
-                        ),
-                        "error_code": "structural_patch_requires_render_full",
-                        "resolved_ui_id": resolved_ui_id,
-                        "routing_reason": routing.reason,
-                        "recommended_flow": [
-                            "1) call metaui.catalog",
-                            "2) build explicit MetaUI spec for the target UI",
-                            "3) call metaui.render_full(spec=..., ui_id=...)",
-                            "4) use metaui.patch/set_state only for non-structural updates",
-                        ],
-                    }
-                    if routing.intent_text:
-                        error_payload["detected_intent"] = routing.intent_text
-                    return error_payload
-
-                rendered_spec: Optional[Dict[str, Any]] = None
-                if routing.reason == "intent_signals_structure_switch" and routing.intent_text:
-                    # Intent-driven view switch should re-compose from intent directly,
-                    # instead of mutating the previous surface spec.
-                    rendered_spec = build_intent_spec(routing.intent_text, session_id=session_id)
-                else:
-                    session_snapshot = await orchestrator.get_session(resolved_ui_id)
-                    if session_snapshot.get("success") and isinstance(session_snapshot.get("spec"), dict):
-                        rendered_spec = apply_structural_patch_to_spec(session_snapshot["spec"], patch)
-                    if rendered_spec is None and routing.intent_text:
-                        rendered_spec = build_intent_spec(routing.intent_text, session_id=session_id)
-
-                if rendered_spec is None:
-                    return {
-                        "success": False,
-                        "error": "Unable to derive full spec from structural patch. Provide explicit spec to render_full.",
-                        "error_code": "structural_patch_requires_render_full",
-                        "resolved_ui_id": resolved_ui_id,
-                        "routing_reason": routing.reason,
-                    }
-
-                result = await orchestrator.render_full(
-                    spec=rendered_spec,
-                    session_id=session_id,
-                    ui_id=resolved_ui_id,
-                )
-                softened = _soften_no_clients_result(result, operation="render_full")
-                if resolved_ui_id != ui_id:
-                    softened["resolved_ui_id"] = resolved_ui_id
-                softened["auto_routed"] = True
-                softened["routed_operation"] = "render_full"
-                softened["routing_reason"] = routing.reason
-                if routing.intent_text:
-                    softened["detected_intent"] = routing.intent_text
-                return softened
-            result = await orchestrator.patch(ui_id=resolved_ui_id, patch=patch, session_id=session_id)
+            patch_result = await orchestrator.patch(ui_id=resolved_ui_id, patch=patch, session_id=session_id)
+            softened = _soften_no_clients_result(
+                patch_result,
+                operation="patch",
+                allow_pending=_allow_pending_client_soft_success(
+                    desktop_pending_connection=desktop_pending_connection
+                ),
+            )
             if resolved_ui_id != ui_id:
-                result = dict(result)
-                result["resolved_ui_id"] = resolved_ui_id
-            return result
+                softened["resolved_ui_id"] = resolved_ui_id
+            if softened.get("success"):
+                _remember_active_ui(ui_id=resolved_ui_id, session_id=session_id)
+            return softened
 
         if operation_key == "set_state":
             resolved_ui_id = await _resolve_target_ui_id(
@@ -669,7 +662,13 @@ async def metaui(
             if state is None:
                 return {"success": False, "error": "`state` is required for set_state."}
             result = await orchestrator.set_state(ui_id=resolved_ui_id, state=state, session_id=session_id)
-            softened = _soften_no_clients_result(result, operation="set_state")
+            softened = _soften_no_clients_result(
+                result,
+                operation="set_state",
+                allow_pending=_allow_pending_client_soft_success(
+                    desktop_pending_connection=desktop_pending_connection
+                ),
+            )
             if desktop_pending_connection:
                 softened.setdefault(
                     "warning",
@@ -678,6 +677,8 @@ async def metaui(
                 softened["pending_client_connection"] = True
             if resolved_ui_id != ui_id:
                 softened["resolved_ui_id"] = resolved_ui_id
+            if softened.get("success"):
+                _remember_active_ui(ui_id=resolved_ui_id, session_id=session_id)
             return softened
 
         if operation_key == "notify":
@@ -702,6 +703,8 @@ async def metaui(
             if resolved_ui_id != ui_id:
                 result = dict(result)
                 result["resolved_ui_id"] = resolved_ui_id
+            if result.get("success"):
+                _forget_active_ui(ui_id=resolved_ui_id)
             return result
 
         if operation_key == "list_sessions":
@@ -710,7 +713,12 @@ async def metaui(
         if operation_key == "get_session":
             if not ui_id:
                 return {"success": False, "error": "`ui_id` is required for get_session."}
-            return await orchestrator.get_session(ui_id)
+            result = await orchestrator.get_session(ui_id)
+            if result.get("success"):
+                session = result.get("session")
+                resolved_session_id = session.get("session_id") if isinstance(session, dict) else None
+                _remember_active_ui(ui_id=ui_id, session_id=resolved_session_id)
+            return result
 
         if operation_key == "update_phase":
             resolved_ui_id = await _resolve_target_ui_id(
@@ -730,6 +738,8 @@ async def metaui(
             if resolved_ui_id != ui_id:
                 result = dict(result)
                 result["resolved_ui_id"] = resolved_ui_id
+            if result.get("success"):
+                _remember_active_ui(ui_id=resolved_ui_id, session_id=session_id)
             return result
 
         if operation_key == "poll_events":

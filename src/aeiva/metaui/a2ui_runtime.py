@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import re
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Iterable, List, Mapping, Sequence
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

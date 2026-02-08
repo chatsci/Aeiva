@@ -26,16 +26,22 @@ AEIVA 是一个面向实际应用的 AI 助手仓库，用于构建和运行多�
 ### 1）安装
 
 ```bash
-pip install -e .
+uv sync
 ```
 
-可选扩展：
+安装全部可选能力（推荐本地开发）：
 
 ```bash
-pip install -e ".[realtime]"   # 实时语音/文本 UI
-pip install -e ".[slack]"      # Slack 网关
-pip install -e ".[media]"      # 媒体处理工具
-pip install -e ".[metaui]"     # 桌面 MetaUI 运行时
+uv sync --all-extras
+```
+
+或按需安装单个扩展：
+
+```bash
+uv sync --extra realtime   # 实时语音/文本 UI
+uv sync --extra slack      # Slack 网关
+uv sync --extra media      # 媒体处理工具
+uv sync --extra metaui     # 桌面 MetaUI 运行时
 ```
 
 ### 2）配置
@@ -100,7 +106,12 @@ aeiva-metaui-desktop --ws-url ws://127.0.0.1:8765/metaui
 ```
 
 `metaui` 工具已可在 `action_config.tools` 中使用。
-默认情况下 `aeiva-gateway` 不会在启动时立即拉起 MetaUI 窗口；当助手实际调用 `metaui`（且 `ensure_visible=true`）时才按需启动。若需要开机即启动，可设置 `metaui_config.auto_start_desktop: true`。
+默认情况下 `aeiva-gateway` 不会在启动时立即拉起 MetaUI 窗口；当助手实际调用 `metaui` 且 `ensure_visible=true` 时才按需启动。
+
+MetaUI 主路径是“纯渲染层”：
+- UI 结构定义由 AI 端显式给出（`components`、`root`、`actions`、`state_bindings`）。
+- MetaUI 负责校验、渲染与交互/文件事件回传。
+- 建议使用 `metaui.catalog` + `metaui.render_full(spec=...)` + `metaui.patch/set_state` 形成确定性流程。
 
 ### 6）通道说明
 

@@ -32,7 +32,9 @@ def build_surface_update_message(spec: MetaUISpec) -> Dict[str, Any]:
 
 
 def build_begin_rendering_message(spec: MetaUISpec, *, catalog_id: Optional[str] = None) -> Dict[str, Any]:
-    root = spec.root[0] if spec.root else (spec.components[0].id if spec.components else "")
+    root = spec.root[0] if spec.root else (spec.components[0].id if spec.components else None)
+    if not root:
+        raise ValueError("MetaUI spec has no root component and no components to derive root from.")
     resolved_catalog_id = catalog_id
     if not resolved_catalog_id:
         resolved_catalog_id = build_catalog_snapshot(get_component_catalog())["catalogId"]
