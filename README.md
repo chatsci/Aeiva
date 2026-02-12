@@ -109,11 +109,58 @@ aeiva-metaui-desktop --ws-url ws://127.0.0.1:8765/metaui
 By default `aeiva-gateway` does not auto-start the desktop window. It is launched lazily when the assistant uses `metaui` with `ensure_visible=true`.
 
 MetaUI is renderer-only on the main path:
-- AI generates explicit UI spec (`components`, `root`, `actions`, `state_bindings`).
+- AI generates explicit UI spec (`components`, `root`, component-level `Action`, `state_bindings`).
 - MetaUI validates, renders, and returns interaction/file events.
-- For deterministic behavior, use `metaui.catalog` + `metaui.render_full(spec=...)` + `metaui.patch/set_state`.
+- `metaui.protocol_schema` exposes `MetaUISpec` JSON schema and strict interaction contract for model-side authoring.
+- For deterministic behavior, use `metaui.catalog` + `metaui.protocol_schema` + `metaui.render_full(spec=...)` + `metaui.patch/set_state`.
+- Use `interaction_mode` in spec:
+  - `interactive` (default): key controls (`button`, `form`, `form_step`) must declare explicit interaction contract.
+  - `preview`: layout-only preview is allowed (non-functional mock UI).
 
-### 6) Channel Notes
+MetaUI event bridge (A2UI-style interaction loop):
+- In `aeiva-gateway` + Gradio mode, UI events can be forwarded back to AI as structured stimuli.
+- This lets AI react to button/form/upload actions and update UI continuously via `metaui` calls.
+- Control with `metaui_config.event_bridge_enabled` and related `event_bridge_*` options.
+
+### 6) Dialogue Replay Testing (Real Conversations)
+
+You can replay real multi-turn dialogue scenarios against a live AEIVA runtime
+and get machine-readable pass/fail reports.
+
+```bash
+aeiva-dialogue-replay \
+  --config configs/agent_config.yaml \
+  --scenarios docs/examples/dialogue_replay/metaui_dialogue_suite.yaml \
+  --output-json .reports/dialogue-replay.json \
+  --output-md .reports/dialogue-replay.md
+```
+
+Useful options:
+- `--scenario-id <id>` (repeatable): run only selected scenarios
+- `--fail-fast`: stop a scenario at the first failing turn assertion
+- `--route-token <token>`: select replay route (default `gradio`)
+
+Scenario file format:
+- `scenarios[]`: list of test scenarios
+- each scenario has `id`, `description`, `turns[]`
+- each turn supports `user`, `timeout_seconds`, `expectation`
+- `expectation` supports content, latency, and MetaUI invariants:
+  - `contains_all`, `contains_any`, `excludes`
+  - `min_response_chars`, `max_latency_seconds`
+  - `metaui_min_sessions`, `metaui_require_non_empty_components`
+
+One-command MetaUI quality gate (pytest + optional live replay):
+
+```bash
+aeiva-metaui-eval \
+  --config configs/agent_config.yaml \
+  --replay-scenarios docs/examples/dialogue_replay/metaui_dialogue_suite.yaml \
+  --replay-mode auto \
+  --output-json .reports/metaui-evaluation.json \
+  --output-md .reports/metaui-evaluation.md
+```
+
+### 7) Channel Notes
 
 Slack usage:
 - install Slack extra: `pip install -e '.[slack]'`

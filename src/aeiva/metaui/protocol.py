@@ -14,14 +14,9 @@ EVENT_VERSION = "1.0"
 UI_COMPONENT_TYPES = frozenset(supported_component_types())
 
 COMMAND_TYPES = {
-    "render_full",
-    "patch",
-    "set_state",
-    "notify",
-    "close",
-    "surface_update",
-    "data_model_update",
-    "begin_rendering",
+    "create_surface",
+    "update_components",
+    "update_data_model",
     "delete_surface",
 }
 
@@ -57,15 +52,17 @@ class MetaUISpec(BaseModel):
     ui_id: str = Field(default_factory=new_ui_id, min_length=4, max_length=128)
     session_id: Optional[str] = Field(default=None, max_length=128)
     title: str = Field(default="MetaUI", min_length=1, max_length=256)
+    interaction_mode: Literal["interactive", "preview"] = "interactive"
     components: List[MetaUIComponent] = Field(default_factory=list)
     root: List[str] = Field(default_factory=list)
-    actions: List[Dict[str, Any]] = Field(default_factory=list)
     state_bindings: Dict[str, Any] = Field(default_factory=dict)
     theme: Dict[str, Any] = Field(default_factory=dict)
     send_data_model: bool = False
 
     @model_validator(mode="after")
     def _validate_root(self) -> "MetaUISpec":
+        if not self.root:
+            raise ValueError("MetaUISpec.root must contain at least one component id.")
         component_ids = {component.id for component in self.components}
         for component_id in self.root:
             if component_id not in component_ids:
@@ -77,14 +74,9 @@ class MetaUISpec(BaseModel):
 
 class MetaUICommand(BaseModel):
     command: Literal[
-        "render_full",
-        "patch",
-        "set_state",
-        "notify",
-        "close",
-        "surface_update",
-        "data_model_update",
-        "begin_rendering",
+        "create_surface",
+        "update_components",
+        "update_data_model",
         "delete_surface",
     ]
     command_id: str = Field(default_factory=new_command_id, min_length=4, max_length=128)

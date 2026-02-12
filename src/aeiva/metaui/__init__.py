@@ -13,13 +13,15 @@ from .protocol import (
 )
 from .orchestrator import MetaUIEndpoint, MetaUIOrchestrator, get_metaui_orchestrator
 from .orchestrator import configure_metaui_runtime, get_metaui_runtime_settings
-from .intent_spec import (
-    build_intent_spec,
-    build_scaffold_spec,
-    intent_has_component_signals,
-)
 from .session import MetaUIPhase, MetaUISession
 from .component_catalog import get_component_catalog, supported_component_types
+from .event_bridge import (
+    MetaUIEventBridge,
+    MetaUIEventBridgeConfig,
+    build_metaui_event_prompt,
+    parse_metaui_event_bridge_config,
+    start_metaui_event_bridge,
+)
 
 __all__ = [
     "MetaUICommand",
@@ -30,13 +32,15 @@ __all__ = [
     "MetaUIPhase",
     "MetaUISession",
     "MetaUISpec",
-    "build_intent_spec",
-    "build_scaffold_spec",
+    "build_metaui_event_prompt",
     "get_component_catalog",
-    "intent_has_component_signals",
+    "MetaUIEventBridge",
+    "MetaUIEventBridgeConfig",
     "configure_metaui_runtime",
     "get_metaui_orchestrator",
     "get_metaui_runtime_settings",
+    "parse_metaui_event_bridge_config",
+    "start_metaui_event_bridge",
     "new_command_id",
     "new_event_id",
     "new_ui_id",

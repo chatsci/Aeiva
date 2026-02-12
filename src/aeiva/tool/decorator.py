@@ -145,8 +145,35 @@ class ToolMetadata:
             },
         }
 
+    def _validate_call_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any] | None:
+        """Validate required/mismatched tool arguments before function invocation."""
+        known = {param.name for param in self.parameters}
+        provided = set(kwargs.keys())
+        missing = [param.name for param in self.parameters if param.required and param.name not in provided]
+        unexpected = sorted(provided - known)
+        if not missing and not unexpected:
+            return None
+
+        error_parts: List[str] = []
+        if missing:
+            error_parts.append(f"missing required argument(s): {', '.join(missing)}")
+        if unexpected:
+            error_parts.append(f"unexpected argument(s): {', '.join(unexpected)}")
+        return {
+            "success": False,
+            "error_code": "invalid_arguments",
+            "tool": self.name,
+            "error": "; ".join(error_parts),
+            "missing": missing,
+            "unexpected": unexpected,
+            "required": [param.name for param in self.parameters if param.required],
+        }
+
     async def execute(self, **kwargs) -> Any:
         """Execute the tool with given arguments."""
+        validation_error = self._validate_call_kwargs(kwargs)
+        if validation_error is not None:
+            return validation_error
         if self.is_async:
             return await self.func(**kwargs)
         else:
@@ -154,6 +181,9 @@ class ToolMetadata:
 
     def execute_sync(self, **kwargs) -> Any:
         """Execute the tool synchronously."""
+        validation_error = self._validate_call_kwargs(kwargs)
+        if validation_error is not None:
+            return validation_error
         if self.is_async:
             try:
                 asyncio.get_running_loop()

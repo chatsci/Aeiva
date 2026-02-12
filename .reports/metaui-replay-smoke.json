@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-02-10T04:15:42.311765+00:00",
+  "total_scenarios": 1,
+  "passed_scenarios": 0,
+  "failed_scenarios": 1,
+  "success_rate": 0.0,
+  "total_turns": 1,
+  "timed_out_turns": 1,
+  "avg_latency_seconds": 40.0063623751048,
+  "errors": [
+    "[smoke_hello] smoke_hello/turn[0] response too short: 0 < 2",
+    "[smoke_hello] smoke_hello/turn[0] latency 40.01s > 35.00s"
+  ],
+  "scenario_results": [
+    {
+      "scenario_id": "smoke_hello",
+      "passed": false,
+      "errors": [
+        "smoke_hello/turn[0] response too short: 0 < 2",
+        "smoke_hello/turn[0] latency 40.01s > 35.00s"
+      ],
+      "turns": [
+        {
+          "user": "hello",
+          "response": "",
+          "latency_seconds": 40.0063623751048,
+          "hints": [
+            "Thinking. (1s)",
+            "Acting.. (5s)",
+            "Acting... (9s)",
+            "Waiting for tools. (13s)",
+            "Waiting for tools.. (17s)",
+            "Waiting for tools... (21s)",
+            "Retrying if needed. (25s)",
+            "Retrying if needed.. (29s)",
+            "Retrying if needed... (33s)",
+            "Retrying if needed. (37s)"
+          ],
+          "timed_out": true,
+          "metaui": null
+        }
+      ]
+    }
+  ]
+}

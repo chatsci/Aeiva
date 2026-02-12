@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Tuple
 
 
-SUPPORTED_PROTOCOL_VERSIONS: Tuple[str, ...] = ("1.0",)
+SUPPORTED_PROTOCOL_VERSIONS: Tuple[str, ...] = ("v0.10",)
 SUPPORTED_FEATURES: Tuple[str, ...] = (
     "a2ui_stream_v1",
     "json_pointer_bindings_v1",
 )
+A2UI_STANDARD_CATALOG_ID = "https://a2ui.org/specification/v0_10/standard_catalog.json"
 
 
 def _clean_string_items(values: Iterable[Any]) -> Tuple[str, ...]:
@@ -40,11 +41,11 @@ class MetaUIClientCapabilities:
 
 def build_catalog_snapshot(server_catalog: Dict[str, Any]) -> Dict[str, Any]:
     catalog = server_catalog if isinstance(server_catalog, dict) else {}
-    version = str(catalog.get("version") or "1.0")
+    version = str(catalog.get("version") or "v0.10")
     components = catalog.get("components")
     component_types = sorted(components.keys()) if isinstance(components, dict) else []
     return {
-        "catalogId": f"aeiva://metaui/catalog/{version}",
+        "catalogId": A2UI_STANDARD_CATALOG_ID,
         "version": version,
         "componentTypes": component_types,
     }

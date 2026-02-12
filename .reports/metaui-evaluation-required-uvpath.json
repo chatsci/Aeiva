@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-02-10T03:34:55.666266+00:00",
+  "replay_mode": "required",
+  "python_executable": "/Users/bangliu/Documents/ChatSCI/Aeiva/.venv/bin/python3",
+  "success": false,
+  "passed_steps": 1,
+  "failed_steps": 1,
+  "skipped_steps": 0,
+  "steps": [
+    {
+      "name": "metaui_pytest",
+      "status": "passed",
+      "duration_seconds": 1.4515913331415504,
+      "return_code": 0,
+      "command": [
+        "/Users/bangliu/Documents/ChatSCI/Aeiva/.venv/bin/python3",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/metaui",
+        "tests/testing/test_dialogue_replay.py",
+        "tests/command/test_dialogue_replay_command.py",
+        "tests/command/test_gradio_progress_hints.py"
+      ],
+      "stdout_tail": "........................................................................ [ 34%]\n........................................................................ [ 68%]\n.................................................................        [100%]\n209 passed in 1.15s\n",
+      "stderr_tail": "",
+      "reason": null
+    },
+    {
+      "name": "metaui_live_replay",
+      "status": "failed",
+      "duration_seconds": 52.400104040978476,
+      "return_code": 1,
+      "command": [
+        "/Users/bangliu/Documents/ChatSCI/Aeiva/.venv/bin/python3",
+        "-m",
+        "aeiva.command.aeiva_dialogue_replay",
+        "--config",
+        "/var/folders/v4/zsxty1fj1gzcn108gpwkgj0r0000gn/T/aeiva-metaui-replay-w79tx29u.json",
+        "--scenarios",
+        "/Users/bangliu/Documents/ChatSCI/Aeiva/docs/examples/dialogue_replay/metaui_dialogue_suite.yaml",
+        "--output-json",
+        ".reports/metaui-evaluation-required-uvpath.replay.json",
+        "--output-md",
+        ".reports/metaui-evaluation-required-uvpath.replay.md",
+        "--fail-fast"
+      ],
+      "stdout_tail": "Loading configuration from /var/folders/v4/zsxty1fj1gzcn108gpwkgj0r0000gn/T/aeiva-metaui-replay-w79tx29u.json\nLoading replay scenarios from /Users/bangliu/Documents/ChatSCI/Aeiva/docs/examples/dialogue_replay/metaui_dialogue_suite.yaml\ntotal_scenarios: 2\npassed_scenarios: 0\nfailed_scenarios: 2\ntotal_turns: 2\ntimed_out_turns: 2\navg_latency_seconds: 25.01\n",
+      "stderr_tail": "",
+      "reason": null
+    }
+  ]
+}

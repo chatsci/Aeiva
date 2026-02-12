@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-02-10T02:40:50.136361+00:00",
+  "replay_mode": "auto",
+  "python_executable": "/opt/anaconda3/envs/aeiva/bin/python",
+  "success": false,
+  "passed_steps": 1,
+  "failed_steps": 1,
+  "skipped_steps": 0,
+  "steps": [
+    {
+      "name": "metaui_pytest",
+      "status": "passed",
+      "duration_seconds": 1.393086708150804,
+      "return_code": 0,
+      "command": [
+        "/opt/anaconda3/envs/aeiva/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/metaui",
+        "tests/testing/test_dialogue_replay.py",
+        "tests/command/test_dialogue_replay_command.py",
+        "tests/command/test_gradio_progress_hints.py"
+      ],
+      "stdout_tail": "........................................................................ [ 35%]\n........................................................................ [ 70%]\n...........................................................              [100%]\n203 passed in 1.08s\n",
+      "stderr_tail": "",
+      "reason": null
+    },
+    {
+      "name": "metaui_live_replay",
+      "status": "failed",
+      "duration_seconds": 52.08192183286883,
+      "return_code": 1,
+      "command": [
+        "/opt/anaconda3/envs/aeiva/bin/python",
+        "-m",
+        "aeiva.command.aeiva_dialogue_replay",
+        "--config",
+        "/var/folders/v4/zsxty1fj1gzcn108gpwkgj0r0000gn/T/aeiva-metaui-replay-7jtu08in.json",
+        "--scenarios",
+        "docs/examples/dialogue_replay/metaui_dialogue_suite.yaml",
+        "--output-json",
+        ".reports/metaui-evaluation.host.replay.json",
+        "--output-md",
+        ".reports/metaui-evaluation.host.replay.md",
+        "--fail-fast"
+      ],
+      "stdout_tail": "Loading configuration from /var/folders/v4/zsxty1fj1gzcn108gpwkgj0r0000gn/T/aeiva-metaui-replay-7jtu08in.json\nLoading replay scenarios from docs/examples/dialogue_replay/metaui_dialogue_suite.yaml\ntotal_scenarios: 2\npassed_scenarios: 0\nfailed_scenarios: 2\ntotal_turns: 2\ntimed_out_turns: 2\navg_latency_seconds: 25.01\n",
+      "stderr_tail": "",
+      "reason": null
+    }
+  ]
+}

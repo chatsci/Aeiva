@@ -2,1473 +2,75 @@ from __future__ import annotations
 
 from copy import deepcopy
 import math
-import re
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 
+from .function_catalog import (
+    get_known_function_return_type,
+    validate_known_function_call,
+)
+from .interaction_contract import (
+    ACTION_VARIANTS,
+    COMPONENT_SUPPORTED_EVENTS,
+    FUNCTION_CALL_RETURN_TYPES,
+)
 from .protocol import UI_COMPONENT_TYPES
 
-_TOKEN_SPLIT_RE = re.compile(r"[^a-z0-9]+")
-
-_TYPE_ALIASES: Dict[str, str] = {
-    "table": "data_table",
-    "grid": "data_table",
-    "data_grid": "data_table",
-    "datagrid": "data_table",
-    "tabset": "tabs",
-    "tab_set": "tabs",
-    "collapse": "accordion",
-    "separator": "divider",
-    "hr": "divider",
-    "chat": "chat_panel",
-    "chatbox": "chat_panel",
-    "chat_box": "chat_panel",
-    "chat_window": "chat_panel",
-    "conversation": "chat_panel",
-    "dialog": "chat_panel",
-    "file_upload": "file_uploader",
-    "upload": "file_uploader",
-    "uploader": "file_uploader",
-    "metric": "metric_card",
-    "kpi": "metric_card",
-    "stat": "metric_card",
-    "list": "list_view",
-    "listview": "list_view",
-    "code": "code_block",
-    "codeblock": "code_block",
-    "pre": "code_block",
-    "img": "image",
-    "picture": "image",
-    "embed": "iframe",
-    "webview": "iframe",
-    "btn": "button",
-    "action_button": "button",
-    "text_input": "input",
-    "input_field": "input",
-    "text_area": "textarea",
-    "dropdown": "select",
-    "toggle": "checkbox",
-    "switch": "checkbox",
-    "radio": "radio_group",
-    "radiogroup": "radio_group",
-    "range": "slider",
-    "multi_step_form": "form_step",
-    "step_form": "form_step",
-    "form_wizard": "form_step",
-    "wizard": "form_step",
-    "progress": "progress_panel",
-    "status_panel": "progress_panel",
-    "export": "result_export",
-    # A2UI standard component compatibility aliases.
-    "row": "container",
-    "column": "container",
-    "card": "container",
-    "modal": "container",
-    "text_field": "input",
-    "textfield": "input",
-    "choice_picker": "select",
-    "choicepicker": "select",
-    "date_time_input": "input",
-    "datetime_input": "input",
-    "datetimeinput": "input",
-    "icon": "badge",
-    "video": "iframe",
-    "audio_player": "iframe",
-    "audioplayer": "iframe",
-}
-
-_LINE_CHART_ALIASES = {
-    "line",
-    "linechart",
-    "line_chart",
-    "plot",
-    "timeseries",
-    "time_series",
-    "trend",
-}
-_BAR_CHART_ALIASES = {
-    "bar",
-    "barchart",
-    "bar_chart",
-    "column",
-    "columns",
-    "histogram",
-}
-
-_IFRAME_SANDBOX_PROFILES: Dict[str, str] = {
-    "strict": "allow-same-origin",
-    "interactive": "allow-same-origin allow-scripts allow-forms",
-}
-_IFRAME_ALLOWED_SANDBOX_TOKENS: set[str] = {
-    "allow-downloads",
-    "allow-forms",
-    "allow-modals",
-    "allow-popups",
-    "allow-popups-to-escape-sandbox",
-    "allow-presentation",
-    "allow-same-origin",
-    "allow-scripts",
-}
-_MAX_CHAT_MESSAGES = 200
-_MAX_CHAT_MESSAGE_CHARS = 4000
-
-_INTERACTION_EVENT_HINTS: Dict[str, Tuple[str, ...]] = {
-    "tabs": ("change",),
-    "accordion": ("change",),
-    "button": ("action", "click"),
-    "input": ("change", "submit"),
-    "textarea": ("change",),
-    "select": ("change",),
-    "checkbox": ("change",),
-    "radio_group": ("change",),
-    "slider": ("change",),
-    "file_uploader": ("upload", "change"),
-    "form": ("submit", "change"),
-    "chat_panel": ("submit", "change"),
-    "form_step": ("submit", "change"),
-    "result_export": ("export", "action"),
-}
-
-_LOCAL_ACTION_STEP_TOKENS = {
-    "sequence",
-    "set_state",
-    "merge_state",
-    "append_state",
-    "mutate",
-    "emit_event",
-    "emit",
-    "notify",
-    "toast",
-    "spec_patch",
-    "apply_patch",
-    "patch",
-    "run_action",
-    "call_action",
-    "merge_theme",
-    "set_theme",
-    "append_chat_message",
-    "chat_append",
-    "add_message",
-    "clear_chat",
-    "chat_clear",
-    "clear_messages",
-}
-
-_THEME_DARK_PRESET: Dict[str, Any] = {
-    "color_bg_top": "#0f172a",
-    "color_bg_bottom": "#111827",
-    "color_surface": "#1f2937",
-    "color_text": "#e5e7eb",
-    "color_muted": "#9ca3af",
-    "color_border": "#334155",
-    "color_border_strong": "#475569",
-    "color_primary": "#22d3ee",
-    "color_primary_hover": "#06b6d4",
-    "color_primary_soft": "#164e63",
-    "color_focus_ring": "rgba(34, 211, 238, 0.35)",
-}
-
-_THEME_LIGHT_PRESET: Dict[str, Any] = {
-    "color_bg_top": "#f4f8ff",
-    "color_bg_bottom": "#edf2f8",
-    "color_surface": "#ffffff",
-    "color_text": "#0f172a",
-    "color_muted": "#64748b",
-    "color_border": "#d6dde8",
-    "color_border_strong": "#c2cedd",
-    "color_primary": "#0f766e",
-    "color_primary_hover": "#0b5f59",
-    "color_primary_soft": "#dff6f4",
-    "color_focus_ring": "rgba(15, 118, 110, 0.25)",
-}
-
-
-def _norm_token(value: Any) -> str:
-    text = str(value or "").strip().lower()
-    if not text:
-        return ""
-    return _TOKEN_SPLIT_RE.sub("_", text).strip("_")
-
-
-def _component_type_token(component: Mapping[str, Any]) -> str:
-    raw_type = component.get("type")
-    if raw_type is None:
-        raw_type = component.get("component")
-    return _norm_token(raw_type)
-
-
-def _component_raw_type(component: Mapping[str, Any]) -> Any:
-    raw_type = component.get("type")
-    if raw_type is None:
-        raw_type = component.get("component")
-    return raw_type
-
-
-def _extract_component_props(component: Mapping[str, Any]) -> Dict[str, Any]:
-    props_raw = component.get("props")
-    props: Dict[str, Any] = deepcopy(dict(props_raw)) if isinstance(props_raw, Mapping) else {}
-    for key, value in component.items():
-        if key in {"id", "type", "component", "props"}:
-            continue
-        if key not in props:
-            props[key] = deepcopy(value)
-    return props
-
-
-def _as_children_list(raw_children: Any, raw_child: Any) -> list[str]:
-    if isinstance(raw_children, list):
-        out: list[str] = []
-        for item in raw_children:
-            ref = _coerce_component_ref(item)
-            if ref:
-                out.append(ref)
-        return out
-    if raw_child is None:
-        return []
-    ref = _coerce_component_ref(raw_child)
-    return [ref] if ref else []
-
-
-def _coerce_component_ref(raw: Any) -> Optional[str]:
-    if isinstance(raw, Mapping):
-        return None
-    if isinstance(raw, (list, tuple, set)):
-        return None
-    token = str(raw or "").strip()
-    return token or None
-
-
-def _next_generated_component_id(existing_ids: set[str], *, prefix: str) -> str:
-    token = _norm_token(prefix) or "component"
-    index = 1
-    while True:
-        candidate = f"{token}_{index}"
-        if candidate not in existing_ids:
-            existing_ids.add(candidate)
-            return candidate
-        index += 1
-
-
-def _claim_component_id(existing_ids: set[str], raw_id: Any, *, preferred_prefix: str) -> str:
-    candidate = str(raw_id or "").strip()
-    if candidate and candidate not in existing_ids:
-        existing_ids.add(candidate)
-        return candidate
-    return _next_generated_component_id(existing_ids, prefix=preferred_prefix)
-
-
-def _collect_child_component_ids(
-    raw_children: Any,
-    *,
-    add_component: Callable[[Mapping[str, Any], str], Optional[str]],
-    hint_prefix: str,
-) -> list[str]:
-    children: list[str] = []
-    if not isinstance(raw_children, list):
-        return children
-    for index, child in enumerate(raw_children):
-        if isinstance(child, Mapping):
-            child_id = add_component(child, f"{hint_prefix}_{index + 1}")
-            if child_id:
-                children.append(child_id)
-            continue
-        child_id = _coerce_component_ref(child)
-        if child_id:
-            children.append(child_id)
-    return children
-
-
-def _expand_inline_component_refs(
-    raw_component: Mapping[str, Any],
-    props: Dict[str, Any],
-    *,
-    add_component: Callable[[Mapping[str, Any], str], Optional[str]],
-    hint_prefix: str,
-) -> None:
-    component_type, _ = _normalize_component_type(_component_raw_type(raw_component))
-    if component_type == "container":
-        raw_children = props.get("children")
-        if not isinstance(raw_children, list):
-            raw_child = props.get("child")
-            raw_children = [raw_child] if raw_child is not None else []
-        props["children"] = _collect_child_component_ids(
-            raw_children,
-            add_component=add_component,
-            hint_prefix=f"{hint_prefix}_child",
-        )
-        return
-
-    if component_type == "tabs":
-        normalized_tabs: list[Dict[str, Any]] = []
-        for index, tab in enumerate(props.get("tabs") if isinstance(props.get("tabs"), list) else []):
-            if not isinstance(tab, Mapping):
-                continue
-            tab_payload = deepcopy(dict(tab))
-            raw_children = tab_payload.get("children")
-            if not isinstance(raw_children, list):
-                raw_child = tab_payload.get("child")
-                raw_children = [raw_child] if raw_child is not None else []
-            tab_payload["children"] = _collect_child_component_ids(
-                raw_children,
-                add_component=add_component,
-                hint_prefix=f"{hint_prefix}_tab_{index + 1}_child",
-            )
-            normalized_tabs.append(tab_payload)
-        props["tabs"] = normalized_tabs
-        return
-
-    if component_type == "accordion":
-        normalized_sections: list[Dict[str, Any]] = []
-        for index, section in enumerate(
-            props.get("sections") if isinstance(props.get("sections"), list) else []
-        ):
-            if not isinstance(section, Mapping):
-                continue
-            section_payload = deepcopy(dict(section))
-            raw_children = section_payload.get("children")
-            if not isinstance(raw_children, list):
-                raw_child = section_payload.get("child")
-                raw_children = [raw_child] if raw_child is not None else []
-            section_payload["children"] = _collect_child_component_ids(
-                raw_children,
-                add_component=add_component,
-                hint_prefix=f"{hint_prefix}_section_{index + 1}_child",
-            )
-            normalized_sections.append(section_payload)
-        props["sections"] = normalized_sections
-
-
-def _props_have_inline_component_refs(component_type: str, props: Mapping[str, Any]) -> bool:
-    if component_type == "container":
-        raw_children = props.get("children")
-        if isinstance(raw_children, list) and any(isinstance(item, Mapping) for item in raw_children):
-            return True
-        return isinstance(props.get("child"), Mapping)
-
-    if component_type == "tabs":
-        raw_tabs = props.get("tabs")
-        if not isinstance(raw_tabs, list):
-            return False
-        for tab in raw_tabs:
-            if not isinstance(tab, Mapping):
-                continue
-            children = tab.get("children")
-            if isinstance(children, list) and any(isinstance(item, Mapping) for item in children):
-                return True
-            if isinstance(tab.get("child"), Mapping):
-                return True
-        return False
-
-    if component_type == "accordion":
-        raw_sections = props.get("sections")
-        if not isinstance(raw_sections, list):
-            return False
-        for section in raw_sections:
-            if not isinstance(section, Mapping):
-                continue
-            children = section.get("children")
-            if isinstance(children, list) and any(isinstance(item, Mapping) for item in children):
-                return True
-            if isinstance(section.get("child"), Mapping):
-                return True
-        return False
-
-    return False
-
-
-def _normalize_component_graph(
-    *,
-    seed_components: Sequence[Mapping[str, Any]],
-    seed_root_entries: Sequence[Any],
-    strict_component_types: bool,
-) -> tuple[list[Dict[str, Any]], list[str], list[str]]:
-    normalized_components: list[Dict[str, Any]] = []
-    existing_ids: set[str] = set()
-    preferred_id_aliases: Dict[str, str] = {}
-    seed_component_ids: list[str] = []
-
-    def _add_component(raw_component: Mapping[str, Any], hint: str) -> Optional[str]:
-        payload = deepcopy(dict(raw_component))
-        raw_type = _component_raw_type(payload)
-        preferred_prefix = (
-            _norm_token(raw_type)
-            or _norm_token(payload.get("component"))
-            or _norm_token(hint)
-            or "component"
-        )
-        component_id = _claim_component_id(
-            existing_ids,
-            payload.get("id"),
-            preferred_prefix=preferred_prefix,
-        )
-        payload["id"] = component_id
-        raw_id = str(raw_component.get("id") or "").strip()
-        if raw_id and raw_id not in preferred_id_aliases:
-            preferred_id_aliases[raw_id] = component_id
-
-        props = _extract_component_props(payload)
-        _expand_inline_component_refs(
-            payload,
-            props,
-            add_component=_add_component,
-            hint_prefix=component_id,
-        )
-
-        component_payload: Dict[str, Any] = {"id": component_id, "props": props}
-        if payload.get("type") is not None:
-            component_payload["type"] = payload["type"]
-        elif payload.get("component") is not None:
-            component_payload["component"] = payload["component"]
-        else:
-            component_payload["type"] = "text"
-
-        normalized_components.append(
-            normalize_component(
-                component_payload,
-                strict_component_types=strict_component_types,
-            )
-        )
-        return component_id
-
-    for index, raw_component in enumerate(seed_components):
-        component_id = _add_component(raw_component, f"component_{index + 1}")
-        if component_id:
-            seed_component_ids.append(component_id)
-
-    root_ids: list[str] = []
-    seen_root_ids: set[str] = set()
-    for index, entry in enumerate(seed_root_entries):
-        component_id: Optional[str] = None
-        if isinstance(entry, Mapping):
-            component_id = _add_component(entry, f"root_{index + 1}")
-        else:
-            token = str(entry or "").strip()
-            if token:
-                component_id = preferred_id_aliases.get(token, token)
-        if component_id and component_id not in seen_root_ids:
-            root_ids.append(component_id)
-            seen_root_ids.add(component_id)
-
-    return normalized_components, root_ids, seed_component_ids
-
-
-def _seed_components_from_raw(raw_components: Any) -> list[Mapping[str, Any]]:
-    seed_components: list[Mapping[str, Any]] = []
-    if isinstance(raw_components, Mapping):
-        if _looks_like_component_object(raw_components):
-            return [raw_components]
-        for key, value in raw_components.items():
-            key_token = str(key or "").strip()
-            if isinstance(value, Mapping):
-                payload = deepcopy(dict(value))
-                if key_token and not str(payload.get("id") or "").strip():
-                    payload["id"] = key_token
-                seed_components.append(payload)
-                continue
-            if not key_token:
-                continue
-            text = str(value).strip() if value is not None else key_token
-            seed_components.append(
-                {
-                    "id": key_token,
-                    "type": "text",
-                    "props": {"text": text or key_token},
-                }
-            )
-        return seed_components
-    if not isinstance(raw_components, list):
-        return seed_components
-    for item in raw_components:
-        if isinstance(item, Mapping):
-            seed_components.append(item)
-            continue
-        token = str(item or "").strip()
-        if not token:
-            continue
-        seed_components.append(
-            {
-                "id": token,
-                "type": "text",
-                "props": {"text": token},
-            }
-        )
-    return seed_components
-
-
-def _looks_like_component_object(raw: Mapping[str, Any]) -> bool:
-    keys = set(raw.keys())
-    return bool(keys & {"id", "type", "component", "props", "children", "child"})
-
-
-def _seed_root_entries_from_raw(raw_root: Any) -> list[Any]:
-    if isinstance(raw_root, list):
-        return list(raw_root)
-    if isinstance(raw_root, Mapping):
-        return [raw_root]
-    scalar = _coerce_component_ref(raw_root)
-    if scalar:
-        return [scalar]
-    return []
-
-
-def _normalize_checks(raw_checks: Any) -> list[Dict[str, Any]]:
-    if not isinstance(raw_checks, list):
-        return []
-    checks: list[Dict[str, Any]] = []
-    for item in raw_checks:
-        if not isinstance(item, Mapping):
-            continue
-        call_name = str(item.get("call") or "").strip()
-        if not call_name:
-            continue
-        check: Dict[str, Any] = {"call": call_name}
-        args = item.get("args")
-        if isinstance(args, Mapping):
-            check["args"] = deepcopy(dict(args))
-        message = item.get("message")
-        if message is not None:
-            check["message"] = str(message)
-        checks.append(check)
-    return checks
+_INTERACTION_MODE_VALUES = frozenset({"interactive", "preview"})
+_BUTTON_VARIANTS = frozenset({"primary", "borderless"})
+_TEXTFIELD_VARIANTS = frozenset({"longText", "number", "shortText", "obscured"})
+_CHOICE_PICKER_VARIANTS = frozenset({"multipleSelection", "mutuallyExclusive"})
+_TEXT_VARIANTS = frozenset({"h1", "h2", "h3", "h4", "h5", "caption", "body"})
+_IMAGE_FIT_VARIANTS = frozenset({"contain", "cover", "fill", "none", "scale-down"})
+_IMAGE_VARIANT_VALUES = frozenset(
+    {"icon", "avatar", "smallFeature", "mediumFeature", "largeFeature", "header"}
+)
+_DIVIDER_AXIS_VALUES = frozenset({"horizontal", "vertical"})
+_INTERACTIVE_VALUE_BOUND_COMPONENTS = frozenset(
+    {"TextField", "CheckBox", "ChoicePicker", "Slider", "DateTimeInput"}
+)
+_LAYOUT_ALIGN_VALUES = frozenset({"start", "center", "end", "stretch"})
+_LAYOUT_JUSTIFY_VALUES = frozenset(
+    {"center", "end", "spaceAround", "spaceBetween", "spaceEvenly", "start", "stretch"}
+)
+_LIST_DIRECTION_VALUES = frozenset({"vertical", "horizontal"})
+_SHARED_OPTIONAL_PROP_KEYS = frozenset({"weight", "accessibility"})
 
 
 def _to_finite_number(value: Any) -> Optional[float]:
     try:
-        number = float(value)
+        parsed = float(value)
     except Exception:
         return None
-    if not math.isfinite(number):
+    if not math.isfinite(parsed):
         return None
-    return number
-
-
-def _coerce_chart_type(raw: Any) -> Optional[str]:
-    token = _norm_token(raw)
-    if token in _LINE_CHART_ALIASES:
-        return "line"
-    if token in _BAR_CHART_ALIASES:
-        return "bar"
-    return None
-
-
-def _extract_points(data: Sequence[Any]) -> Tuple[list[str], list[float]]:
-    labels: list[str] = []
-    values: list[float] = []
-    for index, item in enumerate(data):
-        if isinstance(item, dict):
-            raw_label = (
-                item.get("label")
-                or item.get("x")
-                or item.get("name")
-                or item.get("time")
-                or item.get("date")
-                or item.get("category")
-            )
-            raw_value = (
-                item.get("value")
-                if "value" in item
-                else item.get("y")
-                if "y" in item
-                else item.get("count")
-                if "count" in item
-                else item.get("amount")
-                if "amount" in item
-                else item.get("score")
-            )
-            number = _to_finite_number(raw_value)
-            if number is None:
-                continue
-            labels.append(str(raw_label if raw_label is not None else index + 1))
-            values.append(number)
-            continue
-
-        number = _to_finite_number(item)
-        if number is None:
-            continue
-        labels.append(str(index + 1))
-        values.append(number)
-    return labels, values
-
-
-def _normalize_chart_props(props: Mapping[str, Any], *, inferred_chart_type: Optional[str]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-
-    chart_type = _coerce_chart_type(
-        normalized.get("chart_type") or normalized.get("kind") or normalized.get("mode")
-    ) or inferred_chart_type or "bar"
-    normalized["chart_type"] = chart_type
-
-    labels = normalized.get("labels")
-    values = normalized.get("values")
-
-    valid_labels = isinstance(labels, list) and labels
-    valid_values = isinstance(values, list) and values
-    if not (valid_labels and valid_values):
-        data = normalized.get("data")
-        if isinstance(data, list) and data:
-            labels, values = _extract_points(data)
-        else:
-            series = normalized.get("series")
-            if isinstance(series, list) and series:
-                primary = series[0]
-                if isinstance(primary, dict):
-                    if isinstance(primary.get("labels"), list) and isinstance(primary.get("values"), list):
-                        labels = list(primary["labels"])
-                        values = list(primary["values"])
-                    elif isinstance(primary.get("data"), list):
-                        labels, values = _extract_points(primary["data"])
-
-    parsed_values: list[float] = []
-    parsed_labels: list[str] = []
-    if isinstance(values, list):
-        candidate_labels = labels if isinstance(labels, list) else []
-        for index, raw_value in enumerate(values):
-            number = _to_finite_number(raw_value)
-            if number is None:
-                continue
-            parsed_values.append(number)
-            if index < len(candidate_labels):
-                parsed_labels.append(str(candidate_labels[index]))
-            else:
-                parsed_labels.append(str(index + 1))
-
-    if parsed_values:
-        normalized["values"] = parsed_values
-        normalized["labels"] = parsed_labels
-    else:
-        normalized.setdefault("values", [])
-        normalized.setdefault("labels", [])
-
-    return normalized
-
-
-def _normalize_table_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    rows = normalized.get("rows")
-    if rows is None and isinstance(normalized.get("data"), list):
-        rows = normalized["data"]
-    if not isinstance(rows, list):
-        rows = []
-    normalized["rows"] = rows
-
-    columns = normalized.get("columns")
-    if isinstance(columns, list) and columns:
-        normalized["columns"] = [str(item) for item in columns]
-        return normalized
-
-    if rows and all(isinstance(item, dict) for item in rows):
-        ordered: list[str] = []
-        seen: set[str] = set()
-        for row in rows:
-            for key in row.keys():
-                key_str = str(key)
-                if key_str not in seen:
-                    seen.add(key_str)
-                    ordered.append(key_str)
-        normalized["columns"] = ordered
-    elif rows and all(isinstance(item, list) for item in rows):
-        max_len = max(len(item) for item in rows)
-        normalized["columns"] = [f"col_{index + 1}" for index in range(max_len)]
-    else:
-        normalized.setdefault("columns", [])
-    return normalized
-
-
-def _normalize_chat_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    messages = normalized.get("messages")
-    if isinstance(messages, Mapping):
-        # Preserve declarative state/data-model bindings like {"$state": "messages"}.
-        normalized["messages"] = deepcopy(dict(messages))
-        messages = []
-    elif not isinstance(messages, list):
-        messages = []
-
-    parsed_messages: list[Dict[str, str]] = []
-    content_trimmed_count = 0
-    for item in messages:
-        if isinstance(item, Mapping):
-            role = str(item.get("role") or item.get("speaker") or "assistant").strip().lower()
-            content = item.get("content")
-            if content is None:
-                content = item.get("text")
-            if content is None:
-                continue
-            text = str(content)
-            if len(text) > _MAX_CHAT_MESSAGE_CHARS:
-                text = text[:_MAX_CHAT_MESSAGE_CHARS]
-                content_trimmed_count += 1
-            parsed_messages.append(
-                {
-                    "role": "user" if role in {"user", "human", "client"} else "assistant",
-                    "content": text,
-                }
-            )
-            continue
-        if isinstance(item, str) and item.strip():
-            text = item.strip()
-            if len(text) > _MAX_CHAT_MESSAGE_CHARS:
-                text = text[:_MAX_CHAT_MESSAGE_CHARS]
-                content_trimmed_count += 1
-            parsed_messages.append({"role": "assistant", "content": text})
-
-    dropped_count = 0
-    if len(parsed_messages) > _MAX_CHAT_MESSAGES:
-        dropped_count = len(parsed_messages) - _MAX_CHAT_MESSAGES
-        parsed_messages = parsed_messages[-_MAX_CHAT_MESSAGES:]
-    normalized["messages"] = parsed_messages
-    if dropped_count > 0:
-        normalized["messages_truncated"] = True
-        normalized["messages_truncated_count"] = dropped_count
-    if content_trimmed_count > 0:
-        normalized["message_content_truncated"] = True
-        normalized["message_content_truncated_count"] = content_trimmed_count
-    if "placeholder" in normalized and normalized["placeholder"] is not None:
-        normalized["placeholder"] = str(normalized["placeholder"])
-    if "send_label" in normalized and normalized["send_label"] is not None:
-        normalized["send_label"] = str(normalized["send_label"])
-    if "empty_text" in normalized and normalized["empty_text"] is not None:
-        normalized["empty_text"] = str(normalized["empty_text"])
-    return normalized
-
-
-def _normalize_effects(raw: Any) -> list[Dict[str, Any]]:
-    """Normalize `effects` into a list of shallow operation maps."""
-    if isinstance(raw, list):
-        return [deepcopy(dict(item)) for item in raw if isinstance(item, Mapping)]
-    if isinstance(raw, Mapping):
-        return [deepcopy(dict(raw))]
-    return []
-
-
-def _normalize_event_config(raw: Any) -> Optional[Dict[str, Any]]:
-    """Normalize a per-event config block (`on_change`, `events.submit`, etc.)."""
-    if isinstance(raw, str):
-        action = raw.strip()
-        if not action:
-            return None
-        return {"action": action}
-    if isinstance(raw, list):
-        steps = [deepcopy(dict(item)) for item in raw if isinstance(item, Mapping)]
-        if not steps:
-            return None
-        return {"steps": steps}
-    if not isinstance(raw, Mapping):
-        return None
-    normalized: Dict[str, Any] = {}
-    action = raw.get("action")
-    if action is None:
-        action = raw.get("action_id")
-    if action is None:
-        action = raw.get("handler")
-    if action is None:
-        action = raw.get("command")
-    if action is not None:
-        action_text = str(action).strip()
-        if action_text:
-            normalized["action"] = action_text
-    event_type = raw.get("event_type")
-    if event_type is not None:
-        normalized["event_type"] = str(event_type)
-    steps_raw = raw.get("steps")
-    if not isinstance(steps_raw, list):
-        steps_raw = raw.get("actions")
-    if isinstance(steps_raw, list):
-        steps = [deepcopy(dict(item)) for item in steps_raw if isinstance(item, Mapping)]
-        if steps:
-            normalized["steps"] = steps
-    payload = raw.get("payload")
-    if isinstance(payload, Mapping):
-        normalized["payload"] = deepcopy(dict(payload))
-    effects = _normalize_effects(raw.get("effects"))
-    if effects:
-        normalized["effects"] = effects
-    emit_event = raw.get("emit_event")
-    if isinstance(emit_event, bool):
-        normalized["emit_event"] = bool(emit_event)
-    elif isinstance(emit_event, str):
-        event_name = emit_event.strip()
-        if event_name:
-            normalized["emit_event"] = True
-            normalized.setdefault("event_type", event_name)
-    elif isinstance(emit_event, list):
-        first_name = next(
-            (str(item).strip() for item in emit_event if str(item).strip()),
-            "",
-        )
-        if first_name:
-            normalized["emit_event"] = True
-            normalized.setdefault("event_type", first_name)
-    target_component_id = raw.get("target_component_id")
-    if target_component_id is not None:
-        normalized["target_component_id"] = str(target_component_id)
-    return normalized
-
-
-def _canonical_interaction_event_name(
-    raw_key: Any,
-    *,
-    supported_events: Sequence[str],
-) -> Optional[str]:
-    raw_text = str(raw_key or "").strip()
-    if raw_text == "*":
-        return "*"
-    token = _norm_token(raw_text)
-    if not token:
-        return None
-    supported_lookup = {_norm_token(item): item for item in supported_events}
-    if token in supported_lookup:
-        return supported_lookup[token]
-
-    candidate = token
-    if candidate.startswith("on_"):
-        candidate = candidate[3:]
-    elif candidate.startswith("on") and len(candidate) > 2:
-        candidate = candidate[2:]
-    candidate = candidate.lstrip("_")
-    if not candidate:
-        return None
-    if candidate in supported_lookup:
-        return supported_lookup[candidate]
-    return None
-
-
-def _normalize_interaction_props(
-    props: Mapping[str, Any],
-    *,
-    supported_events: Sequence[str],
-) -> Dict[str, Any]:
-    """
-    Normalize cross-component interaction contract.
-
-    Supports legacy top-level fields (`event_type`, `payload`) and declarative
-    event blocks (`events`, `on_<event>`), plus local effects/emit toggles.
-    """
-    normalized = deepcopy(dict(props))
-
-    if normalized.get("event_type") is not None:
-        normalized["event_type"] = str(normalized.get("event_type"))
-    payload = normalized.get("payload")
-    if payload is not None:
-        normalized["payload"] = deepcopy(dict(payload)) if isinstance(payload, Mapping) else {}
-    effects = _normalize_effects(normalized.get("effects"))
-    if effects:
-        normalized["effects"] = effects
-    elif "effects" in normalized:
-        normalized.pop("effects", None)
-    if normalized.get("emit_event") is not None:
-        normalized["emit_event"] = bool(normalized.get("emit_event"))
-    if normalized.get("target_component_id") is not None:
-        normalized["target_component_id"] = str(normalized.get("target_component_id"))
-
-    supported_lookup = {_norm_token(item): item for item in supported_events}
-
-    events_block = normalized.get("events")
-    if isinstance(events_block, Mapping):
-        parsed_events: Dict[str, Dict[str, Any]] = {}
-        for raw_key, raw_value in events_block.items():
-            event_name = _canonical_interaction_event_name(
-                raw_key,
-                supported_events=supported_events,
-            )
-            if not event_name:
-                continue
-            if event_name != "*" and _norm_token(event_name) not in supported_lookup:
-                continue
-            config = _normalize_event_config(raw_value)
-            if config is not None:
-                parsed_events[event_name] = config
-        if parsed_events:
-            normalized["events"] = parsed_events
-        else:
-            normalized.pop("events", None)
-    elif "events" in normalized:
-        normalized.pop("events", None)
-
-    normalized_event_handlers: Dict[str, Dict[str, Any]] = {}
-    for raw_key in list(normalized.keys()):
-        raw_key_text = str(raw_key or "")
-        key_token = _norm_token(raw_key_text)
-        if not key_token.startswith("on"):
-            continue
-        event_name = _canonical_interaction_event_name(
-            raw_key_text,
-            supported_events=supported_events,
-        )
-        if not event_name or event_name == "*":
-            continue
-        if _norm_token(event_name) not in supported_lookup:
-            continue
-        config = _normalize_event_config(normalized.get(raw_key))
-        normalized.pop(raw_key, None)
-        if config is None:
-            continue
-        normalized_event_handlers[f"on_{event_name}"] = config
-
-    normalized.update(normalized_event_handlers)
-
-    return normalized
-
-
-def _collect_declared_action_ids(raw_actions: Any) -> tuple[set[str], set[str]]:
-    declared_ids: set[str] = set()
-    if isinstance(raw_actions, list):
-        for item in raw_actions:
-            if not isinstance(item, Mapping):
-                continue
-            action_id = str(item.get("id") or item.get("name") or "").strip()
-            if action_id:
-                declared_ids.add(action_id)
-    elif isinstance(raw_actions, Mapping):
-        for key, value in raw_actions.items():
-            key_text = str(key or "").strip()
-            if key_text:
-                declared_ids.add(key_text)
-            if isinstance(value, Mapping):
-                action_id = str(value.get("id") or value.get("name") or "").strip()
-                if action_id:
-                    declared_ids.add(action_id)
-    declared_tokens = {_norm_token(item) for item in declared_ids if _norm_token(item)}
-    return declared_ids, declared_tokens
-
-
-def _action_is_declared_or_builtin(
-    action_name: str,
-    *,
-    declared_ids: set[str],
-    declared_tokens: set[str],
-) -> bool:
-    action_text = str(action_name or "").strip()
-    if not action_text:
-        return False
-    if action_text in declared_ids:
-        return True
-    token = _norm_token(action_text)
-    if not token:
-        return False
-    return token in declared_tokens or token in _LOCAL_ACTION_STEP_TOKENS
-
-
-def _iter_component_event_configs(
-    props: Mapping[str, Any],
-    *,
-    supported_events: Sequence[str],
-) -> list[tuple[str, Dict[str, Any]]]:
-    configs: list[tuple[str, Dict[str, Any]]] = []
-    supported_lookup = {_norm_token(item): item for item in supported_events}
-
-    events_block = props.get("events")
-    if isinstance(events_block, Mapping):
-        for raw_key, raw_value in events_block.items():
-            event_name = _canonical_interaction_event_name(
-                raw_key,
-                supported_events=supported_events,
-            )
-            if not event_name or event_name == "*":
-                continue
-            if _norm_token(event_name) not in supported_lookup:
-                continue
-            config = _normalize_event_config(raw_value)
-            if config is not None:
-                configs.append((event_name, config))
-
-    for raw_key, raw_value in props.items():
-        key_token = _norm_token(raw_key)
-        if not key_token.startswith("on"):
-            continue
-        event_name = _canonical_interaction_event_name(
-            raw_key,
-            supported_events=supported_events,
-        )
-        if not event_name or event_name == "*":
-            continue
-        if _norm_token(event_name) not in supported_lookup:
-            continue
-        config = _normalize_event_config(raw_value)
-        if config is not None:
-            configs.append((event_name, config))
-
-    # Resolve fallback semantics equivalent to desktop runtime:
-    # top-level `action`/`effects`/`emit_event` act as default event config.
-    default_event = supported_events[0] if supported_events else "action"
-    if "action" in supported_lookup:
-        default_event = supported_lookup["action"]
-    fallback_cfg: Dict[str, Any] = {}
-    action_raw = props.get("action")
-    if action_raw is None:
-        action_raw = props.get("command")
-    if action_raw is None:
-        action_raw = props.get("local_action")
-    if action_raw is not None:
-        action_text = str(action_raw).strip()
-        if action_text:
-            fallback_cfg["action"] = action_text
-    fallback_effects = _normalize_effects(props.get("effects"))
-    if fallback_effects:
-        fallback_cfg["effects"] = fallback_effects
-    if "emit_event" in props:
-        fallback_cfg["emit_event"] = bool(props.get("emit_event"))
-    if fallback_cfg:
-        configs.append((default_event, fallback_cfg))
-
-    return configs
-
-
-def _validate_event_steps(
-    *,
-    component_id: str,
-    event_name: str,
-    steps: Any,
-    declared_ids: set[str],
-    declared_tokens: set[str],
-) -> list[str]:
-    if not isinstance(steps, list):
-        return []
-    issues: list[str] = []
-    for index, step in enumerate(steps):
-        if not isinstance(step, Mapping):
-            continue
-        token = _norm_token(step.get("type") or step.get("op") or step.get("action") or step.get("kind"))
-        if not token:
-            continue
-        if token in {"run_action", "call_action"}:
-            nested = str(step.get("action_id") or step.get("name") or "").strip()
-            if nested and not _action_is_declared_or_builtin(
-                nested,
-                declared_ids=declared_ids,
-                declared_tokens=declared_tokens,
-            ):
-                issues.append(
-                    f"component '{component_id}' event '{event_name}' step[{index}] references unknown action '{nested}'."
-                )
-            continue
-        if token in _LOCAL_ACTION_STEP_TOKENS or token in declared_tokens:
-            continue
-        issues.append(
-            f"component '{component_id}' event '{event_name}' step[{index}] uses unsupported token '{token}'."
-        )
-    return issues
-
-
-def collect_interaction_contract_issues(spec: Mapping[str, Any]) -> list[str]:
-    """Return declarative interaction contract issues for a normalized MetaUI spec."""
-    components = spec.get("components")
-    if not isinstance(components, list):
-        return ["`components` must be a list."]
-
-    declared_ids, declared_tokens = _collect_declared_action_ids(spec.get("actions"))
-    issues: list[str] = []
-    for component in components:
-        if not isinstance(component, Mapping):
-            continue
-        component_id = str(component.get("id") or "").strip() or "<unknown>"
-        component_type = str(component.get("type") or "").strip()
-        supported_events = _INTERACTION_EVENT_HINTS.get(component_type)
-        if not supported_events:
-            continue
-        props = component.get("props")
-        if not isinstance(props, Mapping):
-            issues.append(f"component '{component_id}' has invalid props for interactive type '{component_type}'.")
-            continue
-
-        event_configs = _iter_component_event_configs(
-            props,
-            supported_events=supported_events,
-        )
-        for event_name, config in event_configs:
-            action_name = str(config.get("action") or "").strip()
-            if action_name and not _action_is_declared_or_builtin(
-                action_name,
-                declared_ids=declared_ids,
-                declared_tokens=declared_tokens,
-            ):
-                issues.append(
-                    f"component '{component_id}' event '{event_name}' references unknown action '{action_name}'."
-                )
-            issues.extend(
-                _validate_event_steps(
-                    component_id=component_id,
-                    event_name=event_name,
-                    steps=config.get("steps"),
-                    declared_ids=declared_ids,
-                    declared_tokens=declared_tokens,
-                )
-            )
-            has_local_behavior = bool(action_name) or bool(config.get("steps")) or bool(config.get("effects"))
-            if config.get("emit_event") is False and not has_local_behavior:
-                issues.append(
-                    f"component '{component_id}' event '{event_name}' disables emit_event but defines no local behavior."
-                )
-
-        # Explicitly disabling event emission on interactive components without local behavior is a no-op shell.
-        if props.get("emit_event") is False:
-            has_default_local_behavior = bool(
-                str(props.get("action") or props.get("command") or props.get("local_action") or "").strip()
-            ) or bool(_normalize_effects(props.get("effects")))
-            if not has_default_local_behavior and not event_configs:
-                issues.append(
-                    f"component '{component_id}' disables emit_event and has no event/action/effects configuration."
-                )
-
-    return issues
-
-
-def _normalize_button_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    label = normalized.get("label") or normalized.get("text") or normalized.get("title") or "Action"
-    normalized["label"] = str(label)
-    event_type = normalized.get("event_type") or "action"
-    normalized["event_type"] = str(event_type)
-    payload = normalized.get("payload")
-    normalized["payload"] = deepcopy(payload) if isinstance(payload, Mapping) else {}
-    variant = str(normalized.get("variant") or "secondary").strip().lower()
-    normalized["variant"] = variant if variant in {"primary", "secondary"} else "secondary"
-    effects = _normalize_effects(normalized.get("effects"))
-    if effects:
-        normalized["effects"] = effects
-    elif "effects" in normalized:
-        normalized.pop("effects", None)
-    return normalized
-
-
-def _normalize_input_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    normalized["name"] = str(normalized.get("name") or "input")
-    normalized["label"] = str(normalized.get("label") or normalized["name"])
-    input_type = _norm_token(normalized.get("input_type") or normalized.get("type") or "text")
-    if input_type not in {"text", "number", "date", "time", "email", "url", "password", "search"}:
-        input_type = "text"
-    normalized["input_type"] = input_type
-    if "placeholder" in normalized and normalized["placeholder"] is not None:
-        normalized["placeholder"] = str(normalized["placeholder"])
-    value_raw = normalized.get("value")
-    if isinstance(value_raw, Mapping):
-        normalized["value"] = deepcopy(dict(value_raw))
-    elif input_type == "number":
-        number = _to_finite_number(value_raw)
-        normalized["value"] = number if number is not None else 0
-    elif value_raw is not None:
-        normalized["value"] = str(value_raw)
-    else:
-        normalized["value"] = ""
-    checks = _normalize_checks(normalized.get("checks"))
-    if checks:
-        normalized["checks"] = checks
-    return normalized
-
-
-def _normalize_textarea_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    normalized["name"] = str(normalized.get("name") or "textarea")
-    normalized["label"] = str(normalized.get("label") or normalized["name"])
-    value_raw = normalized.get("value")
-    if isinstance(value_raw, Mapping):
-        normalized["value"] = deepcopy(dict(value_raw))
-    else:
-        normalized["value"] = str(value_raw or "")
-    rows = normalized.get("rows")
-    try:
-        rows_int = int(rows)
-    except Exception:
-        rows_int = 4
-    normalized["rows"] = min(max(rows_int, 2), 20)
-    checks = _normalize_checks(normalized.get("checks"))
-    if checks:
-        normalized["checks"] = checks
-    return normalized
-
-
-def _normalize_option_list(raw_options: Any) -> list[Dict[str, str]]:
-    if not isinstance(raw_options, list):
-        return []
-    parsed: list[Dict[str, str]] = []
-    for item in raw_options:
-        if isinstance(item, Mapping):
-            value = str(item.get("value") if item.get("value") is not None else item.get("label") or "")
-            label = str(item.get("label") if item.get("label") is not None else value)
-            if not value and not label:
-                continue
-            parsed.append({"label": label or value, "value": value or label})
-            continue
-        if item is None:
-            continue
-        text = str(item)
-        if not text:
-            continue
-        parsed.append({"label": text, "value": text})
     return parsed
 
 
-def _normalize_select_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    normalized["name"] = str(normalized.get("name") or "select")
-    normalized["label"] = str(normalized.get("label") or normalized["name"])
-    options = _normalize_option_list(normalized.get("options"))
-    normalized["options"] = options
-    value = normalized.get("value")
-    if value is None and options:
-        value = options[0]["value"]
-    if isinstance(value, Mapping):
-        normalized["value"] = deepcopy(dict(value))
-    else:
-        normalized["value"] = str(value) if value is not None else ""
-    checks = _normalize_checks(normalized.get("checks"))
-    if checks:
-        normalized["checks"] = checks
-    return normalized
+def _require_boolean_flag(value: Any, *, field_name: str) -> None:
+    if isinstance(value, bool):
+        return
+    raise ValueError(f"{field_name} must be a boolean.")
 
 
-def _normalize_checkbox_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    normalized["name"] = str(normalized.get("name") or "checkbox")
-    normalized["label"] = str(normalized.get("label") or normalized["name"])
-    value = normalized.get("checked")
-    if value is None:
-        value = normalized.get("value")
-    if value is None:
-        value = normalized.get("default")
-    normalized["checked"] = bool(value)
-    return normalized
-
-
-def _normalize_radio_group_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    normalized["name"] = str(normalized.get("name") or "radio_group")
-    normalized["label"] = str(normalized.get("label") or normalized["name"])
-    options = _normalize_option_list(normalized.get("options"))
-    normalized["options"] = options
-    value = normalized.get("value")
-    if value is None and options:
-        value = options[0]["value"]
-    if isinstance(value, Mapping):
-        normalized["value"] = deepcopy(dict(value))
-    else:
-        normalized["value"] = str(value) if value is not None else ""
-    checks = _normalize_checks(normalized.get("checks"))
-    if checks:
-        normalized["checks"] = checks
-    return normalized
-
-
-def _normalize_slider_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    normalized["name"] = str(normalized.get("name") or "slider")
-    normalized["label"] = str(normalized.get("label") or normalized["name"])
-    min_v = _to_finite_number(normalized.get("min"))
-    max_v = _to_finite_number(normalized.get("max"))
-    step_v = _to_finite_number(normalized.get("step"))
-    value_v = _to_finite_number(normalized.get("value"))
-    min_v = 0.0 if min_v is None else min_v
-    max_v = 100.0 if max_v is None else max_v
-    if max_v < min_v:
-        min_v, max_v = max_v, min_v
-    step_v = 1.0 if step_v is None or step_v <= 0 else step_v
-    if value_v is None:
-        value_v = min_v
-    value_v = max(min_v, min(max_v, value_v))
-    normalized["min"] = min_v
-    normalized["max"] = max_v
-    normalized["step"] = step_v
-    normalized["value"] = value_v
-    return normalized
-
-
-def _normalize_metric_card_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    normalized["label"] = str(normalized.get("label") or normalized.get("title") or "Metric")
-    value = normalized.get("value")
-    normalized["value"] = value if value is not None else "--"
-    if normalized.get("delta") is not None:
-        normalized["delta"] = normalized.get("delta")
-    if normalized.get("description") is not None:
-        normalized["description"] = str(normalized.get("description"))
-    tone = str(normalized.get("tone") or "neutral").strip().lower()
-    normalized["tone"] = tone
-    return normalized
-
-
-def _normalize_list_view_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    items = normalized.get("items")
-    if not isinstance(items, list):
-        items = normalized.get("rows") if isinstance(normalized.get("rows"), list) else []
-    normalized["items"] = deepcopy(items)
-    if normalized.get("title") is not None:
-        normalized["title"] = str(normalized.get("title"))
-    return normalized
-
-
-def _normalize_tabs_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    raw_tabs = normalized.get("tabs")
-    tabs: list[Dict[str, Any]] = []
-    if isinstance(raw_tabs, list):
-        for index, item in enumerate(raw_tabs):
-            if not isinstance(item, Mapping):
-                continue
-            tab_id = str(item.get("id") or f"tab_{index + 1}").strip()
-            label = str(item.get("label") or tab_id or f"Tab {index + 1}")
-            children: list[str] = []
-            raw_children = item.get("children")
-            if isinstance(raw_children, list):
-                for child in raw_children:
-                    ref = _coerce_component_ref(child)
-                    if ref:
-                        children.append(ref)
-            tabs.append({"id": tab_id, "label": label, "children": children})
-    normalized["tabs"] = tabs
-    active = normalized.get("active_tab")
-    if active is None and tabs:
-        active = tabs[0]["id"]
-    normalized["active_tab"] = str(active) if active is not None else ""
-    return normalized
-
-
-def _normalize_accordion_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    raw_sections = normalized.get("sections")
-    sections: list[Dict[str, Any]] = []
-    if isinstance(raw_sections, list):
-        for index, item in enumerate(raw_sections):
-            if not isinstance(item, Mapping):
-                continue
-            section_id = str(item.get("id") or f"section_{index + 1}").strip()
-            title = str(item.get("title") or section_id or f"Section {index + 1}")
-            children: list[str] = []
-            raw_children = item.get("children")
-            if isinstance(raw_children, list):
-                for child in raw_children:
-                    ref = _coerce_component_ref(child)
-                    if ref:
-                        children.append(ref)
-            sections.append({"id": section_id, "title": title, "children": children})
-    normalized["sections"] = sections
-    open_section = normalized.get("open_section")
-    if open_section is None and sections:
-        open_section = sections[0]["id"]
-    normalized["open_section"] = str(open_section) if open_section is not None else ""
-    return normalized
-
-
-def _normalize_image_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    src = normalized.get("src")
-    if src is None:
-        src = normalized.get("url")
-    normalized["src"] = str(src or "")
-    normalized["alt"] = str(normalized.get("alt") or "")
-    width = _to_finite_number(normalized.get("width"))
-    height = _to_finite_number(normalized.get("height"))
-    if width is not None:
-        normalized["width"] = int(width)
-    if height is not None:
-        normalized["height"] = int(height)
-    fit = str(normalized.get("fit") or "contain").strip().lower()
-    normalized["fit"] = fit if fit in {"contain", "cover", "fill", "none", "scale-down"} else "contain"
-    return normalized
-
-
-def _normalize_iframe_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    src = normalized.get("src")
-    if src is None:
-        src = normalized.get("url")
-    normalized["src"] = str(src or "")
-    height = _to_finite_number(normalized.get("height"))
-    normalized["height"] = int(height) if height is not None else 420
-    profile = _norm_token(normalized.get("sandbox_profile")) or "strict"
-    if profile not in _IFRAME_SANDBOX_PROFILES:
-        profile = "strict"
-    sandbox = normalized.get("sandbox")
-    if sandbox is None:
-        normalized["sandbox"] = _IFRAME_SANDBOX_PROFILES[profile]
-    else:
-        normalized["sandbox"] = _normalize_iframe_sandbox(str(sandbox), default_profile=profile)
-    normalized["sandbox_profile"] = profile
-    return normalized
-
-
-def _normalize_iframe_sandbox(sandbox: str, *, default_profile: str) -> str:
-    tokens = [item.strip().lower() for item in str(sandbox or "").split() if item and item.strip()]
-    filtered = [item for item in tokens if item in _IFRAME_ALLOWED_SANDBOX_TOKENS]
-    if not filtered:
-        return _IFRAME_SANDBOX_PROFILES.get(default_profile, _IFRAME_SANDBOX_PROFILES["strict"])
-    ordered = sorted(set(filtered))
-    return " ".join(ordered)
-
-
-def _normalize_code_block_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    code = normalized.get("code")
-    if code is None:
-        code = normalized.get("text")
-    normalized["code"] = str(code or "")
-    if normalized.get("language") is not None:
-        normalized["language"] = str(normalized.get("language"))
-    if normalized.get("title") is not None:
-        normalized["title"] = str(normalized.get("title"))
-    return normalized
-
-
-def _normalize_divider_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    if normalized.get("label") is not None:
-        normalized["label"] = str(normalized.get("label"))
-    return normalized
-
-
-def _normalize_container_props(props: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = deepcopy(dict(props))
-    direction = _norm_token(normalized.get("direction") or "column")
-    normalized["direction"] = "row" if direction == "row" else "column"
-    children = normalized.get("children")
-    if isinstance(children, list):
-        refs: list[str] = []
-        for item in children:
-            ref = _coerce_component_ref(item)
-            if ref:
-                refs.append(ref)
-        normalized["children"] = refs
-    else:
-        normalized["children"] = []
-    if normalized.get("title") is not None:
-        normalized["title"] = str(normalized.get("title"))
-    if normalized.get("justify") is not None:
-        normalized["justify"] = str(normalized.get("justify"))
-    if normalized.get("align") is not None:
-        normalized["align"] = str(normalized.get("align"))
-    if normalized.get("card") is not None:
-        normalized["card"] = bool(normalized["card"])
-    if normalized.get("modal") is not None:
-        normalized["modal"] = bool(normalized["modal"])
-    return normalized
+def _normalize_interaction_mode(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "interactive"
+    if text not in _INTERACTION_MODE_VALUES:
+        raise ValueError(
+            "interaction_mode must be 'interactive' or 'preview'. "
+            f"Received: {value!r}"
+        )
+    return text
 
 
 def _normalize_theme(theme: Any) -> Dict[str, Any]:
-    if isinstance(theme, str):
-        mode = _norm_token(theme)
-        if mode in {"dark", "night"}:
-            return deepcopy(_THEME_DARK_PRESET)
-        if mode in {"light", "day"}:
-            return deepcopy(_THEME_LIGHT_PRESET)
-        return {}
     if not isinstance(theme, Mapping):
         return {}
     normalized: Dict[str, Any] = {}
-    mode_raw = theme.get("mode")
-    if mode_raw is None:
-        mode_raw = theme.get("scheme")
-    if mode_raw is None:
-        mode_raw = theme.get("appearance")
-    mode = _norm_token(mode_raw)
-    if mode in {"dark", "night"}:
-        normalized.update(deepcopy(_THEME_DARK_PRESET))
-    elif mode in {"light", "day"}:
-        normalized.update(deepcopy(_THEME_LIGHT_PRESET))
     for raw_key, raw_value in theme.items():
-        key = _norm_token(raw_key)
-        if not key:
-            continue
-        if key in {"mode", "scheme", "appearance"}:
+        key = str(raw_key or "").strip()
+        if not key or raw_value is None:
             continue
         if isinstance(raw_value, bool):
             normalized[key] = raw_value
@@ -1479,387 +81,1187 @@ def _normalize_theme(theme: Any) -> Dict[str, Any]:
                 continue
             normalized[key] = int(number) if int(number) == number else number
             continue
-        if raw_value is None:
-            continue
         normalized[key] = str(raw_value)
     return normalized
 
 
-def _normalize_component_type(raw_type: Any) -> tuple[str, Optional[str]]:
-    token = _norm_token(raw_type)
-    aliased = _TYPE_ALIASES.get(token)
-    if aliased and aliased != "chart":
-        return aliased, None
-    inferred_chart_type = _coerce_chart_type(token)
-    if inferred_chart_type is not None:
-        return "chart", inferred_chart_type
-    if token in UI_COMPONENT_TYPES:
-        return token, None
-    return _TYPE_ALIASES.get(token, str(raw_type or "")), None
+def _normalize_shared_component_props(
+    component_type: str,
+    props: Mapping[str, Any],
+) -> Dict[str, Any]:
+    normalized = deepcopy(dict(props))
+    if "weight" in normalized:
+        weight = _to_finite_number(normalized.get("weight"))
+        if weight is None:
+            raise ValueError(f"{component_type}.props.weight must be a finite number.")
+        normalized["weight"] = weight
+    accessibility = normalized.get("accessibility")
+    if accessibility is not None:
+        if not isinstance(accessibility, Mapping):
+            raise ValueError(f"{component_type}.props.accessibility must be an object.")
+        normalized_accessibility = deepcopy(dict(accessibility))
+        unknown = sorted(
+            key for key in normalized_accessibility.keys() if str(key) not in {"label", "description"}
+        )
+        if unknown:
+            raise ValueError(
+                f"{component_type}.props.accessibility has unsupported keys: {unknown}. "
+                "Allowed: ['description', 'label']."
+            )
+        normalized["accessibility"] = normalized_accessibility
+    return normalized
+
+
+def _validate_allowed_props(
+    component_type: str,
+    props: Mapping[str, Any],
+    *,
+    allowed: set[str],
+) -> None:
+    allowed_keys = set(allowed) | set(_SHARED_OPTIONAL_PROP_KEYS)
+    unknown = sorted(key for key in props.keys() if str(key) not in allowed_keys)
+    if unknown:
+        raise ValueError(
+            f"{component_type}.props has unsupported keys: {unknown}. "
+            f"Allowed: {sorted(allowed_keys)}."
+        )
+
+
+def _coerce_component_ref(raw: Any, *, field_name: str) -> str:
+    if not isinstance(raw, str):
+        raise ValueError(f"{field_name} must be a non-empty component id string.")
+    token = raw.strip()
+    if not token:
+        raise ValueError(f"{field_name} must be a non-empty component id string.")
+    return token
+
+
+def _coerce_component_ref_list(raw: Any, *, field_name: str) -> list[str]:
+    if not isinstance(raw, list):
+        raise ValueError(f"{field_name} must be an array of component ids.")
+    refs: list[str] = []
+    for item in raw:
+        refs.append(_coerce_component_ref(item, field_name=field_name))
+    return refs
+
+
+def _normalize_child_list(raw: Any, *, field_name: str) -> list[str] | Dict[str, Any]:
+    if isinstance(raw, list):
+        return _coerce_component_ref_list(raw, field_name=field_name)
+    if isinstance(raw, Mapping):
+        component_id = _coerce_component_ref(
+            raw.get("componentId"), field_name=f"{field_name}.componentId"
+        )
+        path = str(raw.get("path") or "").strip()
+        if not path:
+            raise ValueError(f"{field_name}.path must be a non-empty JSON Pointer string.")
+        out: Dict[str, Any] = {"componentId": component_id, "path": path}
+        return out
+    raise ValueError(
+        f"{field_name} must be either an array of component ids or an object "
+        "with {componentId, path}."
+    )
+
+
+def _normalize_dynamic_boolean_condition(raw_condition: Any, *, field_name: str) -> Any:
+    if isinstance(raw_condition, bool):
+        return raw_condition
+    if not isinstance(raw_condition, Mapping):
+        raise ValueError(
+            f"{field_name} must be a boolean, data binding object, or function call object."
+        )
+
+    if "path" in raw_condition:
+        path = str(raw_condition.get("path") or "").strip()
+        if not path:
+            raise ValueError(f"{field_name}.path must be a non-empty JSON Pointer.")
+        unknown = sorted(key for key in raw_condition.keys() if str(key) != "path")
+        if unknown:
+            raise ValueError(
+                f"{field_name} data binding has unsupported keys: {unknown}. Allowed: ['path']."
+            )
+        return {"path": path}
+
+    call_name = str(raw_condition.get("call") or "").strip()
+    if not call_name:
+        raise ValueError(
+            f"{field_name} must declare either a data binding {{path}} or a function call {{call,args}}."
+        )
+    expected_return_type = get_known_function_return_type(call_name)
+    if expected_return_type is None:
+        raise ValueError(
+            f"{field_name}.call has unsupported function call '{call_name}'. "
+            "Use a function name declared in the interaction contract function catalog."
+        )
+    if expected_return_type != "boolean":
+        raise ValueError(
+            f"{field_name}.call '{call_name}' must return 'boolean' in condition context."
+        )
+
+    normalized_condition: Dict[str, Any] = {"call": call_name}
+    if "args" not in raw_condition:
+        raise ValueError(f"{field_name}.args is required for function call conditions.")
+    normalized_condition["args"] = validate_known_function_call(
+        owner=field_name,
+        call_name=call_name,
+        args=raw_condition.get("args"),
+    )
+
+    return_type = raw_condition.get("returnType")
+    if return_type is not None:
+        token = str(return_type).strip()
+        if token != "boolean":
+            raise ValueError(f"{field_name}.returnType must be 'boolean'.")
+        normalized_condition["returnType"] = token
+    else:
+        normalized_condition["returnType"] = "boolean"
+
+    unknown = sorted(
+        key for key in raw_condition.keys() if str(key) not in {"call", "args", "returnType"}
+    )
+    if unknown:
+        raise ValueError(
+            f"{field_name} function call has unsupported keys: {unknown}. "
+            "Allowed: ['args', 'call', 'returnType']."
+        )
+    return normalized_condition
+
+
+def _normalize_checks(raw_checks: Any) -> list[Dict[str, Any]]:
+    if raw_checks is None:
+        return []
+    if not isinstance(raw_checks, list):
+        raise ValueError("checks must be an array.")
+    checks: list[Dict[str, Any]] = []
+    for index, item in enumerate(raw_checks):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"checks[{index}] must be an object.")
+        unknown = sorted(key for key in item.keys() if str(key) not in {"condition", "message"})
+        if unknown:
+            raise ValueError(
+                f"checks[{index}] has unsupported keys: {unknown}. "
+                "Allowed: ['condition', 'message']."
+            )
+        if "condition" not in item:
+            raise ValueError(f"checks[{index}].condition is required.")
+        if "message" not in item:
+            raise ValueError(f"checks[{index}].message is required.")
+        normalized_check: Dict[str, Any] = {
+            "condition": _normalize_dynamic_boolean_condition(
+                item.get("condition"),
+                field_name=f"checks[{index}].condition",
+            ),
+            "message": str(item.get("message")),
+        }
+        checks.append(normalized_check)
+    return checks
+
+
+def _set_normalized_checks(
+    normalized_props: Dict[str, Any],
+) -> None:
+    checks = _normalize_checks(normalized_props.get("checks"))
+    if checks:
+        normalized_props["checks"] = checks
+    else:
+        normalized_props.pop("checks", None)
+
+
+def _normalize_enum_field(
+    normalized_props: Dict[str, Any],
+    *,
+    field_name: str,
+    allowed_values: frozenset[str],
+    error_label: str,
+    default: Optional[str] = None,
+) -> None:
+    raw_value = normalized_props.get(field_name)
+    if raw_value is None:
+        if default is not None:
+            normalized_props[field_name] = default
+        return
+    token = str(raw_value).strip()
+    if token not in allowed_values:
+        raise ValueError(f"{error_label} must be one of {sorted(allowed_values)}.")
+    normalized_props[field_name] = token
+
+
+def _normalize_action_object(raw_action: Any, *, owner: str) -> Dict[str, Any]:
+    if not isinstance(raw_action, Mapping):
+        raise ValueError(f"{owner}.action must be an object.")
+    has_event = "event" in raw_action and raw_action.get("event") is not None
+    has_function = "functionCall" in raw_action and raw_action.get("functionCall") is not None
+    if has_event == has_function:
+        raise ValueError(
+            f"{owner}.action must include exactly one of {list(ACTION_VARIANTS)}."
+        )
+
+    if has_event:
+        event = raw_action.get("event")
+        if not isinstance(event, Mapping):
+            raise ValueError(f"{owner}.action.event must be an object.")
+        name = str(event.get("name") or "").strip()
+        if not name:
+            raise ValueError(f"{owner}.action.event.name is required.")
+        context = event.get("context")
+        normalized_event: Dict[str, Any] = {"name": name}
+        if context is not None:
+            if not isinstance(context, Mapping):
+                raise ValueError(f"{owner}.action.event.context must be an object.")
+            normalized_event["context"] = deepcopy(dict(context))
+        unknown_event_keys = sorted(
+            key for key in event.keys() if str(key) not in {"name", "context"}
+        )
+        if unknown_event_keys:
+            raise ValueError(
+                f"{owner}.action.event has unsupported keys: {unknown_event_keys}."
+            )
+        unknown_action_keys = sorted(
+            key for key in raw_action.keys() if str(key) not in {"event"}
+        )
+        if unknown_action_keys:
+            raise ValueError(
+                f"{owner}.action has unsupported keys: {unknown_action_keys}."
+            )
+        return {"event": normalized_event}
+
+    function_call = raw_action.get("functionCall")
+    if not isinstance(function_call, Mapping):
+        raise ValueError(f"{owner}.action.functionCall must be an object.")
+    call_name = str(function_call.get("call") or "").strip()
+    if not call_name:
+        raise ValueError(f"{owner}.action.functionCall.call is required.")
+    normalized_function: Dict[str, Any] = {"call": call_name}
+    if "args" not in function_call:
+        raise ValueError(f"{owner}.action.functionCall.args is required.")
+    normalized_function["args"] = validate_known_function_call(
+        owner=f"{owner}.action.functionCall",
+        call_name=call_name,
+        args=function_call.get("args"),
+    )
+    expected_return_type = get_known_function_return_type(call_name)
+    if expected_return_type is None:
+        raise ValueError(
+            f"{owner}.action.functionCall.call has unsupported function call '{call_name}'."
+        )
+    return_type = function_call.get("returnType")
+    if return_type is not None:
+        token = str(return_type).strip()
+        if token not in FUNCTION_CALL_RETURN_TYPES:
+            raise ValueError(
+                f"{owner}.action.functionCall.returnType must be one of "
+                f"{list(FUNCTION_CALL_RETURN_TYPES)}."
+            )
+        if token != expected_return_type:
+            raise ValueError(
+                f"{owner}.action.functionCall.returnType for '{call_name}' must be "
+                f"'{expected_return_type}'."
+            )
+        normalized_function["returnType"] = token
+    else:
+        normalized_function["returnType"] = expected_return_type
+    unknown_function_keys = sorted(
+        key for key in function_call.keys() if str(key) not in {"call", "args", "returnType"}
+    )
+    if unknown_function_keys:
+        raise ValueError(
+            f"{owner}.action.functionCall has unsupported keys: {unknown_function_keys}."
+        )
+    unknown_action_keys = sorted(
+        key for key in raw_action.keys() if str(key) not in {"functionCall"}
+    )
+    if unknown_action_keys:
+        raise ValueError(f"{owner}.action has unsupported keys: {unknown_action_keys}.")
+    return {"functionCall": normalized_function}
+
+
+def _extract_props(component: Mapping[str, Any]) -> Dict[str, Any]:
+    raw_props = component.get("props")
+    props: Dict[str, Any] = {}
+    if raw_props is not None:
+        if not isinstance(raw_props, Mapping):
+            raise ValueError("component.props must be an object.")
+        props = deepcopy(dict(raw_props))
+
+    for raw_key, raw_value in component.items():
+        key = str(raw_key or "")
+        if key in {"id", "type", "component", "props"}:
+            continue
+        if key in props:
+            raise ValueError(f"component field '{key}' is duplicated in props and top-level.")
+        props[key] = deepcopy(raw_value)
+    return props
+
+
+def _expand_component_wrapper(component: Mapping[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize component wrapper variants into canonical component mapping.
+
+    Accepted canonical forms:
+    - {"id": "...", "type": "Text", "props": {...}}
+    - {"id": "...", "component": "Text", "props": {...}}
+
+    Accepted wrapper form (A2UI docs/examples compatibility):
+    - {"id": "...", "component": {"Text": {...}}}
+    """
+
+    normalized = deepcopy(dict(component))
+    raw_component_value = normalized.get("component")
+    if not isinstance(raw_component_value, Mapping):
+        return normalized
+
+    wrapper_items = list(raw_component_value.items())
+    if len(wrapper_items) != 1:
+        raise ValueError(
+            "component wrapper object must contain exactly one component type key."
+        )
+
+    raw_type, raw_wrapper_props = wrapper_items[0]
+    wrapper_type = str(raw_type or "").strip()
+    if not wrapper_type:
+        raise ValueError("component wrapper type key must be a non-empty string.")
+    if raw_wrapper_props is None:
+        wrapper_props: Dict[str, Any] = {}
+    elif isinstance(raw_wrapper_props, Mapping):
+        wrapper_props = deepcopy(dict(raw_wrapper_props))
+    else:
+        raise ValueError(
+            "component wrapper value must be an object (component props)."
+        )
+
+    top_level_type = str(normalized.get("type") or "").strip()
+    if top_level_type and top_level_type != wrapper_type:
+        raise ValueError(
+            f"component.type ('{top_level_type}') and wrapped component "
+            f"type ('{wrapper_type}') must match."
+        )
+
+    top_level_props = normalized.get("props")
+    merged_props: Dict[str, Any]
+    if top_level_props is None:
+        merged_props = {}
+    elif isinstance(top_level_props, Mapping):
+        merged_props = deepcopy(dict(top_level_props))
+    else:
+        raise ValueError("component.props must be an object.")
+
+    for key, value in wrapper_props.items():
+        key_text = str(key or "")
+        if not key_text:
+            continue
+        if key_text in merged_props:
+            raise ValueError(
+                f"component wrapper prop '{key_text}' duplicates component.props."
+            )
+        merged_props[key_text] = deepcopy(value)
+
+    normalized["component"] = wrapper_type
+    normalized["type"] = wrapper_type
+    normalized["props"] = merged_props
+    return normalized
+
+
+def _normalize_component_type(component: Mapping[str, Any]) -> str:
+    type_value = component.get("type")
+    component_value = component.get("component")
+    type_text = str(type_value or "").strip()
+    component_text = str(component_value or "").strip()
+    if type_text and component_text and type_text != component_text:
+        raise ValueError(
+            f"component.type ('{type_text}') and component.component "
+            f"('{component_text}') must match when both are provided."
+        )
+    resolved = type_text or component_text
+    if not resolved:
+        raise ValueError("component.type is required.")
+    if resolved not in UI_COMPONENT_TYPES:
+        raise ValueError(
+            f"Unsupported component type: {resolved}. Allowed: {sorted(UI_COMPONENT_TYPES)}"
+        )
+    return resolved
+
+
+def _normalize_layout_props(
+    props: Mapping[str, Any],
+    *,
+    field_name: str,
+) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props(
+        field_name.removesuffix(".props"),
+        props,
+    )
+    _validate_allowed_props(
+        field_name.removesuffix(".props"),
+        normalized,
+        allowed={"children", "justify", "align"},
+    )
+    normalized["children"] = _normalize_child_list(
+        normalized.get("children"),
+        field_name=f"{field_name}.children",
+    )
+    _normalize_enum_field(
+        normalized,
+        field_name="justify",
+        allowed_values=_LAYOUT_JUSTIFY_VALUES,
+        error_label=f"{field_name}.justify",
+    )
+    _normalize_enum_field(
+        normalized,
+        field_name="align",
+        allowed_values=_LAYOUT_ALIGN_VALUES,
+        error_label=f"{field_name}.align",
+    )
+    weight = _to_finite_number(normalized.get("weight"))
+    if weight is not None:
+        normalized["weight"] = weight
+    return normalized
+
+
+def _normalize_list_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("List", props)
+    _validate_allowed_props("List", normalized, allowed={"children", "direction", "align"})
+    normalized["children"] = _normalize_child_list(
+        normalized.get("children"),
+        field_name="List.props.children",
+    )
+    _normalize_enum_field(
+        normalized,
+        field_name="direction",
+        allowed_values=_LIST_DIRECTION_VALUES,
+        error_label="List.props.direction",
+    )
+    _normalize_enum_field(
+        normalized,
+        field_name="align",
+        allowed_values=_LAYOUT_ALIGN_VALUES,
+        error_label="List.props.align",
+    )
+    return normalized
+
+
+def _normalize_tabs_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Tabs", props)
+    _validate_allowed_props("Tabs", normalized, allowed={"tabs"})
+    tabs = normalized.get("tabs")
+    if not isinstance(tabs, list) or not tabs:
+        raise ValueError("Tabs.props.tabs must be a non-empty array.")
+    parsed_tabs: list[Dict[str, Any]] = []
+    for index, item in enumerate(tabs):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"Tabs.props.tabs[{index}] must be an object.")
+        title = item.get("title")
+        if title is None:
+            raise ValueError(f"Tabs.props.tabs[{index}].title is required.")
+        child = _coerce_component_ref(
+            item.get("child"),
+            field_name=f"Tabs.props.tabs[{index}].child",
+        )
+        parsed_tabs.append(
+            {
+                "title": deepcopy(title),
+                "child": child,
+            }
+        )
+    normalized["tabs"] = parsed_tabs
+    weight = _to_finite_number(normalized.get("weight"))
+    if weight is not None:
+        normalized["weight"] = weight
+    return normalized
+
+
+def _normalize_modal_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Modal", props)
+    _validate_allowed_props("Modal", normalized, allowed={"trigger", "content"})
+    normalized["trigger"] = _coerce_component_ref(
+        normalized.get("trigger"), field_name="Modal.props.trigger"
+    )
+    normalized["content"] = _coerce_component_ref(
+        normalized.get("content"), field_name="Modal.props.content"
+    )
+    return normalized
+
+
+def _normalize_button_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Button", props)
+    _validate_allowed_props(
+        "Button",
+        normalized,
+        allowed={"child", "variant", "action", "checks"},
+    )
+    normalized["child"] = _coerce_component_ref(
+        normalized.get("child"), field_name="Button.props.child"
+    )
+    _normalize_enum_field(
+        normalized,
+        field_name="variant",
+        allowed_values=_BUTTON_VARIANTS,
+        error_label="Button.props.variant",
+        default="borderless",
+    )
+    action = normalized.get("action")
+    if action is None:
+        raise ValueError("Button.props.action is required.")
+    normalized["action"] = _normalize_action_object(action, owner="Button.props")
+    _set_normalized_checks(normalized)
+    return normalized
+
+
+def _normalize_textfield_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("TextField", props)
+    _validate_allowed_props("TextField", normalized, allowed={"label", "value", "variant", "checks"})
+    if normalized.get("label") is None:
+        raise ValueError("TextField.props.label is required.")
+    _normalize_enum_field(
+        normalized,
+        field_name="variant",
+        allowed_values=_TEXTFIELD_VARIANTS,
+        error_label="TextField.props.variant",
+        default="shortText",
+    )
+    _set_normalized_checks(normalized)
+    return normalized
+
+
+def _normalize_checkbox_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("CheckBox", props)
+    _validate_allowed_props("CheckBox", normalized, allowed={"label", "value", "checks"})
+    if normalized.get("label") is None:
+        raise ValueError("CheckBox.props.label is required.")
+    if "value" not in normalized:
+        raise ValueError("CheckBox.props.value is required.")
+    _set_normalized_checks(normalized)
+    return normalized
+
+
+def _normalize_choice_picker_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("ChoicePicker", props)
+    _validate_allowed_props(
+        "ChoicePicker",
+        normalized,
+        allowed={"label", "variant", "options", "value", "checks"},
+    )
+    _normalize_enum_field(
+        normalized,
+        field_name="variant",
+        allowed_values=_CHOICE_PICKER_VARIANTS,
+        error_label="ChoicePicker.props.variant",
+        default="mutuallyExclusive",
+    )
+    options = normalized.get("options")
+    if not isinstance(options, list) or not options:
+        raise ValueError("ChoicePicker.props.options must be a non-empty array.")
+    parsed_options: list[Dict[str, Any]] = []
+    for index, option in enumerate(options):
+        if not isinstance(option, Mapping):
+            raise ValueError(f"ChoicePicker.props.options[{index}] must be an object.")
+        if "label" not in option or "value" not in option:
+            raise ValueError(
+                f"ChoicePicker.props.options[{index}] must include both label and value."
+            )
+        parsed_options.append(
+            {
+                "label": deepcopy(option.get("label")),
+                "value": deepcopy(option.get("value")),
+            }
+        )
+    normalized["options"] = parsed_options
+    if "value" not in normalized:
+        raise ValueError("ChoicePicker.props.value is required.")
+    _set_normalized_checks(normalized)
+    return normalized
+
+
+def _normalize_slider_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Slider", props)
+    _validate_allowed_props("Slider", normalized, allowed={"label", "value", "min", "max", "checks"})
+    min_v = _to_finite_number(normalized.get("min"))
+    max_v = _to_finite_number(normalized.get("max"))
+    raw_value = normalized.get("value")
+    value_v = _to_finite_number(raw_value)
+    if min_v is None:
+        raise ValueError("Slider.props.min is required and must be a finite number.")
+    if max_v is None:
+        raise ValueError("Slider.props.max is required and must be a finite number.")
+    if max_v < min_v:
+        min_v, max_v = max_v, min_v
+    if raw_value is None:
+        raise ValueError("Slider.props.value is required.")
+    if value_v is not None:
+        value_v = max(min_v, min(max_v, value_v))
+        normalized["value"] = value_v
+    elif not isinstance(raw_value, Mapping):
+        raise ValueError("Slider.props.value must be a number or a dynamic binding object.")
+    normalized["min"] = min_v
+    normalized["max"] = max_v
+    _set_normalized_checks(normalized)
+    return normalized
+
+
+def _normalize_datetime_input_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("DateTimeInput", props)
+    _validate_allowed_props(
+        "DateTimeInput",
+        normalized,
+        allowed={"value", "enableDate", "enableTime", "min", "max", "label", "checks"},
+    )
+    enable_date = normalized.get("enableDate", True)
+    if not isinstance(enable_date, bool):
+        raise ValueError("DateTimeInput.props.enableDate must be a boolean.")
+    normalized["enableDate"] = enable_date
+    enable_time = normalized.get("enableTime", False)
+    if not isinstance(enable_time, bool):
+        raise ValueError("DateTimeInput.props.enableTime must be a boolean.")
+    normalized["enableTime"] = enable_time
+    if "value" not in normalized:
+        raise ValueError("DateTimeInput.props.value is required.")
+    _set_normalized_checks(normalized)
+    return normalized
+
+
+def _normalize_text_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Text", props)
+    _validate_allowed_props("Text", normalized, allowed={"text", "variant"})
+    if "text" not in normalized:
+        normalized["text"] = ""
+    _normalize_enum_field(
+        normalized,
+        field_name="variant",
+        allowed_values=_TEXT_VARIANTS,
+        error_label="Text.props.variant",
+    )
+    return normalized
+
+
+def _normalize_media_props(component_type: str, props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props(component_type, props)
+    if component_type == "Image":
+        allowed = {"url", "fit", "variant"}
+    elif component_type == "Video":
+        allowed = {"url"}
+    else:
+        allowed = {"url", "description"}
+    _validate_allowed_props(component_type, normalized, allowed=allowed)
+    if "url" not in normalized:
+        raise ValueError(f"{component_type}.props.url is required.")
+    if component_type == "Image":
+        _normalize_enum_field(
+            normalized,
+            field_name="fit",
+            allowed_values=_IMAGE_FIT_VARIANTS,
+            error_label="Image.props.fit",
+        )
+        _normalize_enum_field(
+            normalized,
+            field_name="variant",
+            allowed_values=_IMAGE_VARIANT_VALUES,
+            error_label="Image.props.variant",
+        )
+    return normalized
+
+
+def _normalize_image_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    return _normalize_media_props("Image", props)
+
+
+def _normalize_video_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    return _normalize_media_props("Video", props)
+
+
+def _normalize_audio_player_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    return _normalize_media_props("AudioPlayer", props)
+
+
+def _normalize_icon_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Icon", props)
+    _validate_allowed_props("Icon", normalized, allowed={"name"})
+    if "name" not in normalized:
+        normalized["name"] = ""
+    return normalized
+
+
+def _normalize_card_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Card", props)
+    _validate_allowed_props("Card", normalized, allowed={"child"})
+    normalized["child"] = _coerce_component_ref(
+        normalized.get("child"), field_name="Card.props.child"
+    )
+    return normalized
+
+
+def _normalize_divider_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_shared_component_props("Divider", props)
+    _validate_allowed_props("Divider", normalized, allowed={"axis"})
+    _normalize_enum_field(
+        normalized,
+        field_name="axis",
+        allowed_values=_DIVIDER_AXIS_VALUES,
+        error_label="Divider.props.axis",
+    )
+    return normalized
+
+
+def _normalize_row_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    return _normalize_layout_props(props, field_name="Row.props")
+
+
+def _normalize_column_props(props: Mapping[str, Any]) -> Dict[str, Any]:
+    return _normalize_layout_props(props, field_name="Column.props")
+
+
+_COMPONENT_PROPS_NORMALIZERS: Dict[str, Callable[[Mapping[str, Any]], Dict[str, Any]]] = {
+    "Text": _normalize_text_props,
+    "Image": _normalize_image_props,
+    "Video": _normalize_video_props,
+    "AudioPlayer": _normalize_audio_player_props,
+    "Icon": _normalize_icon_props,
+    "Row": _normalize_row_props,
+    "Column": _normalize_column_props,
+    "List": _normalize_list_props,
+    "Card": _normalize_card_props,
+    "Tabs": _normalize_tabs_props,
+    "Modal": _normalize_modal_props,
+    "Divider": _normalize_divider_props,
+    "Button": _normalize_button_props,
+    "TextField": _normalize_textfield_props,
+    "CheckBox": _normalize_checkbox_props,
+    "ChoicePicker": _normalize_choice_picker_props,
+    "Slider": _normalize_slider_props,
+    "DateTimeInput": _normalize_datetime_input_props,
+}
+
+
+def _normalize_component_props(component_type: str, props: Mapping[str, Any]) -> Dict[str, Any]:
+    normalizer = _COMPONENT_PROPS_NORMALIZERS.get(component_type)
+    if normalizer is not None:
+        return normalizer(props)
+    return _normalize_shared_component_props(component_type, props)
 
 
 def normalize_component(
     component: Mapping[str, Any],
     *,
-    strict_component_types: bool = False,
+    strict_component_types: bool = True,
 ) -> Dict[str, Any]:
-    normalized = deepcopy(dict(component))
-    raw_type = _component_raw_type(normalized)
-    type_token = _component_type_token(normalized)
-    component_type, inferred_chart_type = _normalize_component_type(raw_type)
-    props = _extract_component_props(normalized)
+    _require_boolean_flag(
+        strict_component_types,
+        field_name="strict_component_types",
+    )
+    if not isinstance(component, Mapping):
+        raise ValueError("component must be an object.")
+    normalized_component = _expand_component_wrapper(component)
+    component_id = str(normalized_component.get("id") or "").strip()
+    if not component_id:
+        raise ValueError("component.id is required.")
+    component_type = _normalize_component_type(normalized_component)
+    props = _extract_props(normalized_component)
+    normalized_props = _normalize_component_props(component_type, props)
+    return {
+        "id": component_id,
+        "type": component_type,
+        "props": normalized_props,
+    }
 
-    if type_token == "row":
-        props.setdefault("direction", "row")
-        props["children"] = _as_children_list(props.get("children"), props.get("child"))
-    elif type_token == "column":
-        props.setdefault("direction", "column")
-        props["children"] = _as_children_list(props.get("children"), props.get("child"))
-    elif type_token == "card":
-        props.setdefault("direction", "column")
-        props["card"] = True
-        props["children"] = _as_children_list(props.get("children"), props.get("child"))
-    elif type_token == "modal":
-        props.setdefault("direction", "column")
-        props["modal"] = True
-        props["card"] = True
-        props["children"] = _as_children_list(props.get("children"), props.get("child"))
-    elif type_token in {"textfield", "text_field"}:
-        variant = _norm_token(props.get("variant"))
-        if variant in {"long_text", "longtext", "paragraph"}:
-            component_type = "textarea"
-        else:
-            component_type = "input"
-            props.setdefault("input_type", "text")
-        props.setdefault("name", str(normalized.get("id") or "field"))
-    elif type_token in {"choicepicker", "choice_picker"}:
-        variant = _norm_token(props.get("variant"))
-        component_type = "radio_group" if variant in {"mutuallyexclusive", "mutually_exclusive"} else "select"
-        props.setdefault("name", str(normalized.get("id") or "choice"))
-    elif type_token in {"datetimeinput", "date_time_input", "datetime_input"}:
-        component_type = "input"
-        variant = _norm_token(props.get("variant"))
-        mode = _norm_token(props.get("mode"))
-        resolved = variant or mode
-        if resolved in {"datetime", "date_time", "dateandtime"}:
-            props["input_type"] = "datetime-local"
-        elif resolved == "time":
-            props["input_type"] = "time"
-        else:
-            props["input_type"] = "date"
-        props.setdefault("name", str(normalized.get("id") or "datetime"))
-    elif type_token == "icon":
-        component_type = "badge"
-        icon_name = props.get("name")
-        if isinstance(icon_name, Mapping):
-            icon_name = icon_name.get("path")
-        props["text"] = str(icon_name or props.get("text") or props.get("label") or "icon")
-    elif type_token == "video":
-        component_type = "iframe"
-        props["src"] = props.get("url") or props.get("src") or ""
-        props.setdefault("height", 360)
-    elif type_token in {"audioplayer", "audio_player"}:
-        component_type = "iframe"
-        props["src"] = props.get("url") or props.get("src") or ""
-        props.setdefault("height", 120)
-        if props.get("description") is not None and props.get("title") is None:
-            props["title"] = props.get("description")
 
-    if component_type not in UI_COMPONENT_TYPES:
-        if strict_component_types:
-            raise ValueError(
-                f"Unsupported component type: {component_type}. Allowed: {sorted(UI_COMPONENT_TYPES)}"
-            )
-        text = (
-            props.get("text")
-            or props.get("label")
-            or props.get("title")
-            or f"Unsupported component '{component_type}' normalized to text."
+def _collect_layout_refs(props: Mapping[str, Any]) -> list[str]:
+    refs: list[str] = []
+    children = props.get("children")
+    if isinstance(children, list):
+        refs.extend(str(item) for item in children if str(item).strip())
+    elif isinstance(children, Mapping):
+        template_component_id = str(children.get("componentId") or "").strip()
+        if template_component_id:
+            refs.append(template_component_id)
+    return refs
+
+
+def _collect_card_refs(props: Mapping[str, Any]) -> list[str]:
+    child = str(props.get("child") or "").strip()
+    return [child] if child else []
+
+
+def _collect_tabs_refs(props: Mapping[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for item in props.get("tabs") or []:
+        if not isinstance(item, Mapping):
+            continue
+        child = str(item.get("child") or "").strip()
+        if child:
+            refs.append(child)
+    return refs
+
+
+def _collect_modal_refs(props: Mapping[str, Any]) -> list[str]:
+    refs: list[str] = []
+    trigger = str(props.get("trigger") or "").strip()
+    content = str(props.get("content") or "").strip()
+    if trigger:
+        refs.append(trigger)
+    if content:
+        refs.append(content)
+    return refs
+
+
+_COMPONENT_REF_COLLECTORS: Dict[str, Callable[[Mapping[str, Any]], list[str]]] = {
+    "Row": _collect_layout_refs,
+    "Column": _collect_layout_refs,
+    "List": _collect_layout_refs,
+    "Card": _collect_card_refs,
+    "Tabs": _collect_tabs_refs,
+    "Modal": _collect_modal_refs,
+    "Button": _collect_card_refs,
+}
+
+
+def _collect_component_refs(component: Mapping[str, Any]) -> list[str]:
+    props = component.get("props")
+    if not isinstance(props, Mapping):
+        return []
+    component_type = str(component.get("type") or "").strip()
+    collector = _COMPONENT_REF_COLLECTORS.get(component_type)
+    if collector is None:
+        return []
+    return collector(props)
+
+
+def _has_dynamic_child_template(component: Mapping[str, Any]) -> bool:
+    component_type = str(component.get("type") or "").strip()
+    if component_type not in {"Row", "Column", "List"}:
+        return False
+    props = component.get("props")
+    if not isinstance(props, Mapping):
+        return False
+    children = props.get("children")
+    return isinstance(children, Mapping)
+
+
+def _validate_component_graph(
+    *,
+    components: Sequence[Mapping[str, Any]],
+    root_ids: Sequence[str],
+) -> None:
+    component_ids: set[str] = set()
+    for component in components:
+        component_id = str(component.get("id") or "").strip()
+        if not component_id:
+            continue
+        if component_id in component_ids:
+            raise ValueError(f"duplicate component id: {component_id}")
+        component_ids.add(component_id)
+
+    unknown_roots = [root_id for root_id in root_ids if root_id not in component_ids]
+    if unknown_roots:
+        raise ValueError(f"root contains unknown component ids: {unknown_roots}")
+
+    adjacency: dict[str, list[str]] = {}
+    has_dynamic_templates = False
+    for component in components:
+        component_id = str(component.get("id") or "").strip() or "<unknown>"
+        if component_id != "<unknown>":
+            adjacency[component_id] = []
+        if _has_dynamic_child_template(component):
+            has_dynamic_templates = True
+        refs = _collect_component_refs(component)
+        for ref in refs:
+            if ref not in component_ids:
+                raise ValueError(
+                    f"component '{component_id}' references unknown child component '{ref}'."
+                )
+            if component_id != "<unknown>":
+                adjacency.setdefault(component_id, []).append(ref)
+
+    reachable: set[str] = set()
+    frontier: list[str] = [root_id for root_id in root_ids if root_id in component_ids]
+    while frontier:
+        node = frontier.pop()
+        if node in reachable:
+            continue
+        reachable.add(node)
+        for child in adjacency.get(node, []):
+            if child not in reachable:
+                frontier.append(child)
+
+    unreachable = sorted(component_ids - reachable)
+    if unreachable and not has_dynamic_templates:
+        raise ValueError(
+            "spec contains unreachable components not connected from root: "
+            f"{unreachable}"
         )
-        normalized["type"] = "text"
-        normalized["props"] = {
-            "text": str(text),
-            "card": bool(props.get("card", True)),
-        }
-        return normalized
 
-    normalized["type"] = component_type
-    if component_type == "chart":
-        normalized["props"] = _normalize_chart_props(props, inferred_chart_type=inferred_chart_type)
-    elif component_type == "data_table":
-        normalized["props"] = _normalize_table_props(props)
-    elif component_type == "chat_panel":
-        normalized["props"] = _normalize_chat_props(props)
-    elif component_type == "button":
-        normalized["props"] = _normalize_button_props(props)
-    elif component_type == "input":
-        normalized["props"] = _normalize_input_props(props)
-    elif component_type == "textarea":
-        normalized["props"] = _normalize_textarea_props(props)
-    elif component_type == "select":
-        normalized["props"] = _normalize_select_props(props)
-    elif component_type == "checkbox":
-        normalized["props"] = _normalize_checkbox_props(props)
-    elif component_type == "radio_group":
-        normalized["props"] = _normalize_radio_group_props(props)
-    elif component_type == "slider":
-        normalized["props"] = _normalize_slider_props(props)
-    elif component_type == "metric_card":
-        normalized["props"] = _normalize_metric_card_props(props)
-    elif component_type == "list_view":
-        normalized["props"] = _normalize_list_view_props(props)
-    elif component_type == "tabs":
-        normalized["props"] = _normalize_tabs_props(props)
-    elif component_type == "accordion":
-        normalized["props"] = _normalize_accordion_props(props)
-    elif component_type == "container":
-        normalized["props"] = _normalize_container_props(props)
-    elif component_type == "image":
-        normalized["props"] = _normalize_image_props(props)
-    elif component_type == "iframe":
-        normalized["props"] = _normalize_iframe_props(props)
-    elif component_type == "code_block":
-        normalized["props"] = _normalize_code_block_props(props)
-    elif component_type == "divider":
-        normalized["props"] = _normalize_divider_props(props)
-    else:
-        normalized["props"] = deepcopy(props)
 
-    interaction_events = _INTERACTION_EVENT_HINTS.get(component_type)
-    if interaction_events:
-        normalized["props"] = _normalize_interaction_props(
-            normalized["props"],
-            supported_events=interaction_events,
-        )
-
-    return normalized
+def _normalize_root(raw_root: Any) -> list[str]:
+    if not isinstance(raw_root, list):
+        raise ValueError("root must be a list of component ids.")
+    root: list[str] = []
+    for item in raw_root:
+        token = _coerce_component_ref(item, field_name="root")
+        if token not in root:
+            root.append(token)
+    if not root:
+        raise ValueError("MetaUI spec must declare non-empty root component ids.")
+    return root
 
 
 def normalize_metaui_spec(
     spec: Mapping[str, Any],
     *,
-    strict_component_types: bool = False,
+    strict_component_types: bool = True,
 ) -> Dict[str, Any]:
-    normalized = deepcopy(dict(spec))
-    if "send_data_model" not in normalized and "sendDataModel" in normalized:
-        normalized["send_data_model"] = bool(normalized.get("sendDataModel"))
-    normalized["theme"] = _normalize_theme(normalized.get("theme"))
-    seed_components = _seed_components_from_raw(normalized.get("components"))
-    seed_root_entries = _seed_root_entries_from_raw(normalized.get("root"))
-
-    normalized_components, normalized_root, seed_component_ids = _normalize_component_graph(
-        seed_components=seed_components,
-        seed_root_entries=seed_root_entries,
-        strict_component_types=strict_component_types,
+    _require_boolean_flag(
+        strict_component_types,
+        field_name="strict_component_types",
     )
+    if not isinstance(spec, Mapping):
+        raise ValueError("MetaUI spec must be an object.")
 
-    component_ids = [
-        str(item.get("id") or "").strip()
-        for item in normalized_components
-        if isinstance(item, Mapping) and str(item.get("id") or "").strip()
-    ]
+    normalized = deepcopy(dict(spec))
+    interaction_mode = _normalize_interaction_mode(
+        normalized.get("interaction_mode")
+    )
+    normalized["interaction_mode"] = interaction_mode
+    normalized["theme"] = _normalize_theme(normalized.get("theme"))
+    normalized["title"] = str(normalized.get("title") or "MetaUI")
+    raw_send_data_model = (
+        normalized.get("send_data_model")
+        if normalized.get("send_data_model") is not None
+        else normalized.get("sendDataModel")
+    )
+    if raw_send_data_model is None:
+        normalized["send_data_model"] = interaction_mode == "interactive"
+    else:
+        normalized["send_data_model"] = bool(raw_send_data_model)
+    normalized.pop("sendDataModel", None)
+    if not isinstance(normalized.get("state_bindings"), Mapping):
+        normalized["state_bindings"] = {}
+    else:
+        normalized["state_bindings"] = deepcopy(dict(normalized["state_bindings"]))
 
-    if not normalized_components:
-        fallback_component = normalize_component(
-            {
-                "id": "workspace_info",
-                "type": "text",
-                "props": {
-                    "title": "Workspace",
-                    "text": "No renderable components were provided.",
-                    "card": True,
-                },
-            },
-            strict_component_types=strict_component_types,
+    raw_actions = normalized.get("actions")
+    if raw_actions is None:
+        normalized.pop("actions", None)
+    elif isinstance(raw_actions, list):
+        if raw_actions:
+            raise ValueError(
+                "actions is not supported in strict A2UI mode. "
+                "Use component-level Action (e.g., Button.props.action)."
+            )
+        normalized.pop("actions", None)
+    else:
+        raise ValueError("actions must be an array when provided.")
+
+    raw_components = normalized.get("components")
+    if not isinstance(raw_components, list):
+        raise ValueError("components must be a list of component objects.")
+    components = [normalize_component(item) for item in raw_components]
+    if not components:
+        raise ValueError(
+            "MetaUI spec must include at least one renderable component. "
+            "No fallback UI is injected by runtime."
         )
-        normalized_components = [fallback_component]
-        normalized_root = [fallback_component["id"]]
-    elif not normalized_root:
-        preferred_root_ids: list[str] = []
-        seen_preferred_root_ids: set[str] = set()
-        for component_id in seed_component_ids:
-            if component_id in component_ids and component_id not in seen_preferred_root_ids:
-                preferred_root_ids.append(component_id)
-                seen_preferred_root_ids.add(component_id)
-        normalized_root = preferred_root_ids or component_ids
+    root_ids = _normalize_root(normalized.get("root"))
+    _validate_component_graph(components=components, root_ids=root_ids)
 
-    normalized["components"] = normalized_components
-    normalized["root"] = normalized_root
+    normalized["components"] = components
+    normalized["root"] = root_ids
     return normalized
 
 
-def _normalize_partial_spec_fragment(
-    spec: Mapping[str, Any],
-    *,
-    strict_component_types: bool = False,
-) -> Dict[str, Any]:
-    normalized = deepcopy(dict(spec))
-    if "send_data_model" not in normalized and "sendDataModel" in normalized:
-        normalized["send_data_model"] = bool(normalized.get("sendDataModel"))
+def _normalize_partial_spec_fragment(fragment: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = deepcopy(dict(fragment))
+    if "interaction_mode" in normalized:
+        normalized["interaction_mode"] = _normalize_interaction_mode(
+            normalized.get("interaction_mode")
+        )
     if "theme" in normalized:
         normalized["theme"] = _normalize_theme(normalized.get("theme"))
-
-    has_components = "components" in normalized
-    has_root = "root" in normalized
-    raw_root = normalized.get("root")
-    root_is_component_mapping = isinstance(raw_root, Mapping)
-    root_list_has_component_mappings = isinstance(raw_root, list) and any(
-        isinstance(item, Mapping) for item in raw_root
-    )
-
-    if has_components or root_is_component_mapping or root_list_has_component_mappings:
-        seed_components = _seed_components_from_raw(normalized.get("components")) if has_components else []
-        seed_root_entries = _seed_root_entries_from_raw(raw_root) if has_root else []
-        normalized_components, normalized_root, _ = _normalize_component_graph(
-            seed_components=seed_components,
-            seed_root_entries=seed_root_entries,
-            strict_component_types=strict_component_types,
+    if "send_data_model" in normalized or "sendDataModel" in normalized:
+        raw_send_data_model = (
+            normalized.get("send_data_model")
+            if normalized.get("send_data_model") is not None
+            else normalized.get("sendDataModel")
         )
-        if has_components or normalized_components:
-            normalized["components"] = normalized_components
-        if has_root:
-            normalized["root"] = normalized_root
-        elif "root" in normalized:
-            normalized.pop("root", None)
-        return normalized
-
-    if has_root:
-        if isinstance(raw_root, list):
-            normalized["root"] = [str(item) for item in raw_root if str(item).strip()]
+        normalized["send_data_model"] = bool(raw_send_data_model)
+        normalized.pop("sendDataModel", None)
+    if "actions" in normalized:
+        raw_actions = normalized.get("actions")
+        if raw_actions is None:
+            normalized.pop("actions", None)
+        elif isinstance(raw_actions, list):
+            if raw_actions:
+                raise ValueError(
+                    "patch.spec.actions is not supported in strict A2UI mode. "
+                    "Use component-level Action (e.g., Button.props.action)."
+                )
+            normalized.pop("actions", None)
         else:
-            normalized.pop("root", None)
+            raise ValueError("patch.spec.actions must be an array.")
+    if "components" in normalized:
+        raw_components = normalized.get("components")
+        if not isinstance(raw_components, list):
+            raise ValueError("patch.spec.components must be a list.")
+        normalized["components"] = [normalize_component(item) for item in raw_components]
+    if "root" in normalized:
+        raw_root = normalized.get("root")
+        if not isinstance(raw_root, list):
+            raise ValueError("patch.spec.root must be a list of component ids.")
+        root_ids: list[str] = []
+        for item in raw_root:
+            root_id = _coerce_component_ref(item, field_name="patch.spec.root")
+            if root_id not in root_ids:
+                root_ids.append(root_id)
+        normalized["root"] = root_ids
     return normalized
 
 
 def normalize_metaui_patch(
     patch: Mapping[str, Any],
     *,
-    strict_component_types: bool = False,
+    strict_component_types: bool = True,
 ) -> Dict[str, Any]:
+    _require_boolean_flag(
+        strict_component_types,
+        field_name="strict_component_types",
+    )
+    if not isinstance(patch, Mapping):
+        raise ValueError("patch must be an object.")
     normalized = deepcopy(dict(patch))
-    op_raw = normalized.get("op")
-    op = _norm_token(op_raw) if op_raw is not None else ""
+    op = str(normalized.get("op") or "").strip().lower()
     if op:
         normalized["op"] = op
 
-    if op == "replace_spec" and isinstance(normalized.get("spec"), Mapping):
-        normalized["spec"] = normalize_metaui_spec(
-            normalized["spec"],
-            strict_component_types=strict_component_types,
-        )
+    if op == "replace_spec":
+        raw_spec = normalized.get("spec")
+        if not isinstance(raw_spec, Mapping):
+            raise ValueError("replace_spec patch requires object field `spec`.")
+        normalized["spec"] = normalize_metaui_spec(raw_spec)
         return normalized
 
-    if op == "merge_spec" and isinstance(normalized.get("spec"), Mapping):
-        normalized["spec"] = _normalize_partial_spec_fragment(
-            normalized["spec"],
-            strict_component_types=strict_component_types,
-        )
+    if op == "merge_spec":
+        raw_spec = normalized.get("spec")
+        if not isinstance(raw_spec, Mapping):
+            raise ValueError("merge_spec patch requires object field `spec`.")
+        normalized["spec"] = _normalize_partial_spec_fragment(raw_spec)
         return normalized
 
-    if op == "append_component" and isinstance(normalized.get("component"), Mapping):
-        expanded_components, _, seed_component_ids = _normalize_component_graph(
-            seed_components=[normalized["component"]],
-            seed_root_entries=[],
-            strict_component_types=strict_component_types,
-        )
-        if len(expanded_components) == 1:
-            normalized["component"] = expanded_components[0]
-            return normalized
-        return {
-            "op": "merge_spec",
-            "spec": {
-                "components": expanded_components,
-            },
-            "expanded_from": "append_component",
-            "primary_component_id": seed_component_ids[0] if seed_component_ids else None,
-        }
+    if op == "append_component":
+        raw_component = normalized.get("component")
+        if not isinstance(raw_component, Mapping):
+            raise ValueError("append_component patch requires object field `component`.")
+        normalized["component"] = normalize_component(raw_component)
+        return normalized
 
     if op == "update_component":
         component_patch = normalized.get("component")
         if isinstance(component_patch, Mapping):
-            component_payload = normalize_component(
-                component_patch,
-                strict_component_types=strict_component_types,
-            )
-            normalized.setdefault("id", component_payload.get("id"))
-            merged_props = dict(component_payload.get("props") or {})
-            if isinstance(normalized.get("props"), Mapping):
-                merged_props.update(dict(normalized["props"]))
-            normalized["props"] = merged_props
-            if component_payload.get("type"):
-                normalized["type"] = component_payload["type"]
+            normalized_component = normalize_component(component_patch)
+            normalized["component"] = normalized_component
+            normalized["id"] = str(
+                normalized.get("id") or normalized_component.get("id") or ""
+            ).strip()
+            normalized["type"] = normalized_component.get("type")
+            normalized["props"] = deepcopy(dict(normalized_component.get("props") or {}))
+            if not normalized["id"]:
+                raise ValueError("update_component patch requires target id.")
+            return normalized
 
-        raw_type = normalized.get("type")
+        target_id = str(normalized.get("id") or "").strip()
+        if not target_id:
+            raise ValueError("update_component patch requires `id`.")
+        raw_type = normalized.get("type") or normalized.get("component")
+        raw_props = normalized.get("props")
         if raw_type is not None:
-            component_type, inferred_chart_type = _normalize_component_type(raw_type)
-            if strict_component_types and component_type not in UI_COMPONENT_TYPES:
-                raise ValueError(
-                    f"Unsupported component type: {component_type}. Allowed: {sorted(UI_COMPONENT_TYPES)}"
-                )
-            normalized["type"] = component_type
-            props = normalized.get("props")
-            has_inline_refs = isinstance(props, Mapping) and _props_have_inline_component_refs(component_type, props)
-            if has_inline_refs and normalized.get("id") is not None:
-                expanded_components, _, seed_component_ids = _normalize_component_graph(
-                    seed_components=[
-                        {
-                            "id": normalized.get("id"),
-                            "type": component_type,
-                            "props": props,
-                        }
-                    ],
-                    seed_root_entries=[],
-                    strict_component_types=strict_component_types,
-                )
-                if len(expanded_components) > 1:
-                    return {
-                        "op": "merge_spec",
-                        "spec": {
-                            "components": expanded_components,
-                        },
-                        "expanded_from": "update_component",
-                        "primary_component_id": seed_component_ids[0] if seed_component_ids else None,
-                    }
-            if isinstance(props, Mapping):
-                synthetic_id = str(normalized.get("id") or "patch_component")
-                normalized_component = normalize_component(
-                    {
-                        "id": synthetic_id,
-                        "type": component_type,
-                        "props": props,
-                    },
-                    strict_component_types=strict_component_types,
-                )
-                normalized["props"] = deepcopy(dict(normalized_component.get("props") or {}))
-                if component_type == "chart" and inferred_chart_type:
-                    normalized["props"]["chart_type"] = inferred_chart_type
-            elif props is not None:
-                normalized["props"] = {}
+            candidate = normalize_component(
+                {
+                    "id": target_id,
+                    "type": raw_type,
+                    "props": raw_props if isinstance(raw_props, Mapping) else {},
+                }
+            )
+            normalized["type"] = candidate["type"]
+            normalized["props"] = candidate["props"]
+        elif raw_props is not None:
+            if not isinstance(raw_props, Mapping):
+                raise ValueError("update_component.props must be an object when provided.")
+            normalized["props"] = deepcopy(dict(raw_props))
         return normalized
 
     if op == "set_root":
-        raw_root = normalized.get("root")
-        seed_root_entries = _seed_root_entries_from_raw(raw_root)
-        if any(isinstance(item, Mapping) for item in seed_root_entries):
-            expanded_components, normalized_root, _ = _normalize_component_graph(
-                seed_components=[],
-                seed_root_entries=seed_root_entries,
-                strict_component_types=strict_component_types,
-            )
-            patch_spec: Dict[str, Any] = {"root": normalized_root}
-            if expanded_components:
-                patch_spec["components"] = expanded_components
-            return {
-                "op": "merge_spec",
-                "spec": patch_spec,
-                "expanded_from": "set_root",
-            }
-        normalized["root"] = [ref for ref in (_coerce_component_ref(item) for item in seed_root_entries) if ref]
+        normalized["root"] = _normalize_root(normalized.get("root"))
         return normalized
 
-    if "components" in normalized and isinstance(normalized.get("components"), list):
-        return normalize_metaui_spec(
-            normalized,
-            strict_component_types=strict_component_types,
-        )
+    if op == "set_title":
+        normalized["title"] = str(normalized.get("title") or "")
+        return normalized
+
+    if isinstance(normalized.get("components"), list):
+        return normalize_metaui_spec(normalized)
     return normalized
+
+
+def collect_interaction_contract_issues(
+    spec: Mapping[str, Any],
+    *,
+    require_explicit_interaction_contract: Optional[bool] = None,
+) -> list[str]:
+    _ = require_explicit_interaction_contract  # retained for API compatibility
+    components = spec.get("components")
+    if not isinstance(components, list):
+        return ["`components` must be a list."]
+
+    interaction_mode = _normalize_interaction_mode(spec.get("interaction_mode"))
+    issues: list[str] = []
+    if interaction_mode != "interactive":
+        return issues
+
+    interactive_component_types = set(COMPONENT_SUPPORTED_EVENTS.keys())
+    actionable_components = 0
+
+    def _has_path_value_binding(raw_value: Any) -> bool:
+        if not isinstance(raw_value, Mapping):
+            return False
+        path = str(raw_value.get("path") or "").strip()
+        return bool(path)
+
+    for component in components:
+        if not isinstance(component, Mapping):
+            continue
+        component_id = str(component.get("id") or "").strip() or "<unknown>"
+        component_type = str(component.get("type") or "").strip()
+        props = component.get("props")
+        if not isinstance(props, Mapping):
+            continue
+        if component_type == "Button":
+            action = props.get("action")
+            if action is None:
+                issues.append(
+                    f"component '{component_id}' (Button) requires props.action in interactive mode."
+                )
+            else:
+                try:
+                    _normalize_action_object(action, owner=f"component '{component_id}'")
+                    actionable_components += 1
+                except Exception as exc:
+                    issues.append(str(exc))
+            continue
+
+        if component_type in _INTERACTIVE_VALUE_BOUND_COMPONENTS:
+            if not _has_path_value_binding(props.get("value")):
+                issues.append(
+                    f"component '{component_id}' ({component_type}) requires props.value "
+                    "to be a data binding object with a non-empty `path` in interactive mode."
+                )
+            else:
+                actionable_components += 1
+
+        if component_type != "Button" and "action" in props:
+            issues.append(
+                f"component '{component_id}' ({component_type}) does not support props.action. "
+                "Use Button.action to trigger server-side actions."
+            )
+
+    if actionable_components <= 0:
+        issues.append(
+            "interactive mode requires at least one actionable component: "
+            "either a Button with props.action or an input component with props.value.path binding."
+        )
+
+    return issues

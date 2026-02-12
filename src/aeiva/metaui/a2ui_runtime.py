@@ -4,12 +4,14 @@ from datetime import datetime
 import re
 from typing import Any, Iterable, List, Mapping, Sequence
 
+from .function_catalog import STANDARD_FUNCTION_RETURN_TYPES
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _MAX_REGEX_PATTERN_LENGTH = 512
 _MAX_REGEX_INPUT_LENGTH = 2048
 _REGEX_NESTED_QUANTIFIER_RE = re.compile(r"\((?:[^()\\]|\\.)*[+*](?:[^()\\]|\\.)*\)\s*[+*]")
 _REGEX_BACKREF_RE = re.compile(r"\\[1-9]")
+_FORMAT_STRING_EXPR_RE = re.compile(r"(?<!\\)\$\{([^{}]+)\}")
 
 
 def _is_truthy(value: Any) -> bool:
@@ -164,16 +166,26 @@ def _is_safe_regex_pattern(pattern: str) -> bool:
     return True
 
 
-def _function_boolean(args: Mapping[str, Any]) -> bool:
-    return _is_truthy(args.get("value"))
-
-
 def _function_numeric(args: Mapping[str, Any]) -> bool:
     try:
-        float(args.get("value"))
-        return True
+        value = float(args.get("value"))
     except Exception:
         return False
+    min_v = args.get("min")
+    max_v = args.get("max")
+    if min_v is not None:
+        try:
+            if value < float(min_v):
+                return False
+        except Exception:
+            return False
+    if max_v is not None:
+        try:
+            if value > float(max_v):
+                return False
+        except Exception:
+            return False
+    return True
 
 
 def _function_length(args: Mapping[str, Any]) -> bool:
@@ -181,12 +193,6 @@ def _function_length(args: Mapping[str, Any]) -> bool:
     length = len(value) if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)) else len(str(value or ""))
     min_v = args.get("min")
     max_v = args.get("max")
-    eq_v = args.get("eq")
-    if eq_v is not None:
-        try:
-            return length == int(eq_v)
-        except Exception:
-            return False
     if min_v is not None:
         try:
             if length < int(min_v):
@@ -208,26 +214,33 @@ def _function_not(args: Mapping[str, Any]) -> bool:
 
 def _function_and(args: Mapping[str, Any]) -> bool:
     values = args.get("values")
-    if not isinstance(values, list):
-        values = [args.get("left"), args.get("right")]
+    if not isinstance(values, list) or len(values) < 2:
+        return False
     return all(_is_truthy(item) for item in values)
 
 
 def _function_or(args: Mapping[str, Any]) -> bool:
     values = args.get("values")
-    if not isinstance(values, list):
-        values = [args.get("left"), args.get("right")]
+    if not isinstance(values, list) or len(values) < 2:
+        return False
     return any(_is_truthy(item) for item in values)
 
 
 def _function_format_number(args: Mapping[str, Any]) -> str:
-    digits = args.get("digits")
-    return _format_number(args.get("value"), digits=digits, grouping=True)
+    digits = args.get("decimals")
+    grouping = True if args.get("grouping") is None else bool(args.get("grouping"))
+    return _format_number(args.get("value"), digits=digits, grouping=grouping)
 
 
 def _function_format_currency(args: Mapping[str, Any]) -> str:
     currency = str(args.get("currency") or "USD").upper()
-    text = _format_number(args.get("value"), digits=2, grouping=True)
+    digits = args.get("decimals")
+    grouping = True if args.get("grouping") is None else bool(args.get("grouping"))
+    text = _format_number(
+        args.get("value"),
+        digits=digits if digits is not None else 2,
+        grouping=grouping,
+    )
     return f"{currency} {text}"
 
 
@@ -259,27 +272,58 @@ def _function_format_date(args: Mapping[str, Any]) -> str:
 
 
 def _function_pluralize(args: Mapping[str, Any]) -> str:
-    count = args.get("count")
+    count = args.get("value")
     try:
-        count_int = int(count)
+        count_value = float(count)
     except Exception:
-        count_int = 0
-    singular = str(args.get("singular") or "")
-    plural = str(args.get("plural") or (singular + "s"))
-    return singular if count_int == 1 else plural
+        count_value = 0.0
+
+    if count_value == 0 and args.get("zero") is not None:
+        return str(args.get("zero") or "")
+    if count_value == 1 and args.get("one") is not None:
+        return str(args.get("one") or "")
+    if count_value == 2 and args.get("two") is not None:
+        return str(args.get("two") or "")
+    if count_value.is_integer() and abs(count_value) in {3, 4} and args.get("few") is not None:
+        return str(args.get("few") or "")
+    if count_value.is_integer() and abs(count_value) >= 5 and args.get("many") is not None:
+        return str(args.get("many") or "")
+    return str(args.get("other") or "")
 
 
 def _function_open_url(args: Mapping[str, Any]) -> str:
     # Server-side evaluator returns normalized URL string and leaves side effect
     # to the client renderer/runtime.
-    return str(args.get("url") or args.get("value") or "")
+    return str(args.get("url") or "")
+
+
+def _function_format_string(
+    args: Mapping[str, Any],
+    *,
+    data_model: Mapping[str, Any],
+    context: Mapping[str, Any] | None,
+) -> str:
+    template = str(args.get("value") or "")
+    if not template:
+        return ""
+
+    def _resolve_expr(match: re.Match[str]) -> str:
+        token = str(match.group(1) or "").strip()
+        if not token:
+            return ""
+        resolved = resolve_data_path(path=token, data_model=data_model, context=context)
+        if resolved is None:
+            return ""
+        return str(resolved)
+
+    rendered = _FORMAT_STRING_EXPR_RE.sub(_resolve_expr, template)
+    return rendered.replace("\\${", "${")
 
 
 _FUNCTION_TABLE = {
     "required": _function_required,
     "email": _function_email,
     "regex": _function_regex,
-    "boolean": _function_boolean,
     "numeric": _function_numeric,
     "length": _function_length,
     "not": _function_not,
@@ -288,9 +332,18 @@ _FUNCTION_TABLE = {
     "formatNumber": _function_format_number,
     "formatCurrency": _function_format_currency,
     "formatDate": _function_format_date,
+    "formatString": _function_format_string,
     "pluralize": _function_pluralize,
     "openUrl": _function_open_url,
 }
+
+if set(_FUNCTION_TABLE.keys()) != set(STANDARD_FUNCTION_RETURN_TYPES.keys()):
+    missing = sorted(set(STANDARD_FUNCTION_RETURN_TYPES.keys()) - set(_FUNCTION_TABLE.keys()))
+    extra = sorted(set(_FUNCTION_TABLE.keys()) - set(STANDARD_FUNCTION_RETURN_TYPES.keys()))
+    raise RuntimeError(
+        "A2UI runtime function table drift detected. "
+        f"Missing={missing}, Extra={extra}"
+    )
 
 
 def resolve_dynamic_value(
@@ -338,7 +391,14 @@ def evaluate_function_call(
     resolved_args = resolve_dynamic_value(args or {}, data_model=data_model or {}, context=context)
     if not isinstance(resolved_args, Mapping):
         resolved_args = {}
-    return function(resolved_args)
+    try:
+        return function(
+            resolved_args,
+            data_model=data_model or {},
+            context=context,
+        )
+    except TypeError:
+        return function(resolved_args)
 
 
 def evaluate_check_definitions(
@@ -352,14 +412,20 @@ def evaluate_check_definitions(
     for check in checks:
         if not isinstance(check, Mapping):
             continue
-        call_name = str(check.get("call") or "").strip()
+        # Support both forms:
+        # 1) legacy flat: {"call": "...", "args": {...}, "message": "..."}
+        # 2) strict A2UI: {"condition": {"call": "...", "args": {...}}, "message": "..."}
+        condition = check.get("condition")
+        condition_mapping = condition if isinstance(condition, Mapping) else check
+
+        call_name = str(condition_mapping.get("call") or "").strip()
         if not call_name:
             continue
-        args = check.get("args")
+        args = condition_mapping.get("args")
         resolved_args = resolve_dynamic_value(args or {}, data_model=data_model, context=context)
         if not isinstance(resolved_args, Mapping):
             resolved_args = {}
-        if "value" not in resolved_args:
+        if "value" not in resolved_args or resolved_args.get("value") is None:
             resolved_args = dict(resolved_args)
             resolved_args["value"] = default_value
         ok = bool(evaluate_function_call(call_name, resolved_args, data_model=data_model, context=context))

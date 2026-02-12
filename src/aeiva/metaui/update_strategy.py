@@ -20,8 +20,6 @@ _STRUCTURAL_OPS = frozenset(
 class PatchRoutingDecision:
     route_to_render_full: bool
     reason: str
-    intent_text: str | None = None
-    theme_mode: str | None = None
 
 
 def _merge_dicts(base: Mapping[str, Any], incoming: Mapping[str, Any]) -> Dict[str, Any]:
@@ -65,15 +63,23 @@ def _sanitize_root(root: Any, components: list[Mapping[str, Any]]) -> list[str]:
         if isinstance(component, Mapping)
     }
     valid_ids.discard("")
-    if isinstance(root, list):
-        normalized = []
-        for item in root:
-            token = str(item or "").strip()
-            if token and token in valid_ids and token not in normalized:
-                normalized.append(token)
-        if normalized:
-            return normalized
-    return [item for item in valid_ids]
+    if not valid_ids:
+        raise ValueError("spec.components must contain at least one component.")
+    if not isinstance(root, list) or not root:
+        raise ValueError("root must be a non-empty list of component ids.")
+
+    normalized: list[str] = []
+    for item in root:
+        token = str(item or "").strip()
+        if not token:
+            raise ValueError("root contains an empty component id.")
+        if token not in valid_ids:
+            raise ValueError(f"root references unknown component id: {token}")
+        if token not in normalized:
+            normalized.append(token)
+    if not normalized:
+        raise ValueError("root must be a non-empty list of component ids.")
+    return normalized
 
 
 def _patch_has_structural_payload(patch: Mapping[str, Any]) -> bool:
@@ -94,13 +100,11 @@ def decide_patch_routing(patch: Mapping[str, Any]) -> PatchRoutingDecision:
         return PatchRoutingDecision(
             route_to_render_full=True,
             reason="patch_contains_structural_payload",
-            intent_text=None,
         )
 
     return PatchRoutingDecision(
         route_to_render_full=False,
         reason="patch_safe_for_incremental",
-        intent_text=None,
     )
 
 

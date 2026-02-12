@@ -36,6 +36,7 @@ from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.gateway_base import ResponseQueueGateway
 from aeiva.interface.progress_hints import build_progress_hint
 from aeiva.event.event_names import EventNames
+from aeiva.metaui.event_bridge import start_metaui_event_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,14 @@ def build_gradio_chat_ui(
 
     raw_memory_cfg = config_dict.get("raw_memory_config") or {}
     raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
+    metaui_event_bridge = start_metaui_event_bridge(
+        config_dict=config_dict,
+        queue_gateway=queue_gateway,
+        agent_loop_getter=lambda: getattr(getattr(agent, "event_bus", None), "loop", None),
+        route_token=route_token,
+    )
+    if metaui_event_bridge is not None:
+        log.info("MetaUI event bridge started for Gradio gateway.")
 
     def _emit_raw_memory(event_name, payload):
         if agent is None or agent.event_bus.loop is None:
@@ -508,24 +517,24 @@ def build_gradio_chat_ui(
                     clear_history_btn = gr.Button("Clear History", size="sm", elem_classes=["action-btn"])
                     new_conv_btn = gr.Button("New Conversation", size="sm", elem_classes=["action-btn"])
                     del_last_turn_btn = gr.Button("Remove Last Turn", size="sm", elem_classes=["action-btn"])
-                    regenerate_btn = gr.Button("Regenerate", size="sm", elem_classes=["action-btn"])
+                    gr.Button("Regenerate", size="sm", elem_classes=["action-btn"])
 
             # ---- Sidebar: settings & media (collapsible) ----
             with gr.Column(scale=1, min_width=250):
                 with gr.Accordion("Parameters", open=False):
-                    top_p = gr.Slider(
+                    gr.Slider(
                         minimum=0, maximum=1.0, value=0.95, step=0.05,
                         interactive=True, label="Top-p",
                     )
-                    temperature = gr.Slider(
+                    gr.Slider(
                         minimum=0.1, maximum=2.0, value=1.0, step=0.1,
                         interactive=True, label="Temperature",
                     )
-                    max_length_tokens = gr.Slider(
+                    gr.Slider(
                         minimum=0, maximum=512, value=512, step=8,
                         interactive=True, label="Max Generation Tokens",
                     )
-                    max_context_length_tokens = gr.Slider(
+                    gr.Slider(
                         minimum=0, maximum=4096, value=2048, step=128,
                         interactive=True, label="Max History Tokens",
                     )
@@ -576,8 +585,13 @@ def build_gradio_chat_ui(
         )
 
         if hasattr(demo, "unload"):
+            def _on_unload(session_id):
+                if metaui_event_bridge is not None:
+                    metaui_event_bridge.stop(timeout=1.5)
+                return _end_session(session_id)
+
             demo.unload(
-                _end_session, inputs=session_state,
+                _on_unload, inputs=session_state,
                 outputs=[chatbot, txt, session_state], queue=False,
             )
 

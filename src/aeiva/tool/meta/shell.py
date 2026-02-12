@@ -5,7 +5,6 @@ The most fundamental meta tool - enables all system interactions.
 """
 
 import asyncio
-import shlex
 from typing import Dict, Any, Optional
 
 from ..decorator import tool

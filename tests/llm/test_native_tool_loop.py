@@ -8,6 +8,9 @@ from aeiva.llm.tool_loop import ToolLoopEngine
 from aeiva.cognition.brain.llm_brain import LLMBrain
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.llm.tool_types import ToolCall, ToolCallDelta
+from aeiva.tool.capability import Capability
+from aeiva.tool.decorator import tool
+from aeiva.tool.registry import ToolRegistry
 
 
 class FakeBackend:
@@ -163,6 +166,64 @@ async def test_tool_calls_route_through_registry():
 
     assert result == "Final answer"
     assert registry.called == [("filesystem", {"operation": "list", "path": "/tmp"})]
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_survives_missing_required_tool_arguments() -> None:
+    class MissingArgsBackend:
+        def __init__(self):
+            self.calls = 0
+
+        def build_params(self, messages, tools=None, **kwargs):
+            return {"messages": messages, "tools": tools}
+
+        async def execute(self, params, stream: bool = False):
+            return {"ok": True}
+
+        def execute_sync(self, params):
+            return {"ok": True}
+
+        def parse_response(self, response):
+            if self.calls == 0:
+                self.calls += 1
+                return LLMResponse(
+                    "",
+                    [
+                        ToolCall(
+                            id="call_missing",
+                            name="must_have_operation",
+                            arguments="{}",
+                        )
+                    ],
+                    "resp_1",
+                    {},
+                    response,
+                )
+            return LLMResponse("Recovered after tool error", [], "resp_2", {}, response)
+
+        def parse_stream_delta(self, chunk, **kwargs):
+            return None, None
+
+    @tool(description="Requires operation", capabilities=[Capability.NONE])
+    async def must_have_operation(operation: str):
+        return {"success": True, "operation": operation}
+
+    registry = ToolRegistry()
+    registry.register(must_have_operation)
+    engine = ToolLoopEngine(backend=MissingArgsBackend(), registry=registry, max_tool_loops=4)
+    messages = [{"role": "user", "content": "go"}]
+
+    result = await engine.arun(
+        messages,
+        tools=[{"type": "function", "function": {"name": "must_have_operation"}}],
+    )
+
+    assert result.text == "Recovered after tool error"
+    tool_messages = [m for m in messages if m.get("role") == "tool"]
+    assert tool_messages
+    payload = json.loads(tool_messages[-1]["content"])
+    assert payload["error_code"] == "invalid_arguments"
+    assert "operation" in payload["missing"]
 
 
 def test_stream_tool_call_delta_dict_accumulates():

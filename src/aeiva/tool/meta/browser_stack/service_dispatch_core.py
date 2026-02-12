@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from .service_utils import (
     _as_bool,
     _as_float,
-    _as_int,
     _as_str,
     _coalesce,
 )

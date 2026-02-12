@@ -376,7 +376,13 @@ class ResponseQueueGateway(GatewayBase[None]):
             data = {"text": str(data)}
 
         trace_key = self._extract_trace_key(signal, data)
-        route = await self._resolve_route(trace_key, data, payload)
+        resolving_data = data
+        if data.get("streaming") and not data.get("route_keep"):
+            # Stream chunks share one logical turn; keep the trace route until final.
+            resolving_data = dict(data)
+            resolving_data["route_keep"] = True
+
+        route = await self._resolve_route(trace_key, resolving_data, payload)
         if self._require_route and route is None:
             return
 
@@ -386,6 +392,8 @@ class ResponseQueueGateway(GatewayBase[None]):
                 self._queue.put_nowait((trace_key, chunk))
             if data.get("final"):
                 self._queue.put_nowait((trace_key, self._stream_end_marker))
+                if trace_key:
+                    await self._get_route(trace_key, pop=True)
             return
 
         text = self._extract_text(data)

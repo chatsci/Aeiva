@@ -2,43 +2,57 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .capabilities import SUPPORTED_FEATURES, SUPPORTED_PROTOCOL_VERSIONS
+from .interaction_contract import get_interaction_contract_snapshot
+from .protocol import MetaUISpec
 
-A2UI_PROTOCOL_VERSION = "1.0"
-
-
-class MetaUIComponentPayload(BaseModel):
-    type: str = Field(min_length=1, max_length=64)
-    props: Dict[str, Any] = Field(default_factory=dict)
+A2UI_PROTOCOL_VERSION = "v0.10"
 
 
 class SurfaceComponent(BaseModel):
+    """
+    A2UI v0.10 updateComponents entry.
+
+    Strict shape:
+    {
+      "id": "...",
+      "component": "Button",
+      ...component props...
+    }
+    """
+
+    # Component-specific fields (e.g. Text.text, Button.action) are intentionally
+    # top-level in A2UI updateComponents payloads, so we must allow extras here.
+    model_config = ConfigDict(extra="allow")
+
     id: str = Field(min_length=1, max_length=128)
-    component: Dict[str, MetaUIComponentPayload] = Field(default_factory=dict)
+    component: str = Field(min_length=1, max_length=64)
 
-    @model_validator(mode="after")
-    def _validate_component_wrapper(self) -> "SurfaceComponent":
-        if len(self.component) != 1:
-            raise ValueError("surface component wrapper must contain exactly one component key")
-        return self
+    def as_mapping(self) -> Dict[str, Any]:
+        return self.model_dump(mode="json", exclude_none=True)
 
 
-class BeginRenderingMessage(BaseModel):
+class CreateSurfaceMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     surfaceId: str = Field(min_length=1, max_length=128)
-    root: str = Field(min_length=1, max_length=128)
-    catalogId: Optional[str] = Field(default=None, max_length=256)
+    catalogId: str = Field(min_length=1, max_length=256)
     sendDataModel: Optional[bool] = None
-    styles: Optional[Dict[str, Any]] = None
+    theme: Optional[Dict[str, Any]] = None
 
 
 class SurfaceUpdateMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     surfaceId: str = Field(min_length=1, max_length=128)
     components: List[SurfaceComponent] = Field(default_factory=list)
 
 
 class DataModelTypedValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     valueString: Optional[str] = None
     valueNumber: Optional[float] = None
     valueBoolean: Optional[bool] = None
@@ -62,6 +76,8 @@ class DataModelTypedValue(BaseModel):
 
 
 class DataModelContentEntry(DataModelTypedValue):
+    model_config = ConfigDict(extra="forbid")
+
     key: str = Field(min_length=1, max_length=128)
 
 
@@ -69,27 +85,40 @@ DataModelTypedValue.model_rebuild()
 
 
 class DataModelUpdateMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     surfaceId: str = Field(min_length=1, max_length=128)
     path: str = Field(default="/", min_length=1, max_length=512)
+    value: Optional[Any] = None
     contents: List[DataModelContentEntry] = Field(default_factory=list)
 
 
 class DeleteSurfaceMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     surfaceId: str = Field(min_length=1, max_length=128)
 
 
 class ServerToClientEnvelope(BaseModel):
-    beginRendering: Optional[BeginRenderingMessage] = None
-    surfaceUpdate: Optional[SurfaceUpdateMessage] = None
-    dataModelUpdate: Optional[DataModelUpdateMessage] = None
+    model_config = ConfigDict(extra="forbid")
+
+    version: str = Field(default=A2UI_PROTOCOL_VERSION, min_length=1, max_length=32)
+    createSurface: Optional[CreateSurfaceMessage] = None
+    updateComponents: Optional[SurfaceUpdateMessage] = None
+    updateDataModel: Optional[DataModelUpdateMessage] = None
     deleteSurface: Optional[DeleteSurfaceMessage] = None
 
     @model_validator(mode="after")
     def _validate_exactly_one_message(self) -> "ServerToClientEnvelope":
+        if self.version not in set(SUPPORTED_PROTOCOL_VERSIONS):
+            raise ValueError(
+                f"Unsupported protocol version '{self.version}'. "
+                f"Supported versions: {list(SUPPORTED_PROTOCOL_VERSIONS)}"
+            )
         active = [
-            self.beginRendering is not None,
-            self.surfaceUpdate is not None,
-            self.dataModelUpdate is not None,
+            self.createSurface is not None,
+            self.updateComponents is not None,
+            self.updateDataModel is not None,
             self.deleteSurface is not None,
         ]
         if sum(1 for item in active if item) != 1:
@@ -98,12 +127,16 @@ class ServerToClientEnvelope(BaseModel):
 
 
 class CatalogSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     catalogId: str = Field(min_length=1, max_length=256)
     version: str = Field(min_length=1, max_length=32)
     componentTypes: List[str] = Field(default_factory=list)
 
 
 class ClientHello(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["hello"] = "hello"
     client_id: Optional[str] = Field(default=None, max_length=128)
     token: Optional[str] = Field(default=None, max_length=256)
@@ -114,6 +147,8 @@ class ClientHello(BaseModel):
 
 
 class HelloAck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["hello_ack"] = "hello_ack"
     client_id: str = Field(min_length=1, max_length=128)
     protocol: str = Field(min_length=1, max_length=32)
@@ -132,4 +167,6 @@ def get_protocol_schema_bundle() -> Dict[str, Any]:
         "client_hello": ClientHello.model_json_schema(),
         "hello_ack": HelloAck.model_json_schema(),
         "catalog_snapshot": CatalogSnapshot.model_json_schema(),
+        "metaui_spec": MetaUISpec.model_json_schema(),
+        "interaction_contract": get_interaction_contract_snapshot(),
     }

@@ -26,16 +26,9 @@ from .runtime_interaction import RuntimeInteractionMixin
 from .runtime_launch import RuntimeLaunchMixin
 from .runtime_state import RuntimeStateMixin
 from .runtime_common import (
-    DEFAULT_SELECT_SETTLE_MS,
-    DEFAULT_SLOW_TYPE_DELAY_MS,
     DEFAULT_TIMEOUT_MS,
-    DEFAULT_TYPE_DELAY_MS,
     BrowserRuntime,
-    _distributed_attempt_timeout,
-    _extract_numeric_token,
-    _normalize_text_value,
-    _normalize_timeout,
-    _parse_int_env,
+    TabState,
     _repair_subprocess_policy_for_loop,
     _safe_title,
 )
@@ -44,6 +37,17 @@ from .security import BrowserSecurityPolicy
 from .runtime_scroll_script import ACTIVE_CONTAINER_SCROLL_JS, ELEMENT_SCROLL_JS
 
 logger = logging.getLogger(__name__)
+
+# Compatibility hook: tests and downstream code monkeypatch platform/filesystem
+# behavior via this module namespace (runtime.os / runtime.sys).
+_COMPAT_MODULES = (os, sys)
+
+__all__ = [
+    "BrowserSessionManager",
+    "BrowserRuntime",
+    "PlaywrightRuntime",
+    "DEFAULT_TIMEOUT_MS",
+]
 
 
 class PlaywrightRuntime(

@@ -1,0 +1,38 @@
+scenarios:
+  - id: metaui_dialogue_ui_create
+    description: Create a functional dialogue UI.
+    turns:
+      - user: "Please create a dialogue interaction UI that is functionable (not just look)."
+        timeout_seconds: 25
+        expectation:
+          min_response_chars: 20
+          max_latency_seconds: 20
+          metaui_min_sessions: 1
+          metaui_require_non_empty_components: true
+      - user: "Add send-on-enter and file attachment."
+        timeout_seconds: 25
+        expectation:
+          min_response_chars: 20
+          max_latency_seconds: 20
+          contains_any:
+            - "enter"
+            - "attachment"
+
+  - id: metaui_form_submit_flow
+    description: Build and update an onboarding form UI.
+    turns:
+      - user: "Create an employee onboarding form UI with submit and reset buttons."
+        timeout_seconds: 25
+        expectation:
+          min_response_chars: 20
+          max_latency_seconds: 20
+          metaui_min_sessions: 1
+          metaui_require_non_empty_components: true
+      - user: "Add email validation and required field hints."
+        timeout_seconds: 25
+        expectation:
+          min_response_chars: 20
+          max_latency_seconds: 20
+          contains_any:
+            - "validation"
+            - "required"

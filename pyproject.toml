@@ -109,11 +109,13 @@ aeiva-chat-gradio = "aeiva.command.aeiva_chat_gradio:run"
 aeiva-chat-realtime = "aeiva.command.aeiva_chat_realtime:run"
 aeiva-chat-slack = "aeiva.command.aeiva_chat_slack:run"
 aeiva-chat-whatsapp = "aeiva.command.aeiva_chat_whatsapp:run"
+aeiva-dialogue-replay = "aeiva.command.aeiva_dialogue_replay:run"
 aeiva-gateway = "aeiva.command.aeiva_gateway:run"
 aeiva-server = "aeiva.command.aeiva_server:run"
 maid-chat = "aeiva.command.maid_chat:run"
 aeiva-host = "aeiva.host.host_cli:run"
 aeiva-metaui-desktop = "aeiva.metaui.desktop_client:main"
+aeiva-metaui-eval = "aeiva.command.aeiva_metaui_eval:run"
 
 [build-system]
 requires = ["hatchling"]

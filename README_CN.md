@@ -109,11 +109,57 @@ aeiva-metaui-desktop --ws-url ws://127.0.0.1:8765/metaui
 默认情况下 `aeiva-gateway` 不会在启动时立即拉起 MetaUI 窗口；当助手实际调用 `metaui` 且 `ensure_visible=true` 时才按需启动。
 
 MetaUI 主路径是“纯渲染层”：
-- UI 结构定义由 AI 端显式给出（`components`、`root`、`actions`、`state_bindings`）。
+- UI 结构定义由 AI 端显式给出（`components`、`root`、组件级 `Action`、`state_bindings`）。
 - MetaUI 负责校验、渲染与交互/文件事件回传。
-- 建议使用 `metaui.catalog` + `metaui.render_full(spec=...)` + `metaui.patch/set_state` 形成确定性流程。
+- `metaui.protocol_schema` 会返回 `MetaUISpec` JSON Schema 与严格交互合同，供模型端按规范生成 UI 定义。
+- 建议使用 `metaui.catalog` + `metaui.protocol_schema` + `metaui.render_full(spec=...)` + `metaui.patch/set_state` 形成确定性流程。
+- 可在 spec 中设置 `interaction_mode`：
+  - `interactive`（默认）：关键交互组件（`button`、`form`、`form_step`）必须声明显式交互合同。
+  - `preview`：允许仅做界面草图预览（可无行为实现）。
 
-### 6）通道说明
+MetaUI 事件回流（A2UI 风格交互闭环）：
+- 在 `aeiva-gateway` + Gradio 模式下，可将 UI 交互事件回传给 AI 作为结构化输入。
+- AI 可据此处理按钮/表单/上传事件，并继续调用 `metaui` 实时更新界面。
+- 可通过 `metaui_config.event_bridge_enabled` 及 `event_bridge_*` 参数控制。
+
+### 6）对话重放测试（真实多轮对话）
+
+你可以把“真实对话场景”写成可重放脚本，直接对 AEIVA 运行时做自动验收，并输出机器可读报告。
+
+```bash
+aeiva-dialogue-replay \
+  --config configs/agent_config.yaml \
+  --scenarios docs/examples/dialogue_replay/metaui_dialogue_suite.yaml \
+  --output-json .reports/dialogue-replay.json \
+  --output-md .reports/dialogue-replay.md
+```
+
+常用参数：
+- `--scenario-id <id>`（可重复）：只跑指定场景
+- `--fail-fast`：场景内首个失败即停止
+- `--route-token <token>`：指定回放路由（默认 `gradio`）
+
+场景文件格式：
+- `scenarios[]`：场景列表
+- 每个场景包含 `id`、`description`、`turns[]`
+- 每个 turn 支持 `user`、`timeout_seconds`、`expectation`
+- `expectation` 支持内容、延迟与 MetaUI 不变量断言：
+  - `contains_all`、`contains_any`、`excludes`
+  - `min_response_chars`、`max_latency_seconds`
+  - `metaui_min_sessions`、`metaui_require_non_empty_components`
+
+MetaUI 一键质量评估（pytest + 可选真实回放）：
+
+```bash
+aeiva-metaui-eval \
+  --config configs/agent_config.yaml \
+  --replay-scenarios docs/examples/dialogue_replay/metaui_dialogue_suite.yaml \
+  --replay-mode auto \
+  --output-json .reports/metaui-evaluation.json \
+  --output-md .reports/metaui-evaluation.md
+```
+
+### 7）通道说明
 
 Slack：
 - 安装依赖：`pip install -e '.[slack]'`

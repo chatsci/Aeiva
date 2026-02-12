@@ -3,268 +3,136 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-COMPONENT_CATALOG_VERSION = "1.0"
+from .interaction_contract import get_interaction_contract_snapshot
 
-# A2UI-style standard catalog:
-# - declarative
-# - renderer-controlled
-# - safe, finite component set
+COMPONENT_CATALOG_VERSION = "0.10"
+
+# Strict A2UI-native component catalog (no legacy aliases).
 STANDARD_COMPONENT_CATALOG: Dict[str, Dict[str, Any]] = {
-    "container": {
-        "category": "layout",
-        "description": "Layout container with vertical/horizontal children.",
-        "props": {"direction": "column|row", "children": "string[]", "gap": "number", "title": "string"},
+    "Text": {
+        "category": "display",
+        "description": "Text label or paragraph.",
+        "props": {"text": "DynamicString", "variant": "h1|h2|h3|h4|h5|caption|body"},
     },
-    "tabs": {
-        "category": "layout",
-        "description": "Tabbed container that switches visible child groups.",
+    "Image": {
+        "category": "display",
+        "description": "Image content.",
         "props": {
-            "tabs": "Array<{id,label,children[]}>",
-            "active_tab": "string",
-            "title": "string",
-            "events": "object",
-            "on_change": "object",
+            "url": "DynamicString",
+            "fit": "contain|cover|fill|none|scale-down",
+            "variant": "icon|avatar|smallFeature|mediumFeature|largeFeature|header",
         },
     },
-    "accordion": {
-        "category": "layout",
-        "description": "Collapsible sections with child component groups.",
-        "props": {
-            "sections": "Array<{id,title,children[]}>",
-            "open_section": "string",
-            "title": "string",
-            "events": "object",
-            "on_change": "object",
-        },
-    },
-    "divider": {
-        "category": "layout",
-        "description": "Visual separator line.",
-        "props": {"label": "string"},
-    },
-    "text": {
+    "Icon": {
         "category": "display",
-        "description": "Plain text block.",
-        "props": {"text": "string", "title": "string"},
+        "description": "Icon glyph.",
+        "props": {"name": "DynamicString"},
     },
-    "markdown": {
-        "category": "display",
-        "description": "Markdown-like text block (rendered safely as escaped text).",
-        "props": {"text": "string", "title": "string"},
-    },
-    "badge": {
-        "category": "display",
-        "description": "Small status pill.",
-        "props": {"text": "string", "tone": "info|success|warn|error"},
-    },
-    "metric_card": {
-        "category": "display",
-        "description": "KPI card with value and optional delta.",
-        "props": {"label": "string", "value": "string|number", "delta": "string|number", "tone": "string"},
-    },
-    "list_view": {
-        "category": "display",
-        "description": "Simple item list.",
-        "props": {"items": "array", "title": "string"},
-    },
-    "code_block": {
-        "category": "display",
-        "description": "Monospace code/text block.",
-        "props": {"code": "string", "language": "string", "title": "string"},
-    },
-    "image": {
+    "Video": {
         "category": "media",
-        "description": "Image display component.",
-        "props": {"src": "string", "alt": "string", "width": "number", "height": "number", "fit": "string"},
+        "description": "Video player.",
+        "props": {"url": "DynamicString"},
     },
-    "iframe": {
+    "AudioPlayer": {
         "category": "media",
-        "description": "Embedded frame for trusted sources.",
-        "props": {"src": "string", "height": "number", "sandbox": "string"},
+        "description": "Audio player.",
+        "props": {"url": "DynamicString", "description": "DynamicString"},
     },
-    "chat_panel": {
-        "category": "interaction",
-        "description": "Chat transcript and message input.",
-        "props": {
-            "messages": "array",
-            "placeholder": "string",
-            "send_label": "string",
-            "events": "object",
-            "on_submit": "object",
-            "emit_event": "boolean",
-        },
+    "Row": {
+        "category": "layout",
+        "description": "Horizontal layout container.",
+        "props": {"children": "ChildList", "justify": "enum", "align": "enum", "weight": "number"},
     },
-    "file_uploader": {
+    "Column": {
+        "category": "layout",
+        "description": "Vertical layout container.",
+        "props": {"children": "ChildList", "justify": "enum", "align": "enum", "weight": "number"},
+    },
+    "List": {
+        "category": "layout",
+        "description": "List layout with static children or template binding.",
+        "props": {"children": "ChildList", "direction": "vertical|horizontal", "align": "enum"},
+    },
+    "Card": {
+        "category": "layout",
+        "description": "Card shell with one child.",
+        "props": {"child": "ComponentId", "weight": "number"},
+    },
+    "Tabs": {
+        "category": "layout",
+        "description": "Tabs container.",
+        "props": {"tabs": "Array<{title,child}>", "weight": "number"},
+    },
+    "Modal": {
+        "category": "layout",
+        "description": "Modal with trigger and content component ids.",
+        "props": {"trigger": "ComponentId", "content": "ComponentId"},
+    },
+    "Divider": {
+        "category": "layout",
+        "description": "Section divider line.",
+        "props": {"axis": "horizontal|vertical"},
+    },
+    "Button": {
         "category": "input",
-        "description": "File upload control.",
+        "description": "Action button.",
         "props": {
-            "accept": "string",
-            "multiple": "boolean",
-            "max_bytes": "number",
-            "label": "string",
-            "events": "object",
-            "on_upload": "object",
-            "emit_event": "boolean",
+            "child": "ComponentId",
+            "variant": "primary|borderless",
+            "action": "Action",
+            "checks": "CheckRule[]",
         },
     },
-    "data_table": {
-        "category": "data",
-        "description": "Tabular data preview.",
-        "props": {"columns": "string[]", "rows": "array", "title": "string"},
-    },
-    "chart": {
-        "category": "data",
-        "description": "Bar/line chart.",
-        "props": {"chart_type": "bar|line", "labels": "string[]", "values": "number[]", "title": "string"},
-    },
-    "form": {
+    "TextField": {
         "category": "input",
-        "description": "Declarative form builder.",
+        "description": "Editable text/number field.",
         "props": {
-            "fields": "array",
-            "submit_label": "string",
-            "title": "string",
-            "events": "object",
-            "on_submit": "object",
-            "emit_event": "boolean",
+            "label": "DynamicString",
+            "value": "DynamicString",
+            "variant": "longText|number|shortText|obscured",
+            "checks": "CheckRule[]",
         },
     },
-    "form_step": {
+    "CheckBox": {
         "category": "input",
-        "description": "Multi-step wizard form.",
-        "props": {
-            "steps": "array",
-            "title": "string",
-            "events": "object",
-            "on_submit": "object",
-            "on_change": "object",
-            "emit_event": "boolean",
-        },
+        "description": "Boolean checkbox.",
+        "props": {"label": "DynamicString", "value": "DynamicBoolean", "checks": "CheckRule[]"},
     },
-    "button": {
+    "ChoicePicker": {
         "category": "input",
-        "description": "Standalone action button.",
+        "description": "Single/multi select picker.",
         "props": {
-            "label": "string",
-            "event_type": "string",
-            "payload": "object",
-            "variant": "primary|secondary",
-            "effects": "object|object[]",
-            "emit_event": "bool",
+            "label": "DynamicString",
+            "variant": "multipleSelection|mutuallyExclusive",
+            "options": "Array<{label,value}>",
+            "value": "DynamicStringList",
+            "checks": "CheckRule[]",
         },
     },
-    "input": {
+    "Slider": {
         "category": "input",
-        "description": "Single-line input field.",
+        "description": "Numeric slider.",
         "props": {
-            "name": "string",
-            "label": "string",
-            "value": "string|number",
-            "input_type": "string",
-            "events": "object",
-            "on_change": "object",
-            "on_submit": "object",
-            "emit_event": "boolean",
+            "label": "DynamicString",
+            "value": "DynamicNumber",
+            "min": "DynamicNumber",
+            "max": "DynamicNumber",
+            "checks": "CheckRule[]",
         },
     },
-    "textarea": {
+    "DateTimeInput": {
         "category": "input",
-        "description": "Multi-line input field.",
+        "description": "Date/time selector.",
         "props": {
-            "name": "string",
-            "label": "string",
-            "value": "string",
-            "rows": "number",
-            "events": "object",
-            "on_change": "object",
-            "emit_event": "boolean",
+            "value": "DynamicString",
+            "label": "DynamicString",
+            "enableDate": "boolean",
+            "enableTime": "boolean",
+            "min": "DynamicString",
+            "max": "DynamicString",
+            "checks": "CheckRule[]",
         },
     },
-    "select": {
-        "category": "input",
-        "description": "Select dropdown.",
-        "props": {
-            "name": "string",
-            "label": "string",
-            "options": "array",
-            "value": "string",
-            "events": "object",
-            "on_change": "object",
-            "emit_event": "boolean",
-        },
-    },
-    "checkbox": {
-        "category": "input",
-        "description": "Boolean toggle.",
-        "props": {
-            "name": "string",
-            "label": "string",
-            "checked": "boolean",
-            "events": "object",
-            "on_change": "object",
-            "emit_event": "boolean",
-        },
-    },
-    "radio_group": {
-        "category": "input",
-        "description": "Single-choice option group.",
-        "props": {
-            "name": "string",
-            "label": "string",
-            "options": "array",
-            "value": "string",
-            "events": "object",
-            "on_change": "object",
-            "emit_event": "boolean",
-        },
-    },
-    "slider": {
-        "category": "input",
-        "description": "Numeric range slider.",
-        "props": {
-            "name": "string",
-            "label": "string",
-            "value": "number",
-            "min": "number",
-            "max": "number",
-            "events": "object",
-            "on_change": "object",
-            "emit_event": "boolean",
-        },
-    },
-    "progress_panel": {
-        "category": "feedback",
-        "description": "Progress items display.",
-        "props": {"items": "Array<{label,value}>", "title": "string"},
-    },
-    "result_export": {
-        "category": "feedback",
-        "description": "Export controls for result payloads.",
-        "props": {
-            "filename": "string",
-            "data": "object",
-            "title": "string",
-            "events": "object",
-            "on_export": "object",
-            "emit_event": "boolean",
-        },
-    },
-}
-
-STANDARD_COMPONENT_ALIASES: Dict[str, str] = {
-    "Row": "container",
-    "Column": "container",
-    "Card": "container",
-    "Modal": "container",
-    "TextField": "input",
-    "ChoicePicker": "select",
-    "DateTimeInput": "input",
-    "Icon": "badge",
-    "Video": "iframe",
-    "AudioPlayer": "iframe",
-    "CheckBox": "checkbox",
-    "RadioGroup": "radio_group",
-    "List": "list_view",
 }
 
 
@@ -276,5 +144,5 @@ def get_component_catalog() -> Dict[str, Any]:
     return {
         "version": COMPONENT_CATALOG_VERSION,
         "components": deepcopy(STANDARD_COMPONENT_CATALOG),
-        "aliases": deepcopy(STANDARD_COMPONENT_ALIASES),
+        "interaction_contract": get_interaction_contract_snapshot(),
     }

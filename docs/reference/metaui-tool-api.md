@@ -16,7 +16,6 @@ Common fields:
 - `session_id`: logical conversation/session id.
 - `host` / `port` / `token`: optional runtime endpoint overrides.
 - `ensure_visible`: auto-launch desktop client when no client connected.
-- `auto_route_structural_patch`: when `true` (default), structural patch requests are auto-routed to `render_full` via strategy layer.
 - gateway config: `metaui_config.auto_start_desktop` controls eager startup at gateway boot (default off).
 
 ## Core Operations
@@ -26,9 +25,8 @@ Runtime:
 - `start`: ensure orchestrator is started and return endpoint.
 - `status`: runtime status and connected client/session counts.
 - `catalog`: return the renderer-supported component catalog (A2UI-style authoring baseline).
-- `protocol_schema`: return negotiated A2UI protocol schemas (`client_hello`, `hello_ack`, server envelopes) and catalog metadata.
+- `protocol_schema`: return negotiated A2UI protocol schemas (`client_hello`, `hello_ack`, server envelopes), `MetaUISpec` JSON schema, and strict interaction-contract snapshot.
 - `validate_messages`: validate a candidate lifecycle message sequence (`spec.messages`) before sending.
-- `compose`: compose a normalized `MetaUISpec` from `intent` (no rendering side effect).
 - `validate_spec`: normalize + validate an input `spec` (no rendering side effect).
 - `launch_desktop`: launch desktop app and wait for connection.
 - `set_auto_ui`: toggle automatic UI behavior (`auto_ui: true/false`).
@@ -36,25 +34,20 @@ Runtime:
 Rendering:
 
 - `render_full`: render a full `MetaUISpec` (`spec` required).
-- `scaffold`: build and render an intent-driven workspace from `intent` (chat/kanban/timeline/calendar/analytics/workflow/intake/media/generic).
 - `patch`: apply patch payload (`ui_id`, `patch` required).
-  - Structural guard: if `patch` text implies a layout/view switch (for example "换成聊天窗口"),
-    request is auto-routed to `render_full` by default.
-  - Set `auto_route_structural_patch=false` for strict mode; then structural requests are rejected with
-    `error_code=structural_patch_requires_render_full`.
-  - Use `render_full` for all structural changes whenever possible.
+  - `patch` is for incremental updates only.
+  - Use `render_full` for structural/layout changes.
 - `set_state`: merge runtime UI state (`ui_id`, `state` required).
 - `notify`: show desktop notification (`message` required).
 - `close`: close a UI session (`ui_id` required).
 
-Recommended robust flow for complex intents:
+Recommended robust flow for strict schema authoring:
 
-1. `catalog` + `protocol_schema` to inspect available components and protocol contracts.
-2. model builds explicit `spec` JSON (primary path).
+1. `catalog` + `protocol_schema` to inspect available components, `MetaUISpec` schema, and protocol contracts.
+2. AI model builds explicit canonical `spec` JSON (primary path).
 3. `render_full` to display.
 4. `set_state` / `patch` for non-structural incremental updates only.
 5. optional `validate_messages` before advanced lifecycle orchestration.
-6. `compose`/`scaffold` are compatibility fallback for intent-to-template generation.
 
 Session/state:
 
@@ -99,7 +92,14 @@ Events:
 - `progress_panel`
 - `result_export`
 
-For non-trivial custom UIs, prefer `render_full` with explicit `spec` and use `scaffold` as fallback.
+For non-trivial custom UIs, use `render_full` with explicit `spec` and keep structure decisions on the AI side.
+
+Strict contract (no runtime heuristics):
+
+- No intent/scaffold fallback path.
+- No component type aliases.
+- Invalid/incomplete specs are rejected (no fallback UI injection).
+- Interactive controls and actions should declare explicit behavior (`on_<event>` / `events` with `action` / `steps` / `effects` or explicit event emission semantics).
 
 ## Theme Tokens
 

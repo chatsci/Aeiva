@@ -8,7 +8,7 @@ import asyncio
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from ..decorator import tool
 from ..capability import Capability

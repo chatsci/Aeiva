@@ -173,7 +173,8 @@ class BrowserServiceInputActionsMixin:
                 invoke_ref=resolved_ref,
                 slowly_override=default_slow,
             )
-        except Exception as primary_exc:
+        except Exception as exc:
+            primary_exc: Optional[Exception] = exc
             if used_target_lock and not resolved_selector:
                 self._clear_field_target_lock(profile)
                 used_target_lock = False
@@ -390,7 +391,8 @@ class BrowserServiceInputActionsMixin:
                 invoke_target=active_target,
                 invoke_ref=resolved_ref,
             )
-        except Exception as primary_exc:
+        except Exception as exc:
+            primary_exc: Optional[Exception] = exc
             if used_target_lock and not resolved_selector:
                 self._clear_field_target_lock(profile)
                 used_target_lock = False

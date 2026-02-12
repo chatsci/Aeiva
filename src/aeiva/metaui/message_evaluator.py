@@ -18,6 +18,12 @@ def _extract_child_refs_from_mapping(component: Mapping[str, Any]) -> list[str]:
     child = component.get("child")
     if isinstance(child, str) and child.strip():
         refs.append(child.strip())
+    trigger = component.get("trigger")
+    if isinstance(trigger, str) and trigger.strip():
+        refs.append(trigger.strip())
+    content = component.get("content")
+    if isinstance(content, str) and content.strip():
+        refs.append(content.strip())
 
     children = component.get("children")
     if isinstance(children, list):
@@ -157,22 +163,26 @@ def _evaluate_lifecycle_message(
     surfaces: Dict[str, _SurfaceState],
     issues: List[str],
 ) -> None:
-    if envelope.surfaceUpdate is not None:
-        sid = envelope.surfaceUpdate.surfaceId
+    if envelope.createSurface is not None:
+        sid = envelope.createSurface.surfaceId
+        state = surfaces.setdefault(sid, _SurfaceState())
+        state.created = True
+        return
+
+    if envelope.updateComponents is not None:
+        sid = envelope.updateComponents.surfaceId
         state = surfaces.setdefault(sid, _SurfaceState())
         state.created = True
         state.has_component_update = True
         batch_ids: set[str] = set()
-        for component in envelope.surfaceUpdate.components:
+        for component in envelope.updateComponents.components:
             batch_ids.add(component.id)
             if component.id == "root":
                 state.has_root = True
         all_known_ids = set(state.component_ids) | batch_ids
-        for component in envelope.surfaceUpdate.components:
-            wrapper = component.component
-            payload = next(iter(wrapper.values()), None)
-            props = payload.props if payload is not None else {}
-            for ref in _extract_child_refs_from_mapping(props):
+        for component in envelope.updateComponents.components:
+            component_map = component.as_mapping()
+            for ref in _extract_child_refs_from_mapping(component_map):
                 if ref not in all_known_ids:
                     issues.append(
                         f"message[{index}] missing child reference '{ref}' in surface '{sid}'."
@@ -180,31 +190,16 @@ def _evaluate_lifecycle_message(
         state.component_ids |= batch_ids
         return
 
-    if envelope.beginRendering is not None:
-        sid = envelope.beginRendering.surfaceId
+    if envelope.updateDataModel is not None:
+        sid = envelope.updateDataModel.surfaceId
         state = surfaces.setdefault(sid, _SurfaceState())
         if not state.has_component_update:
             issues.append(
-                f"message[{index}] beginRendering for '{sid}' before any surfaceUpdate."
+                f"message[{index}] updateDataModel for '{sid}' before updateComponents."
             )
-            return
-        root = envelope.beginRendering.root
-        if root not in state.component_ids:
+        if not _is_json_pointer(envelope.updateDataModel.path):
             issues.append(
-                f"message[{index}] beginRendering root '{root}' not found in surface components for '{sid}'."
-            )
-        return
-
-    if envelope.dataModelUpdate is not None:
-        sid = envelope.dataModelUpdate.surfaceId
-        state = surfaces.setdefault(sid, _SurfaceState())
-        if not state.has_component_update:
-            issues.append(
-                f"message[{index}] dataModelUpdate for '{sid}' before surfaceUpdate."
-            )
-        if not _is_json_pointer(envelope.dataModelUpdate.path):
-            issues.append(
-                f"message[{index}] dataModelUpdate.path must be a JSON Pointer (got '{envelope.dataModelUpdate.path}')."
+                f"message[{index}] updateDataModel.path must be a JSON Pointer (got '{envelope.updateDataModel.path}')."
             )
         return
 

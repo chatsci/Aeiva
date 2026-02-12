@@ -53,6 +53,33 @@ def _suppress_gradio_routes_print() -> None:
         pass
 
 
+def _try_start_metaui_event_bridge(
+    *,
+    logger: Any,
+    config_dict: Dict[str, Any],
+    queue_gateway: Any,
+    agent_loop_getter: Any,
+    route_token: Optional[str],
+) -> Optional[Any]:
+    try:
+        from aeiva.metaui.event_bridge import start_metaui_event_bridge
+        bridge = start_metaui_event_bridge(
+            config_dict=config_dict,
+            queue_gateway=queue_gateway,
+            agent_loop_getter=agent_loop_getter,
+            route_token=route_token,
+        )
+        if bridge is not None:
+            logger.info(
+                "MetaUI event bridge started (route=%s).",
+                route_token or "default",
+            )
+        return bridge
+    except Exception as exc:
+        logger.warning("Failed to start MetaUI event bridge: %s", exc)
+        return None
+
+
 def _realtime_dependencies_available() -> bool:
     """
     Turn-based realtime gateway requires FastRTC at runtime.
@@ -476,6 +503,7 @@ def run(config, verbose):
     gateway_tasks: List[asyncio.Task] = []
     uvicorn_handles: List[UvicornHandle] = []
     unity_processes: List[Any] = []
+    metaui_event_bridges: List[Any] = []
     stop_event = asyncio.Event()
 
     def _handle_sig(signum, frame):
@@ -551,6 +579,20 @@ def run(config, verbose):
                 gateways.append(terminal_gateway)
                 gateway_tasks.append(asyncio.create_task(terminal_gateway.run()))
                 logger.info("Terminal gateway started (scope=%s).", cfg.get("gateway_scope"))
+                if not gradio_cfg.get("enabled") and not realtime_cfg.get("enabled"):
+                    bridge = _try_start_metaui_event_bridge(
+                        logger=logger,
+                        config_dict=config_dict,
+                        queue_gateway=terminal_gateway,
+                        agent_loop_getter=lambda _agent=ctx.agent: getattr(
+                            getattr(_agent, "event_bus", None),
+                            "loop",
+                            None,
+                        ),
+                        route_token="terminal",
+                    )
+                    if bridge is not None:
+                        metaui_event_bridges.append(bridge)
             elif name == "whatsapp":
                 try:
                     from aeiva.interface.whatsapp_gateway import WhatsAppGateway
@@ -592,6 +634,20 @@ def run(config, verbose):
                     log=logger,
                     route_token=route_token,
                 )
+                if not gradio_cfg.get("enabled"):
+                    bridge = _try_start_metaui_event_bridge(
+                        logger=logger,
+                        config_dict=config_dict,
+                        queue_gateway=queue_gateway,
+                        agent_loop_getter=lambda _agent=ctx.agent: getattr(
+                            getattr(_agent, "event_bus", None),
+                            "loop",
+                            None,
+                        ),
+                        route_token=route_token,
+                    )
+                    if bridge is not None:
+                        metaui_event_bridges.append(bridge)
                 _suppress_gradio_routes_print()
                 demo.launch(share=True, prevent_thread_lock=True)
                 logger.info("Realtime Gradio UI launched (scope=%s).", cfg.get("gateway_scope"))
@@ -676,6 +732,11 @@ def run(config, verbose):
             ctx.request_stop()
         for gateway in gateways:
             gateway.request_stop()
+        for bridge in metaui_event_bridges:
+            try:
+                bridge.stop(timeout=1.5)
+            except Exception:
+                pass
         for handle in uvicorn_handles:
             handle.request_stop()
         if unity_processes:

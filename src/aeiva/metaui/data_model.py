@@ -106,6 +106,13 @@ def _merge_dict(base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any
     return out
 
 
+def merge_nested_dicts(
+    base: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+) -> Dict[str, Any]:
+    return _merge_dict(dict(base or {}), dict(incoming or {}))
+
+
 def apply_data_model_update(
     model: Mapping[str, Any],
     *,
@@ -116,7 +123,7 @@ def apply_data_model_update(
     payload = decode_contents_to_object(contents)
     segments = _pointer_segments(path)
     if not segments:
-        return _merge_dict(next_model, payload)
+        return merge_nested_dicts(next_model, payload)
 
     cursor: Dict[str, Any] = next_model
     for segment in segments[:-1]:
@@ -129,7 +136,7 @@ def apply_data_model_update(
     leaf = segments[-1]
     existing = cursor.get(leaf)
     if isinstance(existing, dict):
-        cursor[leaf] = _merge_dict(existing, payload)
+        cursor[leaf] = merge_nested_dicts(existing, payload)
     else:
         cursor[leaf] = payload
     return next_model

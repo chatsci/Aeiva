@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-02-12T06:50:45.504575+00:00",
+  "replay_mode": "auto",
+  "python_executable": "/opt/anaconda3/envs/aeiva/bin/python",
+  "success": false,
+  "passed_steps": 0,
+  "failed_steps": 1,
+  "skipped_steps": 1,
+  "steps": [
+    {
+      "name": "metaui_pytest",
+      "status": "failed",
+      "duration_seconds": 0.3,
+      "return_code": 1,
+      "command": [
+        "python",
+        "-m",
+        "pytest"
+      ],
+      "stdout_tail": "",
+      "stderr_tail": "boom",
+      "reason": null
+    },
+    {
+      "name": "metaui_live_replay",
+      "status": "skipped",
+      "duration_seconds": 0.0,
+      "return_code": 0,
+      "command": [],
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "reason": "replay skipped in auto mode: no live LLM credentials detected"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-02-10T04:41:41.153379+00:00",
+  "total_scenarios": 1,
+  "passed_scenarios": 0,
+  "failed_scenarios": 1,
+  "success_rate": 0.0,
+  "total_turns": 1,
+  "timed_out_turns": 1,
+  "avg_latency_seconds": 120.00553804193623,
+  "errors": [
+    "[metaui_dialogue_ui_create_long] metaui_dialogue_ui_create_long/turn[0] response too short: 0 < 20",
+    "[metaui_dialogue_ui_create_long] metaui_dialogue_ui_create_long/turn[0] latency 120.01s > 110.00s",
+    "[metaui_dialogue_ui_create_long] metaui_dialogue_ui_create_long/turn[0] MetaUI session_count 0 < required 1",
+    "[metaui_dialogue_ui_create_long] metaui_dialogue_ui_create_long/turn[0] all MetaUI sessions have empty components."
+  ],
+  "scenario_results": [
+    {
+      "scenario_id": "metaui_dialogue_ui_create_long",
+      "passed": false,
+      "errors": [
+        "metaui_dialogue_ui_create_long/turn[0] response too short: 0 < 20",
+        "metaui_dialogue_ui_create_long/turn[0] latency 120.01s > 110.00s",
+        "metaui_dialogue_ui_create_long/turn[0] MetaUI session_count 0 < required 1",
+        "metaui_dialogue_ui_create_long/turn[0] all MetaUI sessions have empty components."
+      ],
+      "turns": [
+        {
+          "user": "Please create a dialogue interaction UI that is functionable (not just look).",
+          "response": "",
+          "latency_seconds": 120.00553804193623,
+          "hints": [
+            "Thinking. (1s)",
+            "Acting.. (5s)",
+            "Acting... (9s)",
+            "Waiting for tools. (13s)",
+            "Waiting for tools.. (17s)",
+            "Waiting for tools... (21s)",
+            "Retrying if needed. (25s)",
+            "Retrying if needed.. (29s)",
+            "Retrying if needed... (33s)",
+            "Retrying if needed. (37s)",
+            "Still working.. (41s)",
+            "Still working... (45s)",
+            "Still working. (49s)",
+            "Still working.. (53s)",
+            "Still working... (57s)",
+            "Still working. (61s)",
+            "Still working.. (65s)",
+            "Still working... (69s)",
+            "Still working. (73s)",
+            "Still working.. (77s)",
+            "Still working... (81s)",
+            "Still working. (85s)",
+            "Still working.. (89s)",
+            "Still working... (93s)",
+            "Still working. (97s)",
+            "Still working.. (101s)",
+            "Still working... (105s)",
+            "Still working. (109s)",
+            "Still working.. (113s)",
+            "Still working... (117s)"
+          ],
+          "timed_out": true,
+          "metaui": {
+            "available": true,
+            "connected_clients": 0,
+            "session_count": 0,
+            "component_counts": {}
+          }
+        }
+      ]
+    }
+  ]
+}

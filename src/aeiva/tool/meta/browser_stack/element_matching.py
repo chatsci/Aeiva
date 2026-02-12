@@ -465,7 +465,6 @@ def _find_editable_recovery_refs(nodes: list[Any], *, max_results: int = 8) -> l
             continue
         if not _node_is_editable(node):
             continue
-        haystack = _build_node_haystack(node)
         score = 0
         role = str(node.get("role") or "").strip().casefold()
         input_type = str(node.get("input_type") or "").strip().casefold()

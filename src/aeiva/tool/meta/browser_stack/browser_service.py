@@ -7,7 +7,6 @@ This file keeps tool-level orchestration separate from the runtime implementatio
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections import deque
 import logging
 import time
 from typing import Any, Deque, Dict, Optional
@@ -36,7 +35,6 @@ from .service_resolution import BrowserServiceResolutionMixin
 from .logging_utils import _log_browser_event
 from .service_utils import (
     _as_bool,
-    _as_float,
     _as_int,
     _as_str,
     _build_fill_fields_field_key,
@@ -52,6 +50,16 @@ from .service_utils import (
 from .browser_runtime import BrowserSessionManager, DEFAULT_TIMEOUT_MS
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "BrowserService",
+    "get_browser_service",
+    "set_browser_service",
+    "_find_click_target_from_nodes",
+    "_find_confirm_target_from_nodes",
+    "_find_select_target_from_nodes",
+    "_find_type_target_from_nodes",
+]
 
 @dataclass(frozen=True)
 class _ExecuteContext:

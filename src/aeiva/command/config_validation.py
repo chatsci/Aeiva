@@ -156,7 +156,12 @@ def normalize_metaui_config(config_dict: Dict[str, Any]) -> None:
     if enabled is not None:
         metaui_cfg["enabled"] = bool(enabled)
 
-    for key in ("auto_ui", "auto_start_desktop", "strict_component_types"):
+    for key in (
+        "auto_ui",
+        "auto_start_desktop",
+        "strict_component_types",
+        "event_bridge_enabled",
+    ):
         if key in metaui_cfg and metaui_cfg[key] is not None:
             metaui_cfg[key] = bool(metaui_cfg[key])
 
@@ -176,7 +181,15 @@ def normalize_metaui_config(config_dict: Dict[str, Any]) -> None:
         if key in metaui_cfg:
             metaui_cfg[key] = _as_positive_int(metaui_cfg[key], path=f"metaui_config.{key}")
 
-    for key in ("hello_timeout_seconds", "start_timeout_seconds", "send_timeout_seconds", "wait_ack_seconds"):
+    for key in (
+        "hello_timeout_seconds",
+        "start_timeout_seconds",
+        "send_timeout_seconds",
+        "wait_ack_seconds",
+        "event_bridge_poll_timeout_seconds",
+        "event_bridge_emit_timeout_seconds",
+        "event_bridge_change_throttle_seconds",
+    ):
         if key in metaui_cfg:
             try:
                 value = float(metaui_cfg[key])
@@ -185,6 +198,19 @@ def normalize_metaui_config(config_dict: Dict[str, Any]) -> None:
             if value < 0:
                 raise ConfigValidationError(f"metaui_config.{key} must be >= 0")
             metaui_cfg[key] = value
+
+    if "event_bridge_event_types" in metaui_cfg:
+        raw_types = metaui_cfg.get("event_bridge_event_types")
+        if not isinstance(raw_types, list):
+            raise ConfigValidationError("metaui_config.event_bridge_event_types must be a list of strings")
+        parsed: list[str] = []
+        for item in raw_types:
+            if not isinstance(item, str) or not item.strip():
+                raise ConfigValidationError(
+                    "metaui_config.event_bridge_event_types must contain non-empty strings"
+                )
+            parsed.append(item.strip().lower())
+        metaui_cfg["event_bridge_event_types"] = parsed
 
     for key in ("token", "token_env_var", "upload_base_dir", "desktop_log_file"):
         if key in metaui_cfg and metaui_cfg[key] is not None:
