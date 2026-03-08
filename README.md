@@ -2,7 +2,7 @@
 <img src="https://i.ibb.co/P4zQHDk/aeiva-1024.png" alt="AEIVA" style="width: 50%; min-width: 300px; display: block; margin: auto; background-color: transparent;">
 </p>
 
-# AEIVA: An Evolving Intelligent Virtual Assistant
+# Aeiva: A Human-Centered Agent
 
 <p align="center">
 <a href="README_CN.md"><img src="https://img.shields.io/badge/文档-中文版-blue.svg" alt="CN doc"></a>
@@ -14,12 +14,16 @@
 
 ## Objective
 
-AEIVA is a practical AI assistant repository for building and running a multi-channel virtual assistant.
+Aeiva is built as a human-centered, lifelong AI partner that augments human potential.
 
-It is intended for:
-- conversational assistant use cases (terminal/web/realtime/social channels)
-- tool-using assistant workflows
-- single-agent and multi-agent runtime experiments
+Its purpose is to help people grow continuously, amplify human capability and creativity, and turn intent into meaningful action.
+
+Aeiva can play different roles across different moments of life:
+- a mentor, friend, work partner, or delegated agent
+- a "second self": another identity of you for exploration and expression
+- a gateway between you and the world, connecting your goals to tools, knowledge, and execution
+
+Our vision is simple: help people experience deep, high-agency growth in the RPG of life.
 
 ## Usage
 
@@ -41,7 +45,6 @@ Or install specific extras only:
 uv sync --extra realtime   # Realtime audio/text UI
 uv sync --extra slack      # Slack gateway
 uv sync --extra media      # Media utilities
-uv sync --extra metaui     # Desktop MetaUI runtime
 ```
 
 ### 2) Configure
@@ -97,32 +100,7 @@ AEIVA includes a local browser automation tool for real web tasks:
 
 Enable it in `action_config.tools` with `browser`.
 
-### 5) MetaUI (Desktop UI)
-
-MetaUI lets the assistant open/update a local desktop UI for forms, uploads, tables, charts, and progress panels.
-
-```bash
-aeiva-metaui-desktop --ws-url ws://127.0.0.1:8765/metaui
-```
-
-`metaui` is also available as a tool in `action_config.tools`.
-By default `aeiva-gateway` does not auto-start the desktop window. It is launched lazily when the assistant uses `metaui` with `ensure_visible=true`.
-
-MetaUI is renderer-only on the main path:
-- AI generates explicit UI spec (`components`, `root`, component-level `Action`, `state_bindings`).
-- MetaUI validates, renders, and returns interaction/file events.
-- `metaui.protocol_schema` exposes `MetaUISpec` JSON schema and strict interaction contract for model-side authoring.
-- For deterministic behavior, use `metaui.catalog` + `metaui.protocol_schema` + `metaui.render_full(spec=...)` + `metaui.patch/set_state`.
-- Use `interaction_mode` in spec:
-  - `interactive` (default): key controls (`button`, `form`, `form_step`) must declare explicit interaction contract.
-  - `preview`: layout-only preview is allowed (non-functional mock UI).
-
-MetaUI event bridge (A2UI-style interaction loop):
-- In `aeiva-gateway` + Gradio mode, UI events can be forwarded back to AI as structured stimuli.
-- This lets AI react to button/form/upload actions and update UI continuously via `metaui` calls.
-- Control with `metaui_config.event_bridge_enabled` and related `event_bridge_*` options.
-
-### 6) Dialogue Replay Testing (Real Conversations)
+### 5) Dialogue Replay Testing (Real Conversations)
 
 You can replay real multi-turn dialogue scenarios against a live AEIVA runtime
 and get machine-readable pass/fail reports.
@@ -130,7 +108,7 @@ and get machine-readable pass/fail reports.
 ```bash
 aeiva-dialogue-replay \
   --config configs/agent_config.yaml \
-  --scenarios docs/examples/dialogue_replay/metaui_dialogue_suite.yaml \
+  --scenarios docs/examples/dialogue_replay/dialogue_suite.yaml \
   --output-json .reports/dialogue-replay.json \
   --output-md .reports/dialogue-replay.md
 ```
@@ -144,23 +122,11 @@ Scenario file format:
 - `scenarios[]`: list of test scenarios
 - each scenario has `id`, `description`, `turns[]`
 - each turn supports `user`, `timeout_seconds`, `expectation`
-- `expectation` supports content, latency, and MetaUI invariants:
+  - `expectation` supports content and latency:
   - `contains_all`, `contains_any`, `excludes`
   - `min_response_chars`, `max_latency_seconds`
-  - `metaui_min_sessions`, `metaui_require_non_empty_components`
 
-One-command MetaUI quality gate (pytest + optional live replay):
-
-```bash
-aeiva-metaui-eval \
-  --config configs/agent_config.yaml \
-  --replay-scenarios docs/examples/dialogue_replay/metaui_dialogue_suite.yaml \
-  --replay-mode auto \
-  --output-json .reports/metaui-evaluation.json \
-  --output-md .reports/metaui-evaluation.md
-```
-
-### 7) Channel Notes
+### 6) Channel Notes
 
 Slack usage:
 - install Slack extra: `pip install -e '.[slack]'`
