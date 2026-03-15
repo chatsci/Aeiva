@@ -30,6 +30,14 @@ class LLMGatewayConfig(BaseConfig):
         default=None,
         metadata={"help": "Override provider routing for litellm (e.g., 'openai')."}
     )
+    llm_provider: Optional[str] = field(
+        default="litellm",
+        metadata={"help": "LLM provider adapter name (e.g., 'litellm', 'minicpm_local')."}
+    )
+    llm_provider_config: Optional[Dict[str, Any]] = field(
+        default_factory=dict,
+        metadata={"help": "Provider-specific settings used by llm_provider."}
+    )
     llm_embedding_model: Optional[str] = field(
         default=None,
         metadata={"help": "The embedding model to use for tasks requiring embeddings."}
@@ -103,8 +111,26 @@ class LLMGatewayConfig(BaseConfig):
         super().__post_init__()
 
     def to_dict(self):
-        return {
-            key: ('******' if key == 'llm_api_key' and value else value)
-            for key, value in self.__dict__.items()
-            if not key.startswith('_')
-        }
+        def _mask(value):
+            if isinstance(value, dict):
+                masked = {}
+                for k, v in value.items():
+                    key_lower = str(k).lower()
+                    if any(token in key_lower for token in ("api_key", "token", "secret", "password")) and v:
+                        masked[k] = "******"
+                    else:
+                        masked[k] = _mask(v)
+                return masked
+            if isinstance(value, list):
+                return [_mask(item) for item in value]
+            return value
+
+        serialized = {}
+        for key, value in self.__dict__.items():
+            if key.startswith('_'):
+                continue
+            if key == "llm_api_key" and value:
+                serialized[key] = "******"
+            else:
+                serialized[key] = _mask(value)
+        return serialized

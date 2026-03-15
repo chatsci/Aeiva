@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-02-12T07:43:50.744717+00:00",
+  "total_scenarios": 1,
+  "passed_scenarios": 0,
+  "failed_scenarios": 1,
+  "success_rate": 0.0,
+  "total_turns": 1,
+  "timed_out_turns": 0,
+  "avg_latency_seconds": 0.1805127498228103,
+  "errors": [
+    "[metaui_dialogue_ui_create] metaui_dialogue_ui_create/turn[0] MetaUI session_count 0 < required 1",
+    "[metaui_dialogue_ui_create] metaui_dialogue_ui_create/turn[0] all MetaUI sessions have empty components."
+  ],
+  "scenario_results": [
+    {
+      "scenario_id": "metaui_dialogue_ui_create",
+      "passed": false,
+      "errors": [
+        "metaui_dialogue_ui_create/turn[0] MetaUI session_count 0 < required 1",
+        "metaui_dialogue_ui_create/turn[0] all MetaUI sessions have empty components."
+      ],
+      "turns": [
+        {
+          "user": "Please create a dialogue interaction UI that is functionable (not just look).",
+          "response": "Streaming error: litellm.InternalServerError: InternalServerError: OpenAIException - argument 'by_alias': 'NoneType' object cannot be converted to 'PyBool'",
+          "latency_seconds": 0.1805127498228103,
+          "hints": [],
+          "timed_out": false,
+          "metaui": {
+            "available": true,
+            "connected_clients": 0,
+            "session_count": 0,
+            "component_counts": {}
+          }
+        }
+      ]
+    }
+  ]
+}

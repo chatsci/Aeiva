@@ -1,0 +1,36 @@
+{
+  "total": 4,
+  "ok": 3,
+  "avg_latency_seconds": 71.86,
+  "max_latency_seconds": 121.5,
+  "results": [
+    {
+      "idx": 1,
+      "status": "ok",
+      "latency_seconds": 37.68,
+      "prompt": "Build a functional chat UI with send and clear buttons.",
+      "response_excerpt": "I built a functional chat UI with:\n\n- A message list (shows sent messages)\n- A text input bound to `/draft`\n- **Send** button: appends `{ text: /draft }` to `/messages` and clears `/draft` (only if dr"
+    },
+    {
+      "idx": 2,
+      "status": "timeout",
+      "latency_seconds": 121.5,
+      "prompt": "Build an employee onboarding form UI with submit/reset and required hints.",
+      "response_excerpt": "I'm sorry, I didn't receive a response in time."
+    },
+    {
+      "idx": 3,
+      "status": "ok",
+      "latency_seconds": 79.3,
+      "prompt": "Build a data analysis UI with CSV upload, table preview, and line chart.",
+      "response_excerpt": "I built an interactive CSV data analysis UI with:\n\n- **CSV “upload”/load**: a field to paste a local CSV file path and a **Load CSV** button that emits an event:\n  - `load_csv` with `context.csv_path`"
+    },
+    {
+      "idx": 4,
+      "status": "ok",
+      "latency_seconds": 48.94,
+      "prompt": "Build a survey UI with text input, checkbox, choice picker, slider, and submit.",
+      "response_excerpt": "I built a **survey UI** containing all requested controls:\n\n- **Text input**: “Your name”\n- **Checkbox**: “I agree to the terms”\n- **Choice picker**: Student / Professional / Other\n- **Slider**: Satis"
+    }
+  ]
+}

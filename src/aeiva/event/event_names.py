@@ -97,6 +97,14 @@ class EventNames:
     GOAL_ERROR = "goal.error"
 
     # ═══════════════════════════════════════════════════════════════════
+    # LIFERPG EVENTS
+    # ═══════════════════════════════════════════════════════════════════
+    LIFERPG_QUERY = "liferpg.query"
+    LIFERPG_UPDATE = "liferpg.update"
+    LIFERPG_CHANGED = "liferpg.changed"
+    LIFERPG_ERROR = "liferpg.error"
+
+    # ═══════════════════════════════════════════════════════════════════
     # WORLD MODEL EVENTS
     # ═══════════════════════════════════════════════════════════════════
     WORLD_UPDATED = "world.updated"
@@ -137,5 +145,6 @@ class EventNames:
     ALL_ACTION = "action.*"
     ALL_EMOTION = "emotion.*"
     ALL_GOAL = "goal.*"
+    ALL_LIFERPG = "liferpg.*"
     ALL_WORLD = "world.*"
     ALL_RESPONSE = "response.*"

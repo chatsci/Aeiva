@@ -4,7 +4,7 @@ Run multi-turn dialogue replay scenarios against a real AEIVA runtime.
 Example:
     uv run aeiva-dialogue-replay \
       -c configs/agent_config.yaml \
-      -s docs/examples/dialogue_replay/metaui_dialogue_suite.yaml
+      -s docs/examples/dialogue_replay/dialogue_suite.yaml
 """
 
 from __future__ import annotations

@@ -384,6 +384,116 @@ async def test_stream_tool_call_fallback_from_text():
 
 
 @pytest.mark.asyncio
+async def test_stream_without_tools_yields_incremental_deltas():
+    class StreamBackend(FakeBackend):
+        def build_params(self, *args, **kwargs):
+            return {}
+
+        async def execute(self, params, stream: bool):
+            async def _gen():
+                yield {"type": "response.output_text.delta", "delta": "Hel"}
+                yield {"type": "response.output_text.delta", "delta": "lo"}
+                yield {"type": "response.completed", "response": {"output_text": "Hello"}}
+
+            return _gen()
+
+        def parse_stream_delta(self, chunk, **kwargs):
+            return chunk.get("delta"), None
+
+        def parse_response(self, response):
+            return LLMResponse(response.get("output_text", ""), [], "resp_stream", {}, response)
+
+    engine = ToolLoopEngine(backend=StreamBackend(), max_tool_loops=2)
+    messages = [{"role": "user", "content": "hi"}]
+
+    output = []
+    async for chunk in engine.astream(messages, tools=[], stream=True):
+        output.append(chunk)
+
+    assert output == ["Hel", "lo"]
+    assert messages[-1] == {"role": "assistant", "content": "Hello"}
+
+
+@pytest.mark.asyncio
+async def test_stream_without_tools_handles_cumulative_deltas():
+    class StreamBackend(FakeBackend):
+        def build_params(self, *args, **kwargs):
+            return {}
+
+        async def execute(self, params, stream: bool):
+            async def _gen():
+                yield {"type": "response.output_text.delta", "delta": "H"}
+                yield {"type": "response.output_text.delta", "delta": "He"}
+                yield {"type": "response.output_text.delta", "delta": "Hello"}
+                yield {"type": "response.completed", "response": {"output_text": "Hello"}}
+
+            return _gen()
+
+        def parse_stream_delta(self, chunk, **kwargs):
+            return chunk.get("delta"), None
+
+        def parse_response(self, response):
+            return LLMResponse(response.get("output_text", ""), [], "resp_stream", {}, response)
+
+    engine = ToolLoopEngine(backend=StreamBackend(), max_tool_loops=2)
+    messages = [{"role": "user", "content": "hi"}]
+
+    output = []
+    async for chunk in engine.astream(messages, tools=None, stream=True):
+        output.append(chunk)
+
+    assert output == ["H", "e", "llo"]
+    assert messages[-1] == {"role": "assistant", "content": "Hello"}
+
+
+@pytest.mark.asyncio
+async def test_stream_with_available_tools_still_yields_incremental_text_when_no_tool_call_occurs():
+    class StreamBackend(FakeBackend):
+        def build_params(self, *args, **kwargs):
+            return {}
+
+        async def execute(self, params, stream: bool):
+            async def _gen():
+                yield {"type": "response.output_text.delta", "delta": "Hel"}
+                yield {"type": "response.output_text.delta", "delta": "lo"}
+                yield {"type": "response.completed", "response": {"output_text": "Hello"}}
+
+            return _gen()
+
+        def parse_stream_delta(self, chunk, **kwargs):
+            return chunk.get("delta"), None
+
+        def parse_response(self, response):
+            return LLMResponse(response.get("output_text", ""), [], "resp_stream", {}, response)
+
+    engine = ToolLoopEngine(backend=StreamBackend(), max_tool_loops=2)
+    messages = [{"role": "user", "content": "hi"}]
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "filesystem",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {"type": "string"},
+                        "path": {"type": "string"},
+                    },
+                    "required": ["operation", "path"],
+                },
+            },
+        }
+    ]
+
+    output = []
+    async for chunk in engine.astream(messages, tools=tools, stream=True):
+        output.append(chunk)
+
+    assert output == ["Hel", "lo"]
+    assert messages[-1] == {"role": "assistant", "content": "Hello"}
+
+
+@pytest.mark.asyncio
 async def test_llmbrain_uses_arun():
     class DummyClient:
         def __init__(self):

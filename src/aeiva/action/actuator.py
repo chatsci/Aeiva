@@ -35,6 +35,7 @@ from aeiva.action.status import Status
 from aeiva.tool.registry import get_registry, ToolRegistry
 from aeiva.event.event_names import EventNames
 from aeiva.action.plan_utils import actions_to_plan
+from aeiva.common.idempotency import IdempotencyCache, extract_idempotency_key
 
 if TYPE_CHECKING:
     from aeiva.event.event_bus import EventBus
@@ -124,6 +125,11 @@ class ActuatorNeuron(BaseNeuron):
         # Identity metadata
         self.identity.data["tools_loaded"] = 0
         self.identity.data["executions_completed"] = 0
+        raw_cfg = config or {}
+        self._idempotency_cache = IdempotencyCache(
+            max_entries=int(raw_cfg.get("idempotency_cache_size", 2048)),
+            ttl_seconds=float(raw_cfg.get("idempotency_ttl_seconds", 600.0)),
+        )
 
     def build_config(self, config_dict: Dict) -> ActuatorNeuronConfig:
         """Build ActuatorNeuronConfig from dictionary."""
@@ -336,6 +342,12 @@ class ActuatorNeuron(BaseNeuron):
         Returns:
             Execution result dictionary
         """
+        cache_key = self._build_idempotency_key(signal)
+        if cache_key:
+            hit, cached = self._idempotency_cache.get(cache_key)
+            if hit:
+                return cached
+
         data = signal.data
         source = signal.source
 
@@ -370,11 +382,19 @@ class ActuatorNeuron(BaseNeuron):
             self.identity.data["executions_completed"] += 1
             if context:
                 result["context"] = context
+            if cache_key and result is not None:
+                self._idempotency_cache.set(cache_key, result)
             return result
 
         except Exception as e:
             logger.error(f"Action execution failed: {e}")
             return {"error": str(e), "success": False}
+
+    def _build_idempotency_key(self, signal: Signal) -> Optional[str]:
+        base = extract_idempotency_key(signal)
+        if not base:
+            return None
+        return f"{self.name}:{base}"
 
     async def execute_plan(self, plan: Plan) -> Dict[str, Any]:
         """

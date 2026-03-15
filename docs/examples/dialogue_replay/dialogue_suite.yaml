@@ -1,0 +1,37 @@
+scenarios:
+  - id: greeting_and_identity
+    description: Basic greeting and identity check.
+    turns:
+      - user: "Hello! Who are you?"
+        timeout_seconds: 60
+        expectation:
+          min_response_chars: 12
+          contains_any:
+            - "Maid"
+            - "assistant"
+
+  - id: browser_help_request
+    description: Ask for browser automation guidance.
+    turns:
+      - user: "Open github.com and summarize the homepage."
+        timeout_seconds: 90
+        expectation:
+          min_response_chars: 20
+          contains_any:
+            - "github"
+            - "summary"
+
+  - id: follow_up_refinement
+    description: Multi-turn follow-up refinement.
+    turns:
+      - user: "Give me three ways to speed up my Python tests."
+        timeout_seconds: 60
+        expectation:
+          min_response_chars: 40
+      - user: "Now keep only the most impactful one with one command example."
+        timeout_seconds: 60
+        expectation:
+          min_response_chars: 20
+          contains_any:
+            - "command"
+            - "pytest"

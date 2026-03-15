@@ -13,7 +13,7 @@ dependencies = [
     "litellm>=1.60.0,<2",
     "networkx==3.4.1",
     "numpy==2.1.3",
-    "pydantic==2.10.1",
+    "pydantic>=2.11,<2.12",
     "pyyaml==6.0.2",
     "requests==2.32.3",
 ]
@@ -27,20 +27,14 @@ ui = [
 realtime = [
     "fastrtc[vad,stt,tts]",
     "gradio>=5.7.1,<6",
-    "gradio-webrtc==0.0.30",
     "python-dotenv==1.0.1",
     "soundfile>=0.13.1,<1.0",
 ]
 realtime-openai = [
     "gradio>=5.7.1,<6",
-    "gradio-webrtc==0.0.30",
     "python-dotenv==1.0.1",
     "soundfile>=0.13.1,<1.0",
     "websockets>=12,<14",
-]
-metaui = [
-    "websockets>=12,<14",
-    "PySide6>=6.8,<7",
 ]
 realtime-gemini = [
     "google-genai==0.8.0",
@@ -114,8 +108,6 @@ aeiva-gateway = "aeiva.command.aeiva_gateway:run"
 aeiva-server = "aeiva.command.aeiva_server:run"
 maid-chat = "aeiva.command.maid_chat:run"
 aeiva-host = "aeiva.host.host_cli:run"
-aeiva-metaui-desktop = "aeiva.metaui.desktop_client:main"
-aeiva-metaui-eval = "aeiva.command.aeiva_metaui_eval:run"
 
 [build-system]
 requires = ["hatchling"]

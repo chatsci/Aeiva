@@ -35,6 +35,7 @@ import json
 
 from aeiva.neuron import BaseNeuron, Signal, NeuronConfig
 from aeiva.event.event_names import EventNames
+from aeiva.common.idempotency import IdempotencyCache, extract_idempotency_key
 
 if TYPE_CHECKING:
     from aeiva.cognition.brain.base_brain import Brain
@@ -163,6 +164,11 @@ class Cognition(BaseNeuron):
         self.thoughts_produced = 0
         self.skipped = 0
         self._think_lock = asyncio.Lock()
+        cognition_cfg = self.config_dict.get("cognition_config") or {}
+        self._idempotency_cache = IdempotencyCache(
+            max_entries=int(cognition_cfg.get("idempotency_cache_size", 2048)),
+            ttl_seconds=float(cognition_cfg.get("idempotency_ttl_seconds", 600.0)),
+        )
 
     async def setup(self) -> None:
         """Initialize the cognition neuron."""
@@ -171,19 +177,40 @@ class Cognition(BaseNeuron):
 
     async def process(self, signal: Signal) -> Optional[Dict[str, Any]]:
         """Process incoming signal and produce a thought."""
+        cache_key = self._build_idempotency_key(signal)
+        if cache_key:
+            hit, cached = self._idempotency_cache.get(cache_key)
+            if hit:
+                return cached
+
         source = signal.source
 
         if EventNames.COGNITION_QUERY in source:
-            return await self.handle_query(signal)
+            result = await self.handle_query(signal)
+            if cache_key and result is not None:
+                self._idempotency_cache.set(cache_key, result)
+            return result
 
         if EventNames.ACTION_RESULT in source:
-            return await self.handle_action_result(signal)
+            result = await self.handle_action_result(signal)
+            if cache_key and result is not None:
+                self._idempotency_cache.set(cache_key, result)
+            return result
 
         if source.startswith(EventNames.ALL_PERCEPTION[:-1]) or EventNames.COGNITION_THINK in source:
-            return await self.handle_think(signal)
+            result = await self.handle_think(signal)
+            if cache_key and result is not None:
+                self._idempotency_cache.set(cache_key, result)
+            return result
 
         self.skipped += 1
         return None
+
+    def _build_idempotency_key(self, signal: Signal) -> Optional[str]:
+        base = extract_idempotency_key(signal)
+        if not base:
+            return None
+        return f"{self.name}:{base}"
 
     async def send(self, output: Any, parent: Signal = None) -> None:
         """
@@ -557,6 +584,8 @@ class Cognition(BaseNeuron):
 
     def extract_metadata(self, signal: Signal) -> Optional[dict]:
         """Extract metadata from a signal payload if present."""
+        if isinstance(getattr(signal, "meta", None), dict) and signal.meta:
+            return signal.meta
         data = signal.data
         if isinstance(data, dict):
             meta = data.get("meta") or data.get("metadata")

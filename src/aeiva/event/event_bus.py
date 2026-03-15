@@ -9,6 +9,13 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Callable, Dict, List, Any, Optional, Union
 from aeiva.event.event import Event
+from aeiva.event.event_policy import (
+    DEFAULT_EVENT_POLICY,
+    EventPolicy,
+    EventPolicyResolver,
+    resolve_event_policy,
+)
+from aeiva.event.lane_scheduler import LaneScheduler
 
 # Configure logging
 # logging.basicConfig(level=logging.INFO)
@@ -72,7 +79,15 @@ class EventBus:
     MAX_HOP_COUNT: int = 10
     MAX_HISTORY: int = 10_000
 
-    def __init__(self, *, max_hop_count: int = None, max_history: int = None):
+    def __init__(
+        self,
+        *,
+        max_hop_count: int = None,
+        max_history: int = None,
+        lane_queue_limit: int = 2048,
+        readonly_concurrency: int = 8,
+        event_policy_resolver: Optional[EventPolicyResolver] = None,
+    ):
         """
         Initializes the event bus.
 
@@ -88,6 +103,12 @@ class EventBus:
         self._max_hop_count = max_hop_count if max_hop_count is not None else self.MAX_HOP_COUNT
         self._max_history = max_history if max_history is not None else self.MAX_HISTORY
         self._history: collections.deque = collections.deque(maxlen=self._max_history)
+        self._event_policy_resolver: EventPolicyResolver = event_policy_resolver or resolve_event_policy
+        self._lane_scheduler = LaneScheduler(
+            dispatch_fn=self._dispatch_event,
+            lane_queue_limit=lane_queue_limit,
+            readonly_concurrency=readonly_concurrency,
+        )
 
     def subscribe(
         self,
@@ -139,7 +160,9 @@ class EventBus:
         """
         self._event_counter += 1
         # Use a tuple of (priority, counter) to ensure proper ordering
-        await self._event_queue.put((event.priority * -1, self._event_counter, event, only))
+        await self._event_queue.put(
+            (event.priority * -1, self._event_counter, event, only, time.monotonic())
+        )
         logger.info(f"Published event '{event.name}' with priority {event.priority}.")
 
     async def _process_events(self):
@@ -147,17 +170,29 @@ class EventBus:
         Internal coroutine that processes events from the queue and dispatches them to subscribers.
         """
         while True:
+            task_marked_done = False
             try:
-                _, _, event, only = await self._event_queue.get()
+                _, _, event, only, enqueued_at = await self._event_queue.get()
                 logger.info(f"Processing event '{event.name}'.")
-                await self._dispatch_event(event, only)
-                self._event_queue.task_done()
+                policy = self._resolve_event_policy(event.name)
+                consistency_key = self._resolve_consistency_key(event, policy)
+                accepted = await self._lane_scheduler.submit(
+                    event=event,
+                    only=only,
+                    enqueued_at=enqueued_at,
+                    policy=policy,
+                    consistency_key=consistency_key,
+                    on_complete=self._event_queue.task_done,
+                )
+                if not accepted:
+                    task_marked_done = True  # on_complete already invoked by scheduler
             except asyncio.CancelledError:
                 # Exit the loop gracefully
                 break
             except Exception as e:
                 logger.error(f"Error processing event: {e}")
-                self._event_queue.task_done()
+                if not task_marked_done:
+                    self._event_queue.task_done()
 
     async def _dispatch_event(self, event: Event, only: Union[str, List[str]] = None):
         """
@@ -218,6 +253,7 @@ class EventBus:
         """
         Stops the event bus processing loop.
         """
+        self._lane_scheduler.shutdown()
         if self._processing_task:
             self._processing_task.cancel()
             logger.info("Event bus stopped.")
@@ -314,7 +350,11 @@ class EventBus:
                 "source": payload.source,
             })
 
-        await self.publish(Event(name=event_name, payload=payload, priority=priority))
+        effective_priority = int(priority)
+        if effective_priority == 0:
+            effective_priority = int(self._resolve_event_policy(event_name).priority)
+
+        await self.publish(Event(name=event_name, payload=payload, priority=effective_priority))
         return True
 
     async def emit_only(self, event_name: str, subscriber_names: Union[str, List[str]], payload: Any = None, priority: int = 0):
@@ -370,3 +410,59 @@ class EventBus:
         Waits until all events in the queue have been processed.
         """
         await self._event_queue.join()
+
+    def get_scheduler_metrics(self, *, top_n: int = 10) -> Dict[str, Any]:
+        """Return queue/lane scheduler metrics for observability."""
+        return self._lane_scheduler.snapshot_metrics(top_n=top_n)
+
+    def _resolve_event_policy(self, event_name: str) -> EventPolicy:
+        try:
+            policy = self._event_policy_resolver(event_name)
+            if isinstance(policy, EventPolicy):
+                return policy
+        except Exception as exc:
+            logger.warning("Failed to resolve event policy for '%s': %s", event_name, exc)
+        return DEFAULT_EVENT_POLICY
+
+    def _resolve_consistency_key(self, event: Event, policy: EventPolicy) -> str:
+        scope = str(policy.consistency_scope or "session").strip().lower()
+        if scope == "global":
+            return "global"
+
+        meta = self._extract_meta(event.payload)
+        if scope == "user":
+            user_id = meta.get("user_id")
+            if user_id:
+                return str(user_id)
+            return "global"
+
+        # default: session scope
+        session_id = meta.get("session_id")
+        if session_id:
+            return str(session_id)
+        user_id = meta.get("user_id")
+        if user_id:
+            return str(user_id)
+        return "global"
+
+    @staticmethod
+    def _extract_meta(payload: Any) -> Dict[str, Any]:
+        # Lazy import to avoid circular dependency
+        from aeiva.neuron.signal import Signal
+
+        if isinstance(payload, Signal):
+            if isinstance(payload.meta, dict) and payload.meta:
+                return payload.meta
+            data = payload.data
+            if isinstance(data, dict):
+                meta = data.get("meta") or data.get("metadata")
+                if isinstance(meta, dict):
+                    return meta
+            return {}
+
+        if isinstance(payload, dict):
+            meta = payload.get("meta") or payload.get("metadata")
+            if isinstance(meta, dict):
+                return meta
+
+        return {}

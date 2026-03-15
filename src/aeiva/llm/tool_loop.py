@@ -4,8 +4,9 @@ import json
 from typing import Any, AsyncGenerator, Dict, List, Optional, Set
 from uuid import uuid4
 
-from aeiva.llm.backend import LLMBackend, LLMResponse
+from aeiva.llm.backend import LLMResponse
 from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
+from aeiva.llm.providers.base import LLMProvider
 from aeiva.llm.tool_types import ToolCall, ToolCallDelta
 from aeiva.tool.registry import get_registry
 
@@ -24,19 +25,10 @@ class ToolLoopResult:
     raw: Any = None
 
 
-@dataclass
-class ToolLoopStreamResult:
-    content: str
-    has_tool_calls: bool
-    usage: Dict[str, Any]
-    response_id: Optional[str]
-    completed_response: Any = None
-
-
 class ToolLoopEngine:
     def __init__(
         self,
-        backend: LLMBackend,
+        backend: LLMProvider,
         metrics: Optional[LLMUsageMetrics] = None,
         max_tool_loops: int = 10,
         registry=None,
@@ -96,103 +88,99 @@ class ToolLoopEngine:
 
         for _ in range(self.max_tool_loops):
             self._sanitize_tool_history(messages)
-            stream_result = await self._stream_once(messages, tools, **kwargs)
-            if stream_result.content:
-                yield stream_result.content
-            if not stream_result.has_tool_calls:
-                return
+            params = self.backend.build_params(messages, tools, **kwargs)
+            response_stream = await self.backend.execute(params, stream=True)
+
+            tool_calls: List[ToolCall] = []
+            accumulated_text = ""
+            completed_response = None
+            last_chunk: Any = None
+            # Keep live text streaming enabled unless the model actually starts
+            # emitting a tool call. Tool availability alone should not delay
+            # ordinary conversational turns.
+            saw_tool_call_delta = False
+
+            async for chunk in response_stream:
+                last_chunk = chunk
+                response_type = getattr(chunk, "type", None)
+                if response_type and str(response_type).endswith("response.completed"):
+                    completed_response = getattr(chunk, "response", None)
+
+                delta_content, delta_tool_calls = self.backend.parse_stream_delta(
+                    chunk,
+                    response_type=response_type,
+                    has_accumulated=bool(accumulated_text),
+                )
+
+                if delta_tool_calls:
+                    self._accumulate_tool_calls(tool_calls, delta_tool_calls)
+                    saw_tool_call_delta = True
+
+                if delta_content:
+                    accumulated_text, delta_to_emit = self._accumulate_stream_text(
+                        accumulated_text,
+                        str(delta_content),
+                    )
+                    if not saw_tool_call_delta and delta_to_emit:
+                        yield delta_to_emit
+
+            if completed_response is None and last_chunk is not None:
+                if isinstance(last_chunk, dict) and (last_chunk.get("output") or last_chunk.get("output_text")):
+                    completed_response = last_chunk
+                elif hasattr(last_chunk, "output") or hasattr(last_chunk, "output_text"):
+                    completed_response = last_chunk
+
+            parsed: Optional[LLMResponse] = None
+            final_text = accumulated_text
+            if completed_response is not None:
+                parsed = self.backend.parse_response(completed_response)
+                self._record_usage(parsed)
+                self._update_last_response_id(parsed)
+                if parsed.text:
+                    final_text = parsed.text
+
+            final_tool_calls = parsed.tool_calls if parsed and parsed.tool_calls else tool_calls
+            valid_tool_calls = [tc for tc in final_tool_calls if tc.name and tc.name.strip()]
+
+            if valid_tool_calls:
+                await self._execute_tool_calls_async(messages, valid_tool_calls, tools)
+                continue
+
+            if not saw_tool_call_delta:
+                tail = self._unemitted_stream_tail(accumulated_text, final_text)
+                if tail:
+                    yield tail
+            elif final_text:
+                yield final_text
+
+            messages.append({"role": "assistant", "content": final_text})
+            return
 
         yield "Maximum tool call iterations reached."
 
-    async def _stream_once(
-        self,
-        messages: List[Any],
-        tools: Optional[List[Dict[str, Any]]],
-        **kwargs,
-    ) -> ToolLoopStreamResult:
-        params = self.backend.build_params(messages, tools, **kwargs)
-        response_stream = await self.backend.execute(params, stream=True)
+    @staticmethod
+    def _accumulate_stream_text(current: str, incoming: str) -> tuple[str, str]:
+        if not incoming:
+            return current, ""
+        if not current:
+            return incoming, incoming
+        if incoming.startswith(current):
+            return incoming, incoming[len(current):]
+        if current.startswith(incoming):
+            return current, ""
+        return current + incoming, incoming
 
-        tool_calls: List[ToolCall] = []
-        chunks: List[str] = []
-        deferred_chunks: List[str] = []
-        completed_response = None
-        last_chunk: Any = None
-        uses_responses = getattr(self.backend, "uses_responses_api", None)
-        ignore_delta_content = bool(tools) and bool(uses_responses() if callable(uses_responses) else False)
-
-        async for chunk in response_stream:
-            last_chunk = chunk
-            response_type = getattr(chunk, "type", None)
-            if response_type and str(response_type).endswith("response.completed"):
-                completed_response = getattr(chunk, "response", None)
-
-            delta_content, delta_tool_calls = self.backend.parse_stream_delta(
-                chunk, response_type=response_type, has_accumulated=bool(chunks)
-            )
-
-            if delta_content:
-                if ignore_delta_content:
-                    deferred_chunks.append(delta_content)
-                else:
-                    chunks.append(delta_content)
-            if delta_tool_calls:
-                self._accumulate_tool_calls(tool_calls, delta_tool_calls)
-
-        full_content = self._merge_chunks(chunks)
-        deferred_content = self._merge_chunks(deferred_chunks)
-
-        if completed_response is None and last_chunk is not None:
-            if isinstance(last_chunk, dict) and (last_chunk.get("output") or last_chunk.get("output_text")):
-                completed_response = last_chunk
-            elif hasattr(last_chunk, "output") or hasattr(last_chunk, "output_text"):
-                completed_response = last_chunk
-
-        parsed: Optional[LLMResponse] = None
-        if completed_response is not None:
-            parsed = self.backend.parse_response(completed_response)
-            self._record_usage(parsed)
-            self._update_last_response_id(parsed)
-            if not full_content:
-                full_content = parsed.text
-        if not full_content and deferred_content:
-            full_content = deferred_content
-
-        final_tool_calls = parsed.tool_calls if parsed and parsed.tool_calls else tool_calls
-        valid_tool_calls = [tc for tc in final_tool_calls if tc.name and tc.name.strip()]
-
-        if valid_tool_calls:
-            await self._execute_tool_calls_async(messages, valid_tool_calls, tools)
-            return ToolLoopStreamResult(
-                content="",
-                has_tool_calls=True,
-                usage=parsed.usage if parsed else {},
-                response_id=parsed.response_id if parsed else None,
-                completed_response=completed_response,
-            )
-
-        messages.append({"role": "assistant", "content": full_content})
-        return ToolLoopStreamResult(
-            content=full_content,
-            has_tool_calls=False,
-            usage={},
-            response_id=self.last_response_id,
-            completed_response=completed_response,
-        )
-
-    def _merge_chunks(self, chunks: List[str]) -> str:
-        if not chunks:
+    @staticmethod
+    def _unemitted_stream_tail(emitted_prefix: str, final_text: str) -> str:
+        if not final_text:
             return ""
-        if len(chunks) == 1:
-            return chunks[0]
-
-        result = chunks[0]
-        for chunk in chunks[1:]:
-            if chunk.startswith(result):
-                result = chunk
-            else:
-                result += chunk
-        return result
+        if not emitted_prefix:
+            return final_text
+        if final_text.startswith(emitted_prefix):
+            return final_text[len(emitted_prefix):]
+        if emitted_prefix.startswith(final_text):
+            return ""
+        return final_text
 
     def _sanitize_tool_history(self, messages: List[Any]) -> None:
         """Ensure every assistant tool call has a matching tool result."""

@@ -1,0 +1,44 @@
+{
+  "total": 5,
+  "ok": 3,
+  "failed": 2,
+  "avg_latency_seconds": 57.28,
+  "max_latency_seconds": 121.81,
+  "results": [
+    {
+      "index": 1,
+      "prompt": "Build a functional chat UI with send and clear buttons.",
+      "status": "ok",
+      "latency_seconds": 11.28,
+      "response_excerpt": "I built a functional chat UI with:\n\n- **Message history** (list)\n- **Message input** (text field bound to `/draft`)\n- **Send** button: appends `/draft` to `/messages` then clears `/draft`\n- **Clear** button: resets `/messages` to an empty array\n\nNote: the UI spec was successfully sent to the renderer, but the client di"
+    },
+    {
+      "index": 2,
+      "prompt": "Build an employee onboarding form UI with submit/reset and required hints.",
+      "status": "timeout",
+      "latency_seconds": 121.53,
+      "response_excerpt": "I'm sorry, I didn't receive a response in time."
+    },
+    {
+      "index": 3,
+      "prompt": "Build a data analysis UI with CSV upload, table preview, and line chart.",
+      "status": "ok",
+      "latency_seconds": 17.57,
+      "response_excerpt": "I built a CSV data analysis UI with:\n\n- **CSV Upload** control\n- **X/Y column name** inputs (optional)\n- **Table preview** (placeholder columns until parsed)\n- **Line chart** bound to `/chart/labels` (x-axis) and `/chart/values` (y-axis)\n- A **Parse & Preview** button that emits an event: `parse_csv` with context `{ fi"
+    },
+    {
+      "index": 4,
+      "prompt": "Build a survey UI with text input, checkbox, choice picker, slider, and submit.",
+      "status": "ok",
+      "latency_seconds": 14.2,
+      "response_excerpt": "I built a simple interactive **Survey UI** with the requested controls:\n\n- **Text input**: “Your name”\n- **Checkbox**: “I agree to the terms”\n- **Choice picker**: “Your role” (Student / Professional / Other)\n- **Slider**: “Satisfaction (0–10)”\n- **Submit button**: emits an event named **`survey_submit`** with the full "
+    },
+    {
+      "index": 5,
+      "prompt": "Build a dashboard UI with tabs for summary, chart, table, and settings.",
+      "status": "exception",
+      "latency_seconds": 121.81,
+      "response_excerpt": "<pexpect.pty_spawn.spawn object at 0x102c32720>\ncommand: /opt/anaconda3/envs/aeiva/bin/uv\nargs: [b'/opt/anaconda3/envs/aeiva/bin/uv', b'run', b'aeiva-gateway', b'-c', b'configs/agent_config.yaml']\nbuffer (last 100 chars): 'l working.. (112s)\\r\\x1b[KStill working... (115s)\\r\\x1b[KStill working. (117s)\\r\\x1b[KStill worki"
+    }
+  ]
+}

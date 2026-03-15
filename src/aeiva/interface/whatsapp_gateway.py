@@ -218,10 +218,15 @@ class WhatsAppGateway(GatewayBase[WhatsAppRoute]):
             sender,
             display_name,
         )
-        await self._ingest_message(sender, display_name, text)
+        await self._ingest_message(sender, display_name, text, source_event_id=msg_id)
 
     async def _ingest_message(
-        self, phone_number: str, display_name: str, text: str
+        self,
+        phone_number: str,
+        display_name: str,
+        text: str,
+        *,
+        source_event_id: Optional[str] = None,
     ) -> None:
         route = WhatsAppRoute(phone_number=phone_number, display_name=display_name)
 
@@ -229,6 +234,7 @@ class WhatsAppGateway(GatewayBase[WhatsAppRoute]):
             text,
             source=EventNames.PERCEPTION_WHATSAPP,
             route=route,
+            meta={"source_event_id": source_event_id} if source_event_id else None,
         )
         await self.emit_input(
             signal,
@@ -250,6 +256,11 @@ class WhatsAppGateway(GatewayBase[WhatsAppRoute]):
         if not route:
             return None
         return route.phone_number
+
+    def route_session_id(self, route: Optional[WhatsAppRoute]) -> Optional[str]:
+        if not route or not route.phone_number:
+            return None
+        return f"whatsapp:{route.phone_number}"
 
     async def _send_message(self, route: WhatsAppRoute, text: str) -> None:
         if not self._access_token or not self._phone_number_id:

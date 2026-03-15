@@ -9,12 +9,12 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import litellm
 
-from aeiva.llm.backend import LLMBackend
 from aeiva.llm.fault_tolerance import retry_async, retry_sync
 from aeiva.llm.llm_gateway_config import LLMGatewayConfig
 from aeiva.llm.llm_gateway_exceptions import LLMGatewayError, llm_gateway_exception
 from aeiva.llm.llm_usage_metrics import LLMUsageMetrics
 from aeiva.llm.patches import apply_all_patches
+from aeiva.llm.providers.registry import get_llm_provider_registry
 from aeiva.llm.tool_loop import ToolLoopEngine, ToolLoopResult
 
 
@@ -33,14 +33,13 @@ class LLMClient:
         self.metrics = LLMUsageMetrics()
         self.logger = logging.getLogger(__name__)
 
-        if not self.config.llm_api_key:
-            raise ValueError("API key must be provided in the configuration.")
-
         apply_all_patches()
         litellm.drop_params = True
-        self._configure_litellm()
+        self.provider_registry = get_llm_provider_registry()
+        self.backend = self.provider_registry.create(self.config)
+        self.backend.validate_config()
+        self._configure_litellm(getattr(self.backend, "config", self.config))
 
-        self.backend = LLMBackend(self.config)
         self.engine = ToolLoopEngine(
             backend=self.backend,
             metrics=self.metrics,
@@ -74,12 +73,13 @@ class LLMClient:
     def last_response_id(self) -> Optional[str]:
         return self.engine.last_response_id
 
-    def _configure_litellm(self) -> None:
+    def _configure_litellm(self, runtime_config: Optional[LLMGatewayConfig] = None) -> None:
+        config = runtime_config or self.config
         if hasattr(litellm, "suppress_debug_info"):
             litellm.suppress_debug_info = True
-        if self.config.llm_api_key:
-            litellm.api_key = self.config.llm_api_key
-            litellm.openai_key = self.config.llm_api_key
+        if config.llm_api_key:
+            litellm.api_key = config.llm_api_key
+            litellm.openai_key = config.llm_api_key
 
     def uses_responses_api(self) -> bool:
         return self.backend.uses_responses_api()

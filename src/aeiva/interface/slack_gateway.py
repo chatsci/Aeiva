@@ -152,6 +152,7 @@ class SlackGateway(GatewayBase[SlackRoute]):
             text,
             source=EventNames.PERCEPTION_SLACK,
             route=route,
+            meta={"source_event_id": event.get("client_msg_id") or ts},
         )
         await self.emit_input(
             signal,
@@ -175,6 +176,19 @@ class SlackGateway(GatewayBase[SlackRoute]):
         if not route:
             return None
         return route.user
+
+    def route_session_id(self, route: Optional[SlackRoute]) -> Optional[str]:
+        if not route:
+            return None
+        if route.thread_ts:
+            return f"slack:{route.channel}:{route.thread_ts}"
+        if route.channel and route.user:
+            return f"slack:{route.channel}:{route.user}"
+        if route.channel:
+            return f"slack:{route.channel}"
+        if route.user:
+            return f"slack:{route.user}"
+        return None
 
     async def _send_message(self, route: SlackRoute, text: str) -> None:
         if not self._web_client:

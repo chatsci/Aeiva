@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from aeiva.neuron import BaseNeuron, NeuronConfig, Signal
 from aeiva.event.event_names import EventNames
+from aeiva.common.idempotency import IdempotencyCache, extract_idempotency_key
 from aeiva.cognition.memory.memory_unit import MemoryUnit
 from aeiva.cognition.memory.memory_config import MemoryConfig
 from aeiva.cognition.memory.memory_service import MemoryService
@@ -102,6 +103,11 @@ class MemoryNeuron(BaseNeuron):
 
         self.SUBSCRIPTIONS = self.config.input_events.copy()
         self.core: Optional[MemoryService] = None
+        raw_cfg = config if isinstance(config, dict) else {}
+        self._idempotency_cache = IdempotencyCache(
+            max_entries=int(raw_cfg.get("idempotency_cache_size", 2048)),
+            ttl_seconds=float(raw_cfg.get("idempotency_ttl_seconds", 600.0)),
+        )
 
         # Operation statistics
         self._stores = 0
@@ -163,6 +169,18 @@ class MemoryNeuron(BaseNeuron):
         "filter", "organize", "structurize", "skillize",
         "parameterize", "embed", "load", "save",
     })
+    _IDEMPOTENT_MUTATING_OPS = frozenset({
+        "store",
+        "update",
+        "delete",
+        "organize",
+        "structurize",
+        "skillize",
+        "parameterize",
+        "embed",
+        "load",
+        "save",
+    })
 
     async def process(self, signal: Signal) -> Optional[Dict[str, Any]]:
         try:
@@ -188,8 +206,17 @@ class MemoryNeuron(BaseNeuron):
             if handler_name is None:
                 raise ValueError(f"Unknown operation: {operation}")
 
+            cache_key = self._build_idempotency_key(signal, operation)
+            if cache_key:
+                hit, cached = self._idempotency_cache.get(cache_key)
+                if hit:
+                    return cached
+
             handler = getattr(self, handler_name)
-            return await handler(data, params)
+            result = await handler(data, params)
+            if cache_key and result is not None:
+                self._idempotency_cache.set(cache_key, result)
+            return result
 
         except Exception as e:
             self._errors += 1
@@ -211,6 +238,14 @@ class MemoryNeuron(BaseNeuron):
         if suffix in MemoryNeuron._KNOWN_OPS:
             return suffix
         return "store"
+
+    def _build_idempotency_key(self, signal: Signal, operation: str) -> Optional[str]:
+        if operation not in self._IDEMPOTENT_MUTATING_OPS:
+            return None
+        base = extract_idempotency_key(signal)
+        if not base:
+            return None
+        return f"{self.name}:{operation}:{base}"
 
     # ---- operation handlers ----
 

@@ -25,6 +25,23 @@ Aeiva can play different roles across different moments of life:
 
 Our vision is simple: help people experience deep, high-agency growth in the RPG of life.
 
+## Current Product Shape
+
+Aeiva is currently evolving as a unified agent runtime with multiple interaction surfaces:
+
+- terminal chat for direct local use
+- web dialogue UI for multimodal interaction
+- a separate LifeRPG dashboard for structured self-modeling and growth tracking
+- Slack and WhatsApp gateways for real-world messaging channels
+
+The goal is not to ship disconnected demos. The goal is to let one agent architecture serve multiple channels while preserving a coherent human-centered core.
+
+On the web, the gateway now exposes dialogue and LifeRPG as separate pages so each interface can stay focused:
+- Dialogue UI: conversation, tools, multimodal interaction
+- LifeRPG UI: identity, roles, inventory, projects, and TODOs
+
+Model capabilities remain pluggable. Different backends can enable different combinations of text, vision, audio, realtime, and tool use without changing Aeiva's core direction.
+
 ## Usage
 
 ### 1) Install
@@ -74,6 +91,16 @@ Recommended unified mode:
 ```bash
 aeiva-gateway --config configs/agent_config.yaml --verbose
 ```
+
+This launches the unified gateway. In the current default web setup, it serves:
+- Dialogue UI on a local Gradio page
+- LifeRPG dashboard on a separate local Gradio page
+
+Default ports are typically:
+- Dialogue UI: `http://127.0.0.1:7860`
+- LifeRPG UI: `http://127.0.0.1:7862`
+
+If a port is occupied, Gradio may choose a nearby port. Use the startup logs as the source of truth.
 
 Single-channel commands:
 

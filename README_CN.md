@@ -25,6 +25,23 @@ Aeiva 的目标是打造一个以人为中心的、终身成长型 AI 伙伴，�
 
 我们的愿景是：让人在“人生这场 RPG 游戏”中获得酣畅淋漓、可持续的成长体验。
 
+## 当前产品形态
+
+Aeiva 正在演化为一个统一的 Agent 运行时，面向多个交互界面：
+
+- terminal 聊天，用于本地直接使用
+- web 对话界面，用于多模态交互
+- 独立的 LifeRPG 仪表盘，用于结构化自我建模与成长追踪
+- Slack 与 WhatsApp 网关，用于真实消息渠道
+
+我们的目标不是堆叠彼此割裂的 demo，而是让同一套 agent 架构服务多个 channel，同时保持一致的人本核心。
+
+在 web 侧，gateway 现在将 Dialogue 与 LifeRPG 拆成两个独立页面，以保持界面职责清晰：
+- Dialogue UI：负责对话、工具使用、多模态交互
+- LifeRPG UI：负责身份、角色、背包、项目与 TODO 面板
+
+模型能力是可插拔的。不同后端模型可以提供不同组合的文本、视觉、音频、实时与工具使用能力，而不需要改变 Aeiva 的核心方向。
+
 ## 使用方法
 
 ### 1）安装
@@ -74,6 +91,16 @@ export MAID_HOME="..."                     # Maid 桌面模式
 ```bash
 aeiva-gateway --config configs/agent_config.yaml --verbose
 ```
+
+这会启动统一 gateway。在当前默认 web 形态下，它会提供：
+- 一个本地 Gradio Dialogue 页面
+- 一个独立的本地 Gradio LifeRPG 页面
+
+默认端口通常是：
+- Dialogue UI：`http://127.0.0.1:7860`
+- LifeRPG UI：`http://127.0.0.1:7862`
+
+如果端口被占用，Gradio 会自动回退到附近端口；应以启动日志打印出的实际地址为准。
 
 单通道命令：
 

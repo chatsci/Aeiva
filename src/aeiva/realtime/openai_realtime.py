@@ -13,16 +13,19 @@ import base64
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Optional
 
 import numpy as np
 
 try:
-    from gradio_webrtc import AsyncAudioVideoStreamHandler, AdditionalOutputs
+    from fastrtc import AsyncAudioVideoStreamHandler, AdditionalOutputs
 except ImportError:  # pragma: no cover - optional dependency
-    AsyncAudioVideoStreamHandler = object  # type: ignore
-    AdditionalOutputs = None  # type: ignore
+    try:
+        from gradio_webrtc import AsyncAudioVideoStreamHandler, AdditionalOutputs  # type: ignore
+    except ImportError:
+        AsyncAudioVideoStreamHandler = object  # type: ignore
+        AdditionalOutputs = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +203,7 @@ class OpenAIRealtimeHandler(AsyncAudioVideoStreamHandler):
     def __init__(self, config: OpenAIRealtimeConfig):
         if AsyncAudioVideoStreamHandler is object:
             raise RuntimeError(
-                "gradio-webrtc is required for live realtime mode. "
+                "fastrtc is required for live realtime mode. "
                 "Install with: pip install -e '.[realtime]'"
             )
         self.config = config
@@ -210,6 +213,9 @@ class OpenAIRealtimeHandler(AsyncAudioVideoStreamHandler):
         self.last_video_sent = 0.0
         self.chatbot = []
         self.assistant_active = False
+        self._video_frame_queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=1)
+        self._video_send_task: Optional[asyncio.Task] = None
+        self._closed = False
         super().__init__(
             expected_layout="mono",
             output_sample_rate=24000,
@@ -218,53 +224,123 @@ class OpenAIRealtimeHandler(AsyncAudioVideoStreamHandler):
         )
 
     def copy(self) -> "OpenAIRealtimeHandler":
-        cloned = OpenAIRealtimeHandler(self.config)
+        cloned = OpenAIRealtimeHandler(replace(self.config))
         OpenAIRealtimeHandler._active_instance = cloned
         return cloned
 
     @classmethod
     def get_active(cls) -> Optional["OpenAIRealtimeHandler"]:
-        return cls._active_instance
+        instance = cls._active_instance
+        if instance is None:
+            return None
+        if not instance.is_available():
+            if cls._active_instance is instance:
+                cls._active_instance = None
+            return None
+        return instance
+
+    def is_available(self) -> bool:
+        return not self._closed
 
     async def _ensure_connected(self) -> None:
+        if self._closed:
+            raise RuntimeError("OpenAI realtime handler is closed")
         await self.client.connect()
+        self._ensure_video_sender()
 
-    async def receive(self, frame: tuple[int, np.ndarray]) -> None:
-        await self._ensure_connected()
-        _, array = frame
-        array = np.squeeze(array)
-        await self.client.send_audio(array)
-
-    async def emit(self) -> Any:
-        await self._ensure_connected()
-        await self._sync_chatbot()
-
-        text_updated = await self._drain_text_queue()
-        try:
-            audio = self.audio_queue.get_nowait()
-        except asyncio.QueueEmpty:
-            audio = None
-
-        if audio is not None:
-            if text_updated:
-                return (self.output_sample_rate, audio), AdditionalOutputs(self.chatbot)
-            return (self.output_sample_rate, audio)
-
-        if text_updated:
-            return AdditionalOutputs(self.chatbot)
-
-        return None
-
-    async def video_receive(self, frame: np.ndarray) -> None:
+    def _ensure_video_sender(self) -> None:
         if not self.config.send_video:
             return
-        now = time.time()
-        if now - self.last_video_sent < 1.0 / max(self.config.video_fps, 0.1):
+        if self._video_send_task is not None and not self._video_send_task.done():
             return
-        self.last_video_sent = now
-        image_b64 = self._encode_image(frame)
-        if image_b64:
-            await self.client.send_image(image_b64)
+        self._video_send_task = asyncio.create_task(self._video_sender_loop())
+
+    def _enqueue_video_frame(self, frame: np.ndarray) -> None:
+        if not self.config.send_video:
+            return
+        frame_np = np.asarray(frame)
+        if frame_np.size == 0:
+            return
+        if self._video_frame_queue.full():
+            try:
+                self._video_frame_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            self._video_frame_queue.put_nowait(frame_np)
+        except asyncio.QueueFull:
+            pass
+
+    async def _video_sender_loop(self) -> None:
+        while True:
+            frame = await self._video_frame_queue.get()
+            try:
+                await self._ensure_connected()
+                now = time.time()
+                min_gap = 1.0 / max(self.config.video_fps, 0.1)
+                wait_s = max(0.0, min_gap - (now - self.last_video_sent))
+                if wait_s > 0:
+                    await asyncio.sleep(wait_s)
+                image_b64 = self._encode_image(frame)
+                if image_b64:
+                    await self.client.send_image(image_b64)
+                    self.last_video_sent = time.time()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug("OpenAI video sender failed: %s", e)
+
+    async def receive(self, frame: tuple[int, np.ndarray]) -> None:
+        try:
+            await self._ensure_connected()
+            _, array = frame
+            array = np.squeeze(array)
+            await self.client.send_audio(array)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.debug("OpenAI receive failed: %s", e)
+
+    async def emit(self) -> Any:
+        try:
+            await self._ensure_connected()
+            await self._sync_chatbot()
+
+            text_updated = await self._drain_text_queue()
+            try:
+                audio = self.audio_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                audio = None
+
+            if audio is not None:
+                if text_updated:
+                    return (self.output_sample_rate, audio), AdditionalOutputs(self.chatbot)
+                return (self.output_sample_rate, audio)
+
+            if text_updated:
+                return AdditionalOutputs(self.chatbot)
+
+            return None
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.debug("OpenAI emit failed: %s", e)
+            return None
+
+    async def video_receive(self, frame: np.ndarray) -> None:
+        try:
+            if not self.config.send_video:
+                return
+            self._enqueue_video_frame(frame)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.debug("OpenAI video_receive failed: %s", e)
+
+    def update_latest_frame(self, frame: Any) -> Any:
+        if frame is not None:
+            self._enqueue_video_frame(np.asarray(frame))
+        return frame
 
     async def video_emit(self) -> Any:
         return None
@@ -316,3 +392,17 @@ class OpenAIRealtimeHandler(AsyncAudioVideoStreamHandler):
         except Exception as e:
             logger.warning(f"Failed to encode frame: {e}")
             return None
+
+    async def shutdown(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if OpenAIRealtimeHandler._active_instance is self:
+            OpenAIRealtimeHandler._active_instance = None
+        if self._video_send_task and not self._video_send_task.done():
+            self._video_send_task.cancel()
+            try:
+                await self._video_send_task
+            except BaseException:
+                pass
+        await self.client.close()

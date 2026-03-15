@@ -120,14 +120,21 @@ class GatewayBase(Generic[RouteT]):
     ) -> Signal:
         meta_payload = dict(meta or {})
         user_id = self._resolve_session_user_id(route)
+        session_id = self._resolve_session_id(route, user_id=user_id)
         if user_id:
             meta_payload.setdefault("user_id", user_id)
+        if session_id:
+            meta_payload.setdefault("session_id", session_id)
+        source_event_id = meta_payload.get("source_event_id")
+        if source_event_id and "idempotency_key" not in meta_payload:
+            key_parts = [str(source or "event"), str(session_id or "shared"), str(source_event_id)]
+            meta_payload["idempotency_key"] = ":".join(key_parts)
 
         if meta_payload:
             data = {"data": payload, "meta": meta_payload}
         else:
             data = payload
-        return Signal(source=source, data=data)
+        return Signal(source=source, data=data, meta=dict(meta_payload))
 
     async def _handle_perception_output(self, event: Any) -> None:
         payload = event.payload
@@ -260,6 +267,9 @@ class GatewayBase(Generic[RouteT]):
     def route_user_id(self, route: Optional[RouteT]) -> Optional[str]:
         return None
 
+    def route_session_id(self, route: Optional[RouteT]) -> Optional[str]:
+        return None
+
     @staticmethod
     def _extract_source(payload: Any, data: Dict[str, Any]) -> str:
         if isinstance(payload, Signal):
@@ -304,6 +314,29 @@ class GatewayBase(Generic[RouteT]):
                 return f"{base}@{route_user}"
             return base
         return base
+
+    def _resolve_session_id(self, route: Optional[RouteT], *, user_id: str) -> str:
+        route_session = (self.route_session_id(route) or "").strip()
+        if route_session:
+            return route_session
+
+        scope = (self.session_scope or "shared").lower()
+        channel = (self.channel_id or "").strip()
+        route_user = (self.route_user_id(route) or "").strip()
+
+        if scope == "per_channel":
+            return channel or user_id or "shared"
+        if scope == "per_user":
+            return route_user or user_id or "shared"
+        if scope == "per_channel_user":
+            if channel and route_user:
+                return f"{channel}:{route_user}"
+            if channel:
+                return channel
+            if route_user:
+                return route_user
+            return user_id or "shared"
+        return user_id or "shared"
 
     async def _remember_route(self, trace_id: str, route: RouteT) -> None:
         async with self._routes_lock:

@@ -87,22 +87,22 @@ class ToolRegistry:
             module_names.append(module_name)
 
         for module_name in module_names:
-            try:
-                # Import the module
-                full_module = f"aeiva.tool.{tier_name}.{module_name}"
-                module = importlib.import_module(full_module)
+            full_module = f"aeiva.tool.{tier_name}.{module_name}"
+            self._discover_module(full_module, tier_name)
 
-                # Find decorated functions
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
-                    if callable(attr) and hasattr(attr, "metadata"):
-                        metadata: ToolMetadata = attr.metadata
-                        self._tools[metadata.name] = metadata
-                        self._tool_tiers[metadata.name] = tier_name
-                        logger.debug(f"Registered tool: {metadata.name} from {tier_name}/")
-
-            except Exception as e:
-                logger.warning(f"Failed to load tool module {tier_name}/{module_name}: {e}")
+    def _discover_module(self, full_module: str, tier_name: str) -> None:
+        """Import one module and register decorated tools from it."""
+        try:
+            module = importlib.import_module(full_module)
+            for attr_name in dir(module):
+                attr = getattr(module, attr_name)
+                if callable(attr) and hasattr(attr, "metadata"):
+                    metadata: ToolMetadata = attr.metadata
+                    self._tools[metadata.name] = metadata
+                    self._tool_tiers[metadata.name] = tier_name
+                    logger.debug("Registered tool: %s from %s", metadata.name, full_module)
+        except Exception as e:
+            logger.warning("Failed to load tool module %s: %s", full_module, e)
 
     def register(self, func: Callable) -> None:
         """

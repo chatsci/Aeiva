@@ -14,11 +14,13 @@ Requires gradio:
 
 import os
 import sys
+import inspect
 import threading
 import asyncio
 import queue
 import logging
 import time
+from contextlib import nullcontext
 from datetime import datetime
 from uuid import uuid4
 from typing import Any, Callable, Dict, Iterator, Optional
@@ -36,7 +38,6 @@ from aeiva.command.gateway_registry import GatewayRegistry
 from aeiva.interface.gateway_base import ResponseQueueGateway
 from aeiva.interface.progress_hints import build_progress_hint
 from aeiva.event.event_names import EventNames
-from aeiva.metaui.event_bridge import start_metaui_event_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ PACKAGE_ROOT = get_package_root()
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / 'configs' / 'agent_config.yaml'
 DEFAULT_PROGRESS_HINT_INTERVAL = 4.0
 DEFAULT_PROGRESS_POLL_TIMEOUT = 0.8
+DEFAULT_PROGRESS_INITIAL_HINT_DELAY = 1.0
 
 
 def _build_progress_hint(*, elapsed_seconds: float, hint_index: int) -> str:
@@ -90,6 +92,54 @@ def _iter_trace_response_events(
         except queue.Empty:
             now = now_fn()
             if now >= next_hint_at:
+                yield {
+                    "type": "hint",
+                    "payload": _build_progress_hint(
+                        elapsed_seconds=now - start_at,
+                        hint_index=hint_index,
+                    ),
+                }
+                hint_index += 1
+                next_hint_at = now + max(0.1, float(hint_interval))
+
+
+def _iter_trace_stream_events(
+    *,
+    queue_gateway: Any,
+    trace_id: Optional[str],
+    timeout: float,
+    stream_end_marker: str = "<END_OF_RESPONSE>",
+    poll_timeout: float = DEFAULT_PROGRESS_POLL_TIMEOUT,
+    hint_interval: float = DEFAULT_PROGRESS_HINT_INTERVAL,
+    initial_hint_delay: float = DEFAULT_PROGRESS_INITIAL_HINT_DELAY,
+    now_fn: Callable[[], float] = time.time,
+) -> Iterator[Dict[str, Any]]:
+    start_at = now_fn()
+    deadline = start_at + max(0.0, float(timeout))
+    first_hint_delay = max(0.1, min(float(initial_hint_delay), float(hint_interval)))
+    next_hint_at = start_at + first_hint_delay
+    hint_index = 0
+    got_chunk = False
+
+    while True:
+        now = now_fn()
+        remaining = deadline - now
+        if remaining <= 0:
+            yield {"type": "timeout"}
+            return
+        try:
+            payload = queue_gateway.get_for_trace(
+                trace_id,
+                min(max(0.05, float(poll_timeout)), remaining),
+            )
+            if payload == stream_end_marker:
+                yield {"type": "end"}
+                return
+            got_chunk = True
+            yield {"type": "chunk", "payload": payload}
+        except queue.Empty:
+            now = now_fn()
+            if not got_chunk and now >= next_hint_at:
                 yield {
                     "type": "hint",
                     "payload": _build_progress_hint(
@@ -173,6 +223,17 @@ def run(config, verbose):
         log=log,
     )
 
+    from aeiva.liferpg.panel import (
+        is_liferpg_separate_page_enabled,
+        launch_liferpg_standalone_app,
+    )
+    if is_liferpg_separate_page_enabled(config_dict):
+        log.info("Launching LifeRPG standalone UI...")
+        launch_liferpg_standalone_app(
+            config_dict=config_dict,
+            prevent_thread_lock=True,
+        )
+
     log.info("Launching Gradio interface...")
     demo.launch(share=gradio_share)
 
@@ -215,17 +276,14 @@ def build_gradio_chat_ui(
     import numpy as np
     import soundfile as sf
     from PIL import Image
+    from aeiva.liferpg.panel import (
+        build_liferpg_panel,
+        get_liferpg_page_url,
+        is_liferpg_separate_page_enabled,
+    )
 
     raw_memory_cfg = config_dict.get("raw_memory_config") or {}
     raw_user_id = str(raw_memory_cfg.get("user_id", "user"))
-    metaui_event_bridge = start_metaui_event_bridge(
-        config_dict=config_dict,
-        queue_gateway=queue_gateway,
-        agent_loop_getter=lambda: getattr(getattr(agent, "event_bus", None), "loop", None),
-        route_token=route_token,
-    )
-    if metaui_event_bridge is not None:
-        log.info("MetaUI event bridge started for Gradio gateway.")
 
     def _emit_raw_memory(event_name, payload):
         if agent is None or agent.event_bus.loop is None:
@@ -391,47 +449,33 @@ def build_gradio_chat_ui(
                 )
             )
             if stream:
-                start_at = time.time()
-                next_hint_at = start_at + max(0.1, hint_interval)
-                hint_index = 0
-                got_chunk = False
-                # Emit immediate status so long tool/action phases don't look frozen.
-                hint_text = _build_progress_hint(elapsed_seconds=0.0, hint_index=hint_index)
-                hint_index += 1
-                new_history = list(history)
-                new_history[-1] = {"role": "assistant", "content": hint_text}
-                yield new_history, '', session_id
-                while True:
-                    now = time.time()
-                    remaining = (start_at + resp_timeout) - now
-                    if remaining <= 0:
+                for event in _iter_trace_stream_events(
+                    queue_gateway=queue_gateway,
+                    trace_id=trace_id,
+                    timeout=resp_timeout,
+                    poll_timeout=poll_timeout,
+                    hint_interval=hint_interval,
+                ):
+                    event_type = event.get("type")
+                    if event_type == "hint":
+                        new_history = list(history)
+                        new_history[-1] = {"role": "assistant", "content": str(event.get("payload") or "")}
+                        yield new_history, '', session_id
+                        continue
+                    if event_type == "chunk":
+                        assistant_message += str(event.get("payload") or "")
+                        new_history = list(history)
+                        new_history[-1] = {"role": "assistant", "content": assistant_message}
+                        yield new_history, '', session_id
+                        continue
+                    if event_type == "end":
+                        break
+                    if event_type == "timeout":
                         log.warning("Timeout: No response received from Agent.")
                         new_history = list(history)
                         new_history[-1] = {"role": "assistant", "content": "I'm sorry, I didn't receive a response in time."}
                         yield new_history, '', session_id
                         break
-                    try:
-                        chunk = queue_gateway.get_for_trace(trace_id, min(poll_timeout, remaining))
-                        if chunk == "<END_OF_RESPONSE>":
-                            break
-                        got_chunk = True
-                        next_hint_at = time.time() + max(0.1, hint_interval)
-                        assistant_message += str(chunk)
-                        new_history = list(history)
-                        new_history[-1] = {"role": "assistant", "content": assistant_message}
-                        yield new_history, '', session_id
-                    except queue.Empty:
-                        now = time.time()
-                        if now >= next_hint_at and not got_chunk:
-                            hint_text = _build_progress_hint(
-                                elapsed_seconds=now - start_at,
-                                hint_index=hint_index,
-                            )
-                            hint_index += 1
-                            next_hint_at = now + max(0.1, hint_interval)
-                            new_history = list(history)
-                            new_history[-1] = {"role": "assistant", "content": hint_text}
-                            yield new_history, '', session_id
             else:
                 for event in _iter_trace_response_events(
                     queue_gateway=queue_gateway,
@@ -465,11 +509,41 @@ def build_gradio_chat_ui(
 
     # Build the Gradio interface
 
+    liferpg_url = get_liferpg_page_url(config_dict)
+    embed_liferpg_panel = not is_liferpg_separate_page_enabled(config_dict)
+
     with gr.Blocks(title="AEIVA Chat", css="""
         #chatbot { flex-grow: 1; overflow-y: auto; }
         .action-btn { min-width: 70px !important; }
         /* Keep the mic recorder compact */
         #audio-recorder { max-height: 80px; overflow: hidden; }
+        .aeiva-link-card {
+            margin-top: 14px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(25, 74, 66, 0.12);
+            background: linear-gradient(180deg, rgba(245, 249, 247, 0.98), rgba(236, 243, 239, 0.98));
+        }
+        .aeiva-link-card h4 {
+            margin: 0;
+            font-size: 0.96rem;
+        }
+        .aeiva-link-card p {
+            margin: 8px 0 0;
+            color: #52606d;
+            line-height: 1.55;
+            font-size: 0.92rem;
+        }
+        .aeiva-link-card a {
+            display: inline-flex;
+            margin-top: 12px;
+            padding: 9px 12px;
+            border-radius: 999px;
+            background: #143e38;
+            color: #f6f3ed;
+            text-decoration: none;
+            font-size: 0.92rem;
+        }
     """) as demo:
         # Compact header
         gr.HTML(
@@ -492,67 +566,84 @@ def build_gradio_chat_ui(
 
         session_state = gr.State(value="")
 
-        with gr.Row():
-            # ---- Main chat area (dominant) ----
-            with gr.Column(scale=3, min_width=400):
-                chatbot = gr.Chatbot(
-                    [], type="messages", elem_id="chatbot", height=550,
-                )
-
-                # Input row: textbox + upload button
+        has_tabs = hasattr(gr, "Tabs") and hasattr(gr, "Tab")
+        tabs_ctx = gr.Tabs() if has_tabs and embed_liferpg_panel else nullcontext()
+        with tabs_ctx:
+            chat_tab_ctx = gr.Tab("Chat") if has_tabs and embed_liferpg_panel else nullcontext()
+            with chat_tab_ctx:
                 with gr.Row():
-                    txt = gr.Textbox(
-                        show_label=False,
-                        placeholder="Type a message and press Enter ...",
-                        lines=1,
-                        scale=5,
-                    )
-                    btn = gr.UploadButton(
-                        "Upload", file_types=["image", "video", "audio"],
-                        scale=1,
-                    )
+                    # ---- Main chat area (dominant) ----
+                    with gr.Column(scale=3, min_width=400):
+                        chatbot = gr.Chatbot(
+                            [], type="messages", elem_id="chatbot", height=550,
+                        )
 
-                # Action buttons
-                with gr.Row():
-                    clear_history_btn = gr.Button("Clear History", size="sm", elem_classes=["action-btn"])
-                    new_conv_btn = gr.Button("New Conversation", size="sm", elem_classes=["action-btn"])
-                    del_last_turn_btn = gr.Button("Remove Last Turn", size="sm", elem_classes=["action-btn"])
-                    gr.Button("Regenerate", size="sm", elem_classes=["action-btn"])
+                        # Input row: textbox + upload button
+                        with gr.Row():
+                            txt = gr.Textbox(
+                                show_label=False,
+                                placeholder="Type a message and press Enter ...",
+                                lines=1,
+                                scale=5,
+                            )
+                            btn = gr.UploadButton(
+                                "Upload", file_types=["image", "video", "audio"],
+                                scale=1,
+                            )
 
-            # ---- Sidebar: settings & media (collapsible) ----
-            with gr.Column(scale=1, min_width=250):
-                with gr.Accordion("Parameters", open=False):
-                    gr.Slider(
-                        minimum=0, maximum=1.0, value=0.95, step=0.05,
-                        interactive=True, label="Top-p",
-                    )
-                    gr.Slider(
-                        minimum=0.1, maximum=2.0, value=1.0, step=0.1,
-                        interactive=True, label="Temperature",
-                    )
-                    gr.Slider(
-                        minimum=0, maximum=512, value=512, step=8,
-                        interactive=True, label="Max Generation Tokens",
-                    )
-                    gr.Slider(
-                        minimum=0, maximum=4096, value=2048, step=128,
-                        interactive=True, label="Max History Tokens",
-                    )
+                        # Action buttons
+                        with gr.Row():
+                            clear_history_btn = gr.Button("Clear History", size="sm", elem_classes=["action-btn"])
+                            new_conv_btn = gr.Button("New Conversation", size="sm", elem_classes=["action-btn"])
+                            del_last_turn_btn = gr.Button("Remove Last Turn", size="sm", elem_classes=["action-btn"])
+                            gr.Button("Regenerate", size="sm", elem_classes=["action-btn"])
 
-                with gr.Accordion("Media Uploads", open=False):
-                    imagebox = gr.Image(type="pil", label="Image", height=120)
-                    videobox = gr.File(label="Video File", file_types=["video"], height=60)
-                    record_videobox = gr.Video(label="Record Video", height=120)
-                    # Audio upload as a plain file picker (compact)
-                    audiobox = gr.File(label="Audio File", file_types=["audio"], height=60)
-                    # Mic recorder (constrained by CSS above)
-                    record_audiobox = gr.Audio(
-                        label="Record Audio",
-                        sources=["microphone"],
-                        type="numpy",
-                        elem_id="audio-recorder",
-                    )
-                    clear_media_btn = gr.Button("Clear Media", variant="secondary", size="sm")
+                    # ---- Sidebar: settings & media (collapsible) ----
+                    with gr.Column(scale=1, min_width=250):
+                        with gr.Accordion("Parameters", open=False):
+                            gr.Slider(
+                                minimum=0, maximum=1.0, value=0.95, step=0.05,
+                                interactive=True, label="Top-p",
+                            )
+                            gr.Slider(
+                                minimum=0.1, maximum=2.0, value=1.0, step=0.1,
+                                interactive=True, label="Temperature",
+                            )
+                            gr.Slider(
+                                minimum=0, maximum=512, value=512, step=8,
+                                interactive=True, label="Max Generation Tokens",
+                            )
+                            gr.Slider(
+                                minimum=0, maximum=4096, value=2048, step=128,
+                                interactive=True, label="Max History Tokens",
+                            )
+
+                        with gr.Accordion("Media Uploads", open=False):
+                            imagebox = gr.Image(type="pil", label="Image", height=120)
+                            videobox = gr.File(label="Video File", file_types=["video"], height=60)
+                            record_videobox = gr.Video(label="Record Video", height=120)
+                            # Audio upload as a plain file picker (compact)
+                            audiobox = gr.File(label="Audio File", file_types=["audio"], height=60)
+                            # Mic recorder (constrained by CSS above)
+                            record_audiobox = gr.Audio(
+                                label="Record Audio",
+                                sources=["microphone"],
+                                type="numpy",
+                                elem_id="audio-recorder",
+                            )
+                            clear_media_btn = gr.Button("Clear Media", variant="secondary", size="sm")
+
+                        if liferpg_url:
+                            gr.HTML(
+                                "<div class='aeiva-link-card'>"
+                                "<h4>LifeRPG Dashboard</h4>"
+                                "<p>Open the standalone profile and growth panel in a separate page.</p>"
+                                f"<a href='{liferpg_url}' target='_blank' rel='noopener'>Open Dashboard</a>"
+                                "</div>"
+                            )
+
+            if has_tabs and embed_liferpg_panel:
+                build_liferpg_panel(gr=gr, config_dict=config_dict)
 
         # ---- Wire up interactions ----
 
@@ -586,13 +677,16 @@ def build_gradio_chat_ui(
 
         if hasattr(demo, "unload"):
             def _on_unload(session_id):
-                if metaui_event_bridge is not None:
-                    metaui_event_bridge.stop(timeout=1.5)
                 return _end_session(session_id)
-
-            demo.unload(
-                _on_unload, inputs=session_state,
-                outputs=[chatbot, txt, session_state], queue=False,
-            )
+            # Gradio API changed: older versions accepted inputs/outputs/queue
+            # while newer versions only accept a no-arg callback.
+            unload_sig = inspect.signature(demo.unload)
+            if "inputs" in unload_sig.parameters:
+                demo.unload(
+                    _on_unload, inputs=session_state,
+                    outputs=[chatbot, txt, session_state], queue=False,
+                )
+            else:
+                demo.unload(lambda: _end_session(""))
 
     return demo

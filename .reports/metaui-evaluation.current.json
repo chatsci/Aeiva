@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-02-13T23:17:53.084730+00:00",
+  "replay_mode": "auto",
+  "python_executable": "/Users/bangliu/Documents/ChatSCI/Aeiva/.venv/bin/python3",
+  "success": false,
+  "passed_steps": 1,
+  "failed_steps": 1,
+  "skipped_steps": 0,
+  "steps": [
+    {
+      "name": "metaui_pytest",
+      "status": "passed",
+      "duration_seconds": 28.22501887497492,
+      "return_code": 0,
+      "command": [
+        "/Users/bangliu/Documents/ChatSCI/Aeiva/.venv/bin/python3",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/metaui",
+        "tests/testing/test_dialogue_replay.py",
+        "tests/command/test_dialogue_replay_command.py",
+        "tests/command/test_gradio_progress_hints.py"
+      ],
+      "stdout_tail": "........................................................................ [ 24%]\n........................................................................ [ 48%]\n........................................................................ [ 73%]\n........................................................................ [ 97%]\n......                                                                   [100%]\n294 passed in 27.97s\n",
+      "stderr_tail": "",
+      "reason": null
+    },
+    {
+      "name": "metaui_live_replay",
+      "status": "failed",
+      "duration_seconds": 240.011489167111,
+      "return_code": -1,
+      "command": [
+        "/Users/bangliu/Documents/ChatSCI/Aeiva/.venv/bin/python3",
+        "-m",
+        "aeiva.command.aeiva_dialogue_replay",
+        "--config",
+        "/var/folders/v4/zsxty1fj1gzcn108gpwkgj0r0000gn/T/aeiva-metaui-replay-5x27phc7.json",
+        "--scenarios",
+        "/Users/bangliu/Documents/ChatSCI/Aeiva/docs/examples/dialogue_replay/metaui_dialogue_suite.yaml",
+        "--output-json",
+        ".reports/metaui-evaluation.current.replay.json",
+        "--output-md",
+        ".reports/metaui-evaluation.current.replay.md",
+        "--fail-fast"
+      ],
+      "stdout_tail": "Loading configuration from /var/folders/v4/zsxty1fj1gzcn108gpwkgj0r0000gn/T/aeiva-metaui-replay-5x27phc7.json\nLoading replay scenarios from /Users/bangliu/Documents/ChatSCI/Aeiva/docs/examples/dialogue_replay/metaui_dialogue_suite.yaml\n",
+      "stderr_tail": "",
+      "reason": "timeout>240.0s"
+    }
+  ]
+}

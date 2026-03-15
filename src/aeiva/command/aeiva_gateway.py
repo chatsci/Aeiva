@@ -41,8 +41,6 @@ DEFAULT_CONFIG_PATH = _json_config if _json_config.exists() else _yaml_config
 LOGS_DIR = get_log_dir()
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_HOST_DAEMON_TOKEN_ENV = "AEIVA_HOST_DAEMON_TOKEN"
-DEFAULT_METAUI_TOKEN_ENV = "AEIVA_METAUI_TOKEN"
-DEFAULT_METAUI_DESKTOP_PENDING_ENV = "AEIVA_METAUI_DESKTOP_PENDING_UNTIL_MONO"
 
 
 def _suppress_gradio_routes_print() -> None:
@@ -53,38 +51,67 @@ def _suppress_gradio_routes_print() -> None:
         pass
 
 
-def _try_start_metaui_event_bridge(
-    *,
-    logger: Any,
-    config_dict: Dict[str, Any],
-    queue_gateway: Any,
-    agent_loop_getter: Any,
-    route_token: Optional[str],
-) -> Optional[Any]:
-    try:
-        from aeiva.metaui.event_bridge import start_metaui_event_bridge
-        bridge = start_metaui_event_bridge(
-            config_dict=config_dict,
-            queue_gateway=queue_gateway,
-            agent_loop_getter=agent_loop_getter,
-            route_token=route_token,
-        )
-        if bridge is not None:
-            logger.info(
-                "MetaUI event bridge started (route=%s).",
-                route_token or "default",
-            )
-        return bridge
-    except Exception as exc:
-        logger.warning("Failed to start MetaUI event bridge: %s", exc)
-        return None
-
-
 def _realtime_dependencies_available() -> bool:
     """
     Turn-based realtime gateway requires FastRTC at runtime.
     """
     return importlib.util.find_spec("fastrtc") is not None
+
+
+def _launch_live_realtime_gateway_ui(config_dict: Dict[str, Any], logger: Any) -> None:
+    realtime_cfg = config_dict.get("realtime_config") or {}
+    provider = str(realtime_cfg.get("provider") or "openai").strip().lower() or "openai"
+    from aeiva.command.aeiva_chat_realtime import launch_live_realtime_ui
+
+    launch_live_realtime_ui(
+        config_dict=config_dict,
+        log=logger,
+        provider=provider,
+        prevent_thread_lock=True,
+    )
+
+
+def _launch_liferpg_gateway_ui(config_dict: Dict[str, Any], logger: Any) -> None:
+    from aeiva.liferpg.panel import launch_liferpg_standalone_app
+
+    launch_liferpg_standalone_app(
+        config_dict=config_dict,
+        prevent_thread_lock=True,
+    )
+    logger.info("LifeRPG standalone UI launched.")
+
+
+def _should_skip_gradio_channel(
+    *,
+    realtime_cfg: Dict[str, Any],
+    gradio_cfg: Dict[str, Any],
+    realtime_mode: str,
+    logger: Any,
+) -> bool:
+    """
+    Prevent duplicate Gradio web UIs in the same gateway process.
+
+    In turn-based mode, realtime already launches a full Gradio app
+    (chat + multimodal + LifeRPG tab). Launching the legacy gradio channel
+    alongside it creates two competing web UIs and frequent port confusion.
+    """
+    if not gradio_cfg.get("enabled"):
+        return False
+    if not realtime_cfg.get("enabled"):
+        return False
+    if str(realtime_mode or "").strip().lower() != "turn_based":
+        return False
+
+    logger.warning(
+        "Both realtime and gradio channels are enabled. "
+        "Skipping gradio channel because turn-based realtime already provides "
+        "the unified web UI (chat + LifeRPG)."
+    )
+    return True
+
+
+async def _wait_for_stop_event(stop_event: asyncio.Event) -> None:
+    await stop_event.wait()
 
 
 def _as_non_empty_str(value: Any) -> Optional[str]:
@@ -257,27 +284,6 @@ def _resolve_autostart_daemon_port(
     return new_port
 
 
-def _build_metaui_ws_url(*, host: str, port: int) -> str:
-    normalized_host = host.strip() or "127.0.0.1"
-    if ":" in normalized_host and not normalized_host.startswith("["):
-        normalized_host = f"[{normalized_host}]"
-    return f"ws://{normalized_host}:{int(port)}/metaui"
-
-
-def _resolve_metaui_token(
-    metaui_cfg: Dict[str, Any],
-    *,
-    startup_env: Dict[str, str],
-) -> tuple[Optional[str], str]:
-    token = _as_non_empty_str(metaui_cfg.get("token"))
-    token_env_var = _as_non_empty_str(metaui_cfg.get("token_env_var")) or DEFAULT_METAUI_TOKEN_ENV
-    if token is None:
-        token = _as_non_empty_str(startup_env.get(token_env_var))
-    if token is None:
-        token = _as_non_empty_str(os.environ.get(token_env_var))
-    return token, token_env_var
-
-
 @dataclass
 class UvicornHandle:
     server: Any
@@ -342,74 +348,6 @@ def _try_start_host(logger, config_dict, log_dir: Path, config_path: Optional[Pa
         return None
 
 
-def _try_start_metaui_desktop(logger, config_dict, log_dir: Path):
-    metaui_cfg = config_dict.get("metaui_config") or {}
-    if not metaui_cfg.get("enabled"):
-        return None
-
-    auto_start_desktop_raw = metaui_cfg.get("auto_start_desktop")
-    auto_start_desktop = False if auto_start_desktop_raw is None else bool(auto_start_desktop_raw)
-    if not auto_start_desktop:
-        return None
-
-    host = _as_non_empty_str(metaui_cfg.get("host")) or "127.0.0.1"
-    try:
-        port = int(metaui_cfg.get("port") or 8765)
-    except Exception:
-        logger.warning("Invalid metaui_config.port '%s'; fallback to 8765.", metaui_cfg.get("port"))
-        port = 8765
-    if port <= 0:
-        logger.warning("Invalid metaui_config.port '%s'; fallback to 8765.", metaui_cfg.get("port"))
-        port = 8765
-
-    startup_env = os.environ.copy()
-    token, token_env_var = _resolve_metaui_token(metaui_cfg, startup_env=startup_env)
-    if token:
-        startup_env[token_env_var] = token
-
-    try:
-        from aeiva.metaui.desktop_runtime import resolve_desktop_python
-
-        python_exec = resolve_desktop_python(current_executable=sys.executable)
-    except Exception as exc:
-        logger.warning("Failed to resolve MetaUI desktop interpreter: %s", exc)
-        return None
-    if not python_exec:
-        logger.warning(
-            "MetaUI desktop auto-start skipped: no Python runtime with PySide6 + QtWebEngine found."
-        )
-        return None
-
-    ws_url = _build_metaui_ws_url(host=host, port=port)
-    cmd = [python_exec, "-m", "aeiva.metaui.desktop_client", "--ws-url", ws_url]
-    if token:
-        cmd.extend(["--token", token])
-
-    log_path = metaui_cfg.get("desktop_log_file")
-    if log_path:
-        log_path = Path(os.path.expanduser(str(log_path)))
-    else:
-        log_path = log_dir / "aeiva-metaui-desktop.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        log_handle = open(log_path, "a", encoding="utf-8")
-        process = subprocess.Popen(
-            cmd,
-            stdout=log_handle,
-            stderr=log_handle,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-            env=startup_env,
-        )
-        os.environ[DEFAULT_METAUI_DESKTOP_PENDING_ENV] = f"{(time.monotonic() + 45.0):.6f}"
-        logger.info("MetaUI desktop started (pid=%s, ws=%s, log=%s).", process.pid, ws_url, log_path)
-        return process
-    except Exception as exc:
-        logger.warning("Failed to start MetaUI desktop: %s", exc)
-        return None
-
-
 def _try_stop_host(logger, host_process):
     if host_process is None:
         return
@@ -429,30 +367,6 @@ def _try_stop_host(logger, host_process):
             logger.warning("Failed to kill host daemon: %s", exc)
     except Exception as exc:
         logger.warning("Host daemon stop failed: %s", exc)
-
-
-def _try_stop_metaui_desktop(logger, metaui_process):
-    if metaui_process is None:
-        return
-    try:
-        if metaui_process.poll() is None:
-            metaui_process.terminate()
-            metaui_process.wait(timeout=10)
-            logger.info("MetaUI desktop stopped.")
-            os.environ.pop(DEFAULT_METAUI_DESKTOP_PENDING_ENV, None)
-        else:
-            logger.info("MetaUI desktop already stopped.")
-            os.environ.pop(DEFAULT_METAUI_DESKTOP_PENDING_ENV, None)
-    except subprocess.TimeoutExpired:
-        logger.warning("MetaUI desktop did not terminate in time; killing.")
-        try:
-            metaui_process.kill()
-            metaui_process.wait(timeout=5)
-            os.environ.pop(DEFAULT_METAUI_DESKTOP_PENDING_ENV, None)
-        except Exception as exc:
-            logger.warning("Failed to kill MetaUI desktop: %s", exc)
-    except Exception as exc:
-        logger.warning("MetaUI desktop stop failed: %s", exc)
 
 
 @click.command(name="aeiva-gateway")
@@ -494,16 +408,15 @@ def run(config, verbose):
     maid_cfg = registry.resolve_channel_config("maid")
     gradio_cfg = registry.resolve_channel_config("gradio")
     realtime_mode = (config_dict.get("realtime_config") or {}).get("mode", "turn_based")
+    from aeiva.liferpg.panel import is_liferpg_separate_page_enabled
+    liferpg_separate_page = is_liferpg_separate_page_enabled(config_dict)
 
     host_process = _try_start_host(logger, config_dict, LOGS_DIR, config_path)
-    metaui_desktop_process = _try_start_metaui_desktop(logger, config_dict, LOGS_DIR)
-
     gateways: List[Any] = []
     runtime_tasks: List[asyncio.Task] = []
     gateway_tasks: List[asyncio.Task] = []
     uvicorn_handles: List[UvicornHandle] = []
     unity_processes: List[Any] = []
-    metaui_event_bridges: List[Any] = []
     stop_event = asyncio.Event()
 
     def _handle_sig(signum, frame):
@@ -529,24 +442,38 @@ def run(config, verbose):
             pending_gateways.append(("whatsapp", ctx, whatsapp_cfg))
 
         if realtime_cfg.get("enabled"):
-            if realtime_mode != "turn_based":
-                logger.warning("Realtime mode '%s' not supported in unified gateway. Skipping.", realtime_mode)
-            elif not _realtime_dependencies_available():
-                logger.warning(
-                    "Realtime channel enabled but FastRTC is unavailable. "
-                    "Skipping realtime gateway. Install with: `uv sync --extra realtime`."
-                )
+            if realtime_mode == "turn_based":
+                if not _realtime_dependencies_available():
+                    logger.warning(
+                        "Realtime channel enabled but FastRTC is unavailable. "
+                        "Skipping realtime gateway. Install with: `uv sync --extra realtime`."
+                    )
+                else:
+                    ctx = await registry.get_context_async("realtime", realtime_cfg)
+                    pending_gateways.append(("realtime", ctx, realtime_cfg))
+            elif realtime_mode == "live":
+                pending_gateways.append(("realtime_live", None, realtime_cfg))
             else:
-                ctx = await registry.get_context_async("realtime", realtime_cfg)
-                pending_gateways.append(("realtime", ctx, realtime_cfg))
+                logger.warning(
+                    "Realtime mode '%s' not supported in unified gateway. Skipping.",
+                    realtime_mode,
+                )
 
         if maid_cfg.get("enabled"):
             ctx = await registry.get_context_async("maid", maid_cfg)
             pending_gateways.append(("maid", ctx, maid_cfg))
 
-        if gradio_cfg.get("enabled"):
+        if gradio_cfg.get("enabled") and not _should_skip_gradio_channel(
+            realtime_cfg=realtime_cfg,
+            gradio_cfg=gradio_cfg,
+            realtime_mode=realtime_mode,
+            logger=logger,
+        ):
             ctx = await registry.get_context_async("gradio", gradio_cfg)
             pending_gateways.append(("gradio", ctx, gradio_cfg))
+
+        if liferpg_separate_page:
+            pending_gateways.append(("liferpg", None, {}))
 
         for ctx in registry.contexts.values():
             runtime_tasks.append(asyncio.create_task(ctx.runtime.run()))
@@ -579,20 +506,6 @@ def run(config, verbose):
                 gateways.append(terminal_gateway)
                 gateway_tasks.append(asyncio.create_task(terminal_gateway.run()))
                 logger.info("Terminal gateway started (scope=%s).", cfg.get("gateway_scope"))
-                if not gradio_cfg.get("enabled") and not realtime_cfg.get("enabled"):
-                    bridge = _try_start_metaui_event_bridge(
-                        logger=logger,
-                        config_dict=config_dict,
-                        queue_gateway=terminal_gateway,
-                        agent_loop_getter=lambda _agent=ctx.agent: getattr(
-                            getattr(_agent, "event_bus", None),
-                            "loop",
-                            None,
-                        ),
-                        route_token="terminal",
-                    )
-                    if bridge is not None:
-                        metaui_event_bridges.append(bridge)
             elif name == "whatsapp":
                 try:
                     from aeiva.interface.whatsapp_gateway import WhatsAppGateway
@@ -609,7 +522,10 @@ def run(config, verbose):
                 gateway_tasks.append(asyncio.create_task(wa_gateway.run(host=host, port=port)))
                 logger.info("WhatsApp gateway started (scope=%s).", cfg.get("gateway_scope"))
             elif name == "realtime":
-                from aeiva.command.aeiva_chat_realtime import build_turn_based_realtime_ui
+                from aeiva.command.aeiva_chat_realtime import (
+                    build_turn_based_realtime_ui,
+                    launch_turn_based_demo,
+                )
                 from aeiva.interface.gateway_base import ResponseQueueGateway
                 import queue as sync_queue
 
@@ -634,23 +550,21 @@ def run(config, verbose):
                     log=logger,
                     route_token=route_token,
                 )
-                if not gradio_cfg.get("enabled"):
-                    bridge = _try_start_metaui_event_bridge(
-                        logger=logger,
-                        config_dict=config_dict,
-                        queue_gateway=queue_gateway,
-                        agent_loop_getter=lambda _agent=ctx.agent: getattr(
-                            getattr(_agent, "event_bus", None),
-                            "loop",
-                            None,
-                        ),
-                        route_token=route_token,
-                    )
-                    if bridge is not None:
-                        metaui_event_bridges.append(bridge)
                 _suppress_gradio_routes_print()
-                demo.launch(share=True, prevent_thread_lock=True)
+                launch_turn_based_demo(
+                    demo=demo,
+                    realtime_cfg=(config_dict.get("realtime_config") or {}),
+                    log=logger,
+                    prevent_thread_lock=True,
+                )
                 logger.info("Realtime Gradio UI launched (scope=%s).", cfg.get("gateway_scope"))
+            elif name == "realtime_live":
+                _launch_live_realtime_gateway_ui(config_dict, logger)
+                gateway_tasks.append(asyncio.create_task(_wait_for_stop_event(stop_event)))
+                logger.info("Realtime live UI launched (scope=%s).", cfg.get("gateway_scope"))
+            elif name == "liferpg":
+                _launch_liferpg_gateway_ui(config_dict, logger)
+                gateway_tasks.append(asyncio.create_task(_wait_for_stop_event(stop_event)))
             elif name == "maid":
                 from aeiva.command.maid_chat import build_maid_app, start_unity_app, stop_unity_app
                 import uvicorn
@@ -732,11 +646,6 @@ def run(config, verbose):
             ctx.request_stop()
         for gateway in gateways:
             gateway.request_stop()
-        for bridge in metaui_event_bridges:
-            try:
-                bridge.stop(timeout=1.5)
-            except Exception:
-                pass
         for handle in uvicorn_handles:
             handle.request_stop()
         if unity_processes:
@@ -752,12 +661,6 @@ def run(config, verbose):
     try:
         asyncio.run(_main())
     finally:
-        try:
-            from aeiva.tool.meta.metaui import _cleanup_launched_desktops
-            _cleanup_launched_desktops()
-        except Exception:
-            pass
-        _try_stop_metaui_desktop(logger, metaui_desktop_process)
         _try_stop_host(logger, host_process)
         logger.info("Gateway shutdown complete.")
 

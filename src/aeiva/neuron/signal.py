@@ -18,7 +18,7 @@ Example:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 from uuid import uuid4
 import time
 
@@ -41,7 +41,8 @@ class Signal:
         parent_id: trace_id of the signal that spawned this one (if any)
         hop_count: How many neurons this signal has passed through
         priority: Higher values indicate more urgent signals
-        version: Schema version for forward compatibility
+    version: Schema version for forward compatibility
+        meta: Optional structured metadata propagated across child signals
     """
 
     source: str
@@ -52,6 +53,7 @@ class Signal:
     hop_count: int = 0
     priority: int = 0
     version: int = 1
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def child(self, source: str, data: Any) -> "Signal":
         """
@@ -79,6 +81,7 @@ class Signal:
             parent_id=self.trace_id,
             hop_count=self.hop_count + 1,
             priority=self.priority,
+            meta=dict(self.meta or {}),
         )
 
     def __repr__(self) -> str:

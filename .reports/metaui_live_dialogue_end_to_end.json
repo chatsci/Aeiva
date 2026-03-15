@@ -1,0 +1,155 @@
+{
+  "total_scenarios": 5,
+  "passed_scenarios": 5,
+  "failed_scenarios": 0,
+  "scenario_success_rate": 1.0,
+  "total_turns": 15,
+  "ok_turns": 15,
+  "failed_turns": 0,
+  "turn_success_rate": 1.0,
+  "avg_turn_latency_seconds": 20.75,
+  "max_turn_latency_seconds": 34.67,
+  "suite_wall_time_seconds": 313.82,
+  "scenarios": [
+    {
+      "scenario_id": "chat_customization_flow",
+      "status": "ok",
+      "total_latency_seconds": 51.76,
+      "turns": [
+        {
+          "scenario_id": "chat_customization_flow",
+          "prompt": "Build a functional chat UI with send and clear buttons.",
+          "status": "ok",
+          "latency_seconds": 15.85,
+          "response_excerpt": "I built a functional chat UI with:\n\n- **Message history** (list of cards)\n- **Message input** (TextField bound to `/draft`)\n- **Send** button:\n  - Validates the draft is non-empty\n  - Appends `{ role: \"You\", text: <draft> }` to `/messages`\n  - Clears `/draft`\n- **Clear** button:\n  - Sets `/messages` to an empty list\n\nI"
+        },
+        {
+          "scenario_id": "chat_customization_flow",
+          "prompt": "Change it to whatsapp style: compact spacing, right/left bubbles.",
+          "status": "ok",
+          "latency_seconds": 11.42,
+          "response_excerpt": "Change it to whatsapp style: compact spacing, right/left bubbles.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)"
+        },
+        {
+          "scenario_id": "chat_customization_flow",
+          "prompt": "Add export and clear actions; keep them functional.",
+          "status": "ok",
+          "latency_seconds": 24.49,
+          "response_excerpt": "Add export and clear actions; keep them functional.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)Waiting for tools... (17s)Waiting for tools. (19s)Waiting for tools.. (21s)Waiting for tools... (23s)"
+        }
+      ]
+    },
+    {
+      "scenario_id": "onboarding_form_flow",
+      "status": "ok",
+      "total_latency_seconds": 77.65,
+      "turns": [
+        {
+          "scenario_id": "onboarding_form_flow",
+          "prompt": "Create an employee onboarding form UI with submit/reset.",
+          "status": "ok",
+          "latency_seconds": 26.8,
+          "response_excerpt": "Create an employee onboarding form UI with submit/reset.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)Waiting for tools... (17s)Waiting for tools. (19s)Waiting for tools.. (21s)Waiting for tools... (23s)Retrying if needed. (25s)Ret"
+        },
+        {
+          "scenario_id": "onboarding_form_flow",
+          "prompt": "Add required hints and email validation.",
+          "status": "ok",
+          "latency_seconds": 32.04,
+          "response_excerpt": "Add required hints and email validation.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (15s)Waiting for tools... (17s)Waiting for tools. (19s)Waiting for tools.. (21s)Waiting for tools... (23s)Retrying if needed. (25s)Retrying if needed."
+        },
+        {
+          "scenario_id": "onboarding_form_flow",
+          "prompt": "After submit, show a success summary section.",
+          "status": "ok",
+          "latency_seconds": 18.81,
+          "response_excerpt": "After submit, show a success summary section.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (15s)Waiting for tools... (17s)Waiting for tools. (19s)"
+        }
+      ]
+    },
+    {
+      "scenario_id": "data_analysis_flow",
+      "status": "ok",
+      "total_latency_seconds": 53.83,
+      "turns": [
+        {
+          "scenario_id": "data_analysis_flow",
+          "prompt": "Create a data analysis UI with CSV upload, table preview, and line chart.",
+          "status": "ok",
+          "latency_seconds": 22.81,
+          "response_excerpt": "Create a data analysis UI with CSV upload, table preview, and line chart.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (15s)Waiting for tools... (17s)Waiting for tools. (19s)Waiting for tools.. (21s)Waiting for tools... (23s)"
+        },
+        {
+          "scenario_id": "data_analysis_flow",
+          "prompt": "Add selectors for X and Y columns and a plot button.",
+          "status": "ok",
+          "latency_seconds": 11.29,
+          "response_excerpt": "Add selectors for X and Y columns and a plot button.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)"
+        },
+        {
+          "scenario_id": "data_analysis_flow",
+          "prompt": "Switch chart style to compact dark mode with clear legend.",
+          "status": "ok",
+          "latency_seconds": 19.73,
+          "response_excerpt": "Switch chart style to compact dark mode with clear legend.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)Waiting for tools... (17s)Waiting for tools. (19s)"
+        }
+      ]
+    },
+    {
+      "scenario_id": "survey_flow",
+      "status": "ok",
+      "total_latency_seconds": 49.45,
+      "turns": [
+        {
+          "scenario_id": "survey_flow",
+          "prompt": "Create a survey UI with text input, checkbox, choice picker, slider, and submit.",
+          "status": "ok",
+          "latency_seconds": 19.65,
+          "response_excerpt": "Create a survey UI with text input, checkbox, choice picker, slider, and submit.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)Waiting for tools... (17s)Waiting for tools. (19s)"
+        },
+        {
+          "scenario_id": "survey_flow",
+          "prompt": "Add reset button and validation errors.",
+          "status": "ok",
+          "latency_seconds": 15.15,
+          "response_excerpt": "Add reset button and validation errors.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)"
+        },
+        {
+          "scenario_id": "survey_flow",
+          "prompt": "Show thank-you message after submit.",
+          "status": "ok",
+          "latency_seconds": 14.65,
+          "response_excerpt": "Show thank-you message after submit.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)"
+        }
+      ]
+    },
+    {
+      "scenario_id": "dashboard_flow",
+      "status": "ok",
+      "total_latency_seconds": 78.55,
+      "turns": [
+        {
+          "scenario_id": "dashboard_flow",
+          "prompt": "Create a dashboard UI with tabs for summary, chart, table, and settings.",
+          "status": "ok",
+          "latency_seconds": 34.67,
+          "response_excerpt": "Create a dashboard UI with tabs for summary, chart, table, and settings.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)Waiting for tools... (17s)Waiting for tools. (19s)Waiting for tools.. (21s)Waiting for tools... (23s)Retrying if "
+        },
+        {
+          "scenario_id": "dashboard_flow",
+          "prompt": "Make the chart tab a line chart and table tab sortable preview.",
+          "status": "ok",
+          "latency_seconds": 21.92,
+          "response_excerpt": "Make the chart tab a line chart and table tab sortable preview.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (14s)Waiting for tools... (17s)Waiting for tools. (19s)Waiting for tools.. (21s)"
+        },
+        {
+          "scenario_id": "dashboard_flow",
+          "prompt": "Add settings controls for theme and compact layout.",
+          "status": "ok",
+          "latency_seconds": 21.96,
+          "response_excerpt": "Add settings controls for theme and compact layout.\nThinking. (0s)Thinking.. (2s)Thinking... (4s)Acting. (6s)Acting.. (8s)Acting... (10s)Waiting for tools. (12s)Waiting for tools.. (15s)Waiting for tools... (17s)Waiting for tools. (19s)Waiting for tools.. (21s)"
+        }
+      ]
+    }
+  ]
+}

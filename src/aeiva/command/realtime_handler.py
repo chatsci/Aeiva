@@ -28,6 +28,10 @@ from typing import Any, Generator, Optional, Union
 from aeiva.neuron import Signal
 from aeiva.event.event_names import EventNames
 from aeiva.interface.progress_hints import build_progress_hint
+from aeiva.realtime.turn_based_response_strategy import (
+    TurnBasedResponseStrategy,
+    resolve_turn_based_response_strategy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +117,8 @@ class RealtimePipelineHandler:
             0.05,
             float(realtime_cfg.get("progress_poll_timeout", DEFAULT_PROGRESS_POLL_TIMEOUT)),
         )
+        self._chat_update_seq = 0
+        self.response_strategy: TurnBasedResponseStrategy = resolve_turn_based_response_strategy(config_dict)
 
     def update_latest_frame(self, frame: Any) -> None:
         """Cache the latest webcam frame for fallback image sends."""
@@ -140,8 +146,6 @@ class RealtimePipelineHandler:
             Audio chunks (sample_rate, np.ndarray) for TTS playback,
             plus AdditionalOutputs for chatbot updates.
         """
-        from fastrtc import AdditionalOutputs
-
         chatbot = chatbot if chatbot is not None else []
 
         # 1. Extract user text: from audio (STT) or from textbox
@@ -152,62 +156,44 @@ class RealtimePipelineHandler:
         # 2. Update chatbot with user message
         chatbot = list(chatbot)
         chatbot.append({"role": "user", "content": text})
-        yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+        yield self._chat_additional_outputs(chatbot)
 
         # 3. Build payload (text-only or multimodal)
         payload = self._build_payload(text, camera_image, uploaded_image)
 
         # 4. Emit to Agent EventBus (through gateway)
-        trace_id = None
         try:
-            if self.gateway is not None:
-                signal = self.gateway.build_input_signal(
-                    payload,
-                    source=EventNames.PERCEPTION_REALTIME,
-                    route=self.route_token,
-                    meta={"llm_stream": False},
-                )
-                trace_id = signal.trace_id
-            else:
-                signal = Signal(source=EventNames.PERCEPTION_REALTIME, data=payload)
-            if self.gateway is None:
-                asyncio.run_coroutine_threadsafe(
-                    self.agent.event_bus.emit(EventNames.PERCEPTION_REALTIME, payload=payload),
-                    self.agent.event_bus.loop
-                ).result(timeout=self.emit_timeout)
-            else:
-                asyncio.run_coroutine_threadsafe(
-                    self.gateway.emit_input(
-                        signal,
-                        route=self.route_token,
-                        add_pending_route=True,
-                        event_name=EventNames.PERCEPTION_STIMULI,
-                    ),
-                    self.agent.event_bus.loop
-                ).result(timeout=self.emit_timeout)
+            trace_id = self._emit_payload(payload)
         except Exception as e:
             logger.error(f"Failed to emit perception.realtime: {e}")
             chatbot.append({"role": "assistant", "content": f"Error: {e}"})
-            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+            yield self._chat_additional_outputs(chatbot)
             return
 
-        stream = False  # Force non-streaming for realtime audio stability
-
         # 5. Collect response from Agent (streaming or non-streaming)
-        if stream:
+        if self.response_strategy.llm_stream:
             chatbot.append({"role": "assistant", "content": ""})
             response_text = yield from self._collect_response_stream(
-                chatbot, trace_id, timeout=self.response_timeout
+                chatbot,
+                trace_id,
+                timeout=self.response_timeout,
+                emit_progress_hints=self.response_strategy.emit_progress_hints,
             )
+            if chatbot and str(chatbot[-1].get("content", "")) != str(response_text):
+                chatbot[-1]["content"] = response_text
+                yield self._chat_additional_outputs(chatbot)
         else:
             chatbot.append({"role": "assistant", "content": ""})
-            response_text = yield from self._collect_response_with_hints(
-                chatbot=chatbot,
-                trace_id=trace_id,
-                timeout=self.response_timeout,
-            )
+            if self.response_strategy.emit_progress_hints:
+                response_text = yield from self._collect_response_with_hints(
+                    chatbot=chatbot,
+                    trace_id=trace_id,
+                    timeout=self.response_timeout,
+                )
+            else:
+                response_text = self._collect_response(trace_id, timeout=self.response_timeout)
             chatbot[-1]["content"] = response_text
-            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+            yield self._chat_additional_outputs(chatbot)
 
         # 6. TTS -> yield audio chunks (after full text available)
         if self.tts_model is not None and response_text:
@@ -216,6 +202,56 @@ class RealtimePipelineHandler:
                     yield chunk
             except Exception as e:
                 logger.error(f"TTS error: {e}")
+
+    def _emit_payload(self, payload: Union[str, dict]) -> Optional[str]:
+        trace_id = None
+        if self.gateway is not None:
+            signal = self.gateway.build_input_signal(
+                payload,
+                source=EventNames.PERCEPTION_REALTIME,
+                route=self.route_token,
+                meta={"llm_stream": bool(self.response_strategy.llm_stream)},
+            )
+            trace_id = signal.trace_id
+        else:
+            signal = Signal(source=EventNames.PERCEPTION_REALTIME, data=payload)
+        if self.gateway is None:
+            asyncio.run_coroutine_threadsafe(
+                self.agent.event_bus.emit(EventNames.PERCEPTION_REALTIME, payload=payload),
+                self.agent.event_bus.loop,
+            ).result(timeout=self.emit_timeout)
+        else:
+            asyncio.run_coroutine_threadsafe(
+                self.gateway.emit_input(
+                    signal,
+                    route=self.route_token,
+                    add_pending_route=True,
+                    event_name=EventNames.PERCEPTION_STIMULI,
+                ),
+                self.agent.event_bus.loop,
+            ).result(timeout=self.emit_timeout)
+        return trace_id
+
+    def send_text_sync(
+        self,
+        text: str,
+        *,
+        camera_image: Any = None,
+        uploaded_image: Any = None,
+    ) -> Optional[str]:
+        message = str(text or "").strip()
+        if not message:
+            return None
+        payload = self._build_payload(message, camera_image, uploaded_image)
+        try:
+            trace_id = self._emit_payload(payload)
+        except Exception as e:
+            logger.error("Failed to emit text perception.realtime: %s", e)
+            return f"Error: {e}"
+        return self._collect_response(trace_id, timeout=self.response_timeout)
+
+    async def send_text(self, text: str) -> Optional[str]:
+        return await asyncio.to_thread(self.send_text_sync, text)
 
     def _build_payload(
         self,
@@ -311,8 +347,6 @@ class RealtimePipelineHandler:
         now_fn=time.time,
     ) -> Generator:
         """Collect non-streaming response with periodic user-visible progress hints."""
-        from fastrtc import AdditionalOutputs
-
         start_at = now_fn()
         deadline = start_at + max(0.0, float(timeout))
         next_hint_at = start_at + self.progress_hint_interval
@@ -325,7 +359,7 @@ class RealtimePipelineHandler:
                 hint_index=hint_index,
             )
             hint_index += 1
-            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+            yield self._chat_additional_outputs(chatbot)
 
         while True:
             remaining = deadline - now_fn()
@@ -347,9 +381,17 @@ class RealtimePipelineHandler:
                 next_hint_at = now + self.progress_hint_interval
                 if chatbot:
                     chatbot[-1]["content"] = hint_text
-                    yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+                    yield self._chat_additional_outputs(chatbot)
 
-    def _collect_response_stream(self, chatbot: list, trace_id: Optional[str], timeout: float = 30.0) -> str:
+    def _collect_response_stream(
+        self,
+        chatbot: list,
+        trace_id: Optional[str],
+        timeout: float = 30.0,
+        *,
+        emit_progress_hints: bool = False,
+        now_fn=time.time,
+    ) -> str:
         """Stream response chunks to the chatbot as they arrive.
 
         Args:
@@ -359,22 +401,48 @@ class RealtimePipelineHandler:
         Returns:
             Complete response text
         """
-        from fastrtc import AdditionalOutputs
         response_parts = []
+        start_at = now_fn()
+        deadline = start_at + max(0.0, float(timeout))
+        next_hint_at = start_at + self.progress_hint_interval
+        hint_index = 0
 
         while True:
-            try:
-                chunk = self._queue_get(trace_id, timeout)
-            except queue.Empty:
+            remaining = deadline - now_fn()
+            if remaining <= 0:
                 logger.warning("Timeout waiting for streaming response chunk")
-                break
-
+                if response_parts:
+                    break
+                return "I'm sorry, I didn't receive a response in time."
+            try:
+                poll_timeout = min(
+                    self.progress_poll_timeout if emit_progress_hints else remaining,
+                    remaining,
+                )
+                chunk = self._queue_get(trace_id, poll_timeout)
+            except queue.Empty:
+                if not emit_progress_hints:
+                    continue
+                now = now_fn()
+                if now < next_hint_at:
+                    continue
+                hint_text = self._build_progress_hint(
+                    elapsed_seconds=now - start_at,
+                    hint_index=hint_index,
+                )
+                hint_index += 1
+                next_hint_at = now + self.progress_hint_interval
+                if chatbot and not response_parts:
+                    chatbot[-1]["content"] = hint_text
+                    yield self._chat_additional_outputs(chatbot)
+                continue
             if chunk == "<END_OF_RESPONSE>":
                 break
 
             response_parts.append(str(chunk))
-            chatbot[-1]["content"] = "".join(response_parts)
-            yield AdditionalOutputs(self._snapshot_chatbot(chatbot))
+            if chatbot:
+                chatbot[-1]["content"] = "".join(response_parts)
+                yield self._chat_additional_outputs(chatbot)
 
         return "".join(response_parts)
 
@@ -388,6 +456,21 @@ class RealtimePipelineHandler:
             else:
                 snapshot.append(item)
         return snapshot
+
+    def _next_chat_update_seq(self) -> int:
+        self._chat_update_seq += 1
+        return self._chat_update_seq
+
+    def _chat_additional_outputs(self, chatbot: list):
+        from fastrtc import AdditionalOutputs
+
+        snapshot = self._snapshot_chatbot(chatbot)
+        seq = self._next_chat_update_seq()
+        try:
+            return AdditionalOutputs(snapshot, seq)
+        except TypeError:
+            # Test doubles may expose a simplified single-arg signature.
+            return AdditionalOutputs(snapshot)
 
     def _queue_get(self, trace_id: Optional[str], timeout: float) -> Any:
         if self.gateway is not None and hasattr(self.gateway, "get_for_trace"):

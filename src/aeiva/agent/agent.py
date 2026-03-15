@@ -35,6 +35,7 @@ from aeiva.cognition.memory.summary_memory import SummaryMemoryNeuron
 from aeiva.cognition.emotion.emotion import EmotionNeuron
 from aeiva.cognition.goal.goal import GoalNeuron
 from aeiva.cognition.world_model.world_model import WorldModelNeuron
+from aeiva.liferpg.neuron import LifeRPGNeuron
 from aeiva.event.event_names import EventNames
 from aeiva.action.actuator import ActuatorNeuron
 from aeiva.tool.registry import bind_tool_executor, reset_tool_executor
@@ -64,7 +65,13 @@ class Agent:
         """
         self.config_dict = config
         self.config = None
-        self.event_bus = EventBus()
+        event_cfg = config.get("event_config") or {}
+        self.event_bus = EventBus(
+            max_hop_count=self._parse_positive_int(event_cfg.get("max_hop_count")),
+            max_history=self._parse_positive_int(event_cfg.get("max_history")),
+            lane_queue_limit=self._parse_positive_int(event_cfg.get("lane_queue_limit")) or 2048,
+            readonly_concurrency=self._parse_positive_int(event_cfg.get("readonly_concurrency")) or 8,
+        )
         self._stop_requested = False
 
         # Neurons (initialized in setup)
@@ -76,11 +83,22 @@ class Agent:
         self.emotion: Optional[EmotionNeuron] = None
         self.goal: Optional[GoalNeuron] = None
         self.world_model: Optional[WorldModelNeuron] = None
+        self.liferpg: Optional[LifeRPGNeuron] = None
         self.action: Optional[ActuatorNeuron] = None
 
         # Emotion logging state
         self._last_emotion_log_state: Optional[Dict[str, float]] = None
         self._last_emotion_log_label: Optional[str] = None
+
+    @staticmethod
+    def _parse_positive_int(value: Any) -> Optional[int]:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
 
     def request_stop(self) -> None:
         """Request the agent to stop its run loop."""
@@ -100,6 +118,7 @@ class Agent:
             self.emotion,
             self.goal,
             self.world_model,
+            self.liferpg,
             self.action,
         ]
         return [n for n in neurons if n is not None]
@@ -129,6 +148,7 @@ class Agent:
         emotion_config = cfg.get("emotion_config")
         goal_config = cfg.get("goal_config")
         world_model_config = cfg.get("world_model_config")
+        liferpg_config = cfg.get("liferpg_config")
         raw_memory_config = cfg.get("raw_memory_config")
         raw_memory_summary_config = cfg.get("raw_memory_summary_config")
 
@@ -203,6 +223,20 @@ class Agent:
                 event_bus=self.event_bus
             )
 
+        if self._config_enabled(liferpg_config, default=False):
+            liferpg_cfg = dict(liferpg_config or {})
+            if "llm_gateway_config" not in liferpg_cfg:
+                liferpg_cfg["llm_gateway_config"] = cfg.get("llm_gateway_config", {})
+            if "raw_memory_base_dir" not in liferpg_cfg and raw_memory_config:
+                liferpg_cfg["raw_memory_base_dir"] = raw_memory_config.get("base_dir", "storage/memory")
+            if "user_id" not in liferpg_cfg and raw_memory_config:
+                liferpg_cfg["user_id"] = raw_memory_config.get("user_id", "User")
+            self.liferpg = LifeRPGNeuron(
+                name="liferpg",
+                config=liferpg_cfg,
+                event_bus=self.event_bus,
+            )
+
         if self._config_enabled(action_config, default=True):
             self.action = ActuatorNeuron(
                 name="action",
@@ -223,6 +257,12 @@ class Agent:
                 logger.info("SummaryMemory startup catchup result: %s", result)
             except Exception as exc:
                 logger.warning("SummaryMemory startup catchup failed: %s", exc)
+        if self.liferpg:
+            try:
+                result = await self.liferpg.startup_catchup()
+                logger.info("LifeRPG startup catchup result: %s", result)
+            except Exception as exc:
+                logger.warning("LifeRPG startup catchup failed: %s", exc)
 
     async def _setup_runtime(self) -> None:
         """Create and initialize runtime neurons and startup tasks."""
@@ -409,6 +449,18 @@ class Agent:
                 payload = payload.data
             if isinstance(payload, dict) and payload.get("updates"):
                 logger.info("Goal updated: %d changes", len(payload["updates"]))
+
+        @self.event_bus.on(EventNames.LIFERPG_CHANGED)
+        async def handle_liferpg_changed(event: Event):
+            payload = event.payload
+            if isinstance(payload, Signal):
+                payload = payload.data
+            if isinstance(payload, dict) and payload.get("updated"):
+                logger.info(
+                    "LifeRPG updated (period=%s keys=%s)",
+                    payload.get("period"),
+                    payload.get("changed_keys"),
+                )
 
         @self.event_bus.on(EventNames.AGENT_STOP)
         async def handle_agent_stop(event: Event):

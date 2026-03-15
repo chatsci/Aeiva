@@ -1,0 +1,304 @@
+{
+  "generated_at": "2026-02-15T00:49:11.435490+00:00",
+  "total_scenarios": 5,
+  "passed_scenarios": 0,
+  "failed_scenarios": 5,
+  "success_rate": 0.0,
+  "total_turns": 5,
+  "timed_out_turns": 5,
+  "avg_latency_seconds": 120.00690673342906,
+  "errors": [
+    "[metaui_dialogue_ui_create] metaui_dialogue_ui_create/turn[0] latency 120.01s > 110.00s",
+    "[metaui_dialogue_ui_create] metaui_dialogue_ui_create/turn[0] MetaUI session_count 0 < required 1",
+    "[metaui_dialogue_ui_create] metaui_dialogue_ui_create/turn[0] all MetaUI sessions have empty components.",
+    "[metaui_form_submit_flow] metaui_form_submit_flow/turn[0] latency 120.01s > 110.00s",
+    "[metaui_form_submit_flow] metaui_form_submit_flow/turn[0] MetaUI session_count 0 < required 1",
+    "[metaui_form_submit_flow] metaui_form_submit_flow/turn[0] all MetaUI sessions have empty components.",
+    "[metaui_data_analysis_flow] metaui_data_analysis_flow/turn[0] latency 120.01s > 110.00s",
+    "[metaui_data_analysis_flow] metaui_data_analysis_flow/turn[0] MetaUI session_count 0 < required 1",
+    "[metaui_data_analysis_flow] metaui_data_analysis_flow/turn[0] all MetaUI sessions have empty components.",
+    "[metaui_survey_flow] metaui_survey_flow/turn[0] latency 120.01s > 110.00s",
+    "[metaui_survey_flow] metaui_survey_flow/turn[0] MetaUI session_count 0 < required 1",
+    "[metaui_survey_flow] metaui_survey_flow/turn[0] all MetaUI sessions have empty components.",
+    "[metaui_dashboard_flow] metaui_dashboard_flow/turn[0] latency 120.01s > 110.00s",
+    "[metaui_dashboard_flow] metaui_dashboard_flow/turn[0] MetaUI session_count 0 < required 1",
+    "[metaui_dashboard_flow] metaui_dashboard_flow/turn[0] all MetaUI sessions have empty components."
+  ],
+  "scenario_results": [
+    {
+      "scenario_id": "metaui_dialogue_ui_create",
+      "passed": false,
+      "errors": [
+        "metaui_dialogue_ui_create/turn[0] latency 120.01s > 110.00s",
+        "metaui_dialogue_ui_create/turn[0] MetaUI session_count 0 < required 1",
+        "metaui_dialogue_ui_create/turn[0] all MetaUI sessions have empty components."
+      ],
+      "turns": [
+        {
+          "user": "Please create a dialogue interaction UI that is functionable (not just look).",
+          "response": "I'm sorry, I didn't receive a response in time.",
+          "latency_seconds": 120.00542170903645,
+          "hints": [
+            "Thinking. (1s)",
+            "Acting.. (5s)",
+            "Acting... (9s)",
+            "Waiting for tools. (13s)",
+            "Waiting for tools.. (17s)",
+            "Waiting for tools... (21s)",
+            "Retrying if needed. (25s)",
+            "Retrying if needed.. (29s)",
+            "Retrying if needed... (33s)",
+            "Retrying if needed. (37s)",
+            "Still working.. (41s)",
+            "Still working... (45s)",
+            "Still working. (49s)",
+            "Still working.. (53s)",
+            "Still working... (57s)",
+            "Still working. (61s)",
+            "Still working.. (65s)",
+            "Still working... (70s)",
+            "Still working. (74s)",
+            "Still working.. (78s)",
+            "Still working... (82s)",
+            "Still working. (86s)",
+            "Still working.. (90s)",
+            "Still working... (94s)",
+            "Still working. (98s)",
+            "Still working.. (102s)",
+            "Still working... (106s)",
+            "Still working. (110s)",
+            "Still working.. (114s)",
+            "Still working... (118s)"
+          ],
+          "timed_out": true,
+          "metaui": {
+            "available": true,
+            "connected_clients": 0,
+            "session_count": 0,
+            "component_counts": {}
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "metaui_form_submit_flow",
+      "passed": false,
+      "errors": [
+        "metaui_form_submit_flow/turn[0] latency 120.01s > 110.00s",
+        "metaui_form_submit_flow/turn[0] MetaUI session_count 0 < required 1",
+        "metaui_form_submit_flow/turn[0] all MetaUI sessions have empty components."
+      ],
+      "turns": [
+        {
+          "user": "Create an employee onboarding form UI with submit and reset buttons.",
+          "response": "I'm sorry, I didn't receive a response in time.",
+          "latency_seconds": 120.00604237499647,
+          "hints": [
+            "Thinking. (1s)",
+            "Acting.. (5s)",
+            "Acting... (9s)",
+            "Waiting for tools. (13s)",
+            "Waiting for tools.. (17s)",
+            "Waiting for tools... (21s)",
+            "Retrying if needed. (25s)",
+            "Retrying if needed.. (29s)",
+            "Retrying if needed... (33s)",
+            "Retrying if needed. (37s)",
+            "Still working.. (41s)",
+            "Still working... (45s)",
+            "Still working. (49s)",
+            "Still working.. (53s)",
+            "Still working... (57s)",
+            "Still working. (61s)",
+            "Still working.. (65s)",
+            "Still working... (70s)",
+            "Still working. (74s)",
+            "Still working.. (78s)",
+            "Still working... (82s)",
+            "Still working. (86s)",
+            "Still working.. (90s)",
+            "Still working... (94s)",
+            "Still working. (98s)",
+            "Still working.. (102s)",
+            "Still working... (106s)",
+            "Still working. (110s)",
+            "Still working.. (114s)",
+            "Still working... (118s)"
+          ],
+          "timed_out": true,
+          "metaui": {
+            "available": true,
+            "connected_clients": 0,
+            "session_count": 0,
+            "component_counts": {}
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "metaui_data_analysis_flow",
+      "passed": false,
+      "errors": [
+        "metaui_data_analysis_flow/turn[0] latency 120.01s > 110.00s",
+        "metaui_data_analysis_flow/turn[0] MetaUI session_count 0 < required 1",
+        "metaui_data_analysis_flow/turn[0] all MetaUI sessions have empty components."
+      ],
+      "turns": [
+        {
+          "user": "Create a data analysis UI with CSV upload, table preview, and line chart options.",
+          "response": "I'm sorry, I didn't receive a response in time.",
+          "latency_seconds": 120.00673433300108,
+          "hints": [
+            "Thinking. (1s)",
+            "Acting.. (5s)",
+            "Acting... (9s)",
+            "Waiting for tools. (13s)",
+            "Waiting for tools.. (17s)",
+            "Waiting for tools... (21s)",
+            "Retrying if needed. (25s)",
+            "Retrying if needed.. (29s)",
+            "Retrying if needed... (33s)",
+            "Retrying if needed. (37s)",
+            "Still working.. (41s)",
+            "Still working... (45s)",
+            "Still working. (49s)",
+            "Still working.. (53s)",
+            "Still working... (57s)",
+            "Still working. (61s)",
+            "Still working.. (65s)",
+            "Still working... (69s)",
+            "Still working. (74s)",
+            "Still working.. (78s)",
+            "Still working... (82s)",
+            "Still working. (86s)",
+            "Still working.. (90s)",
+            "Still working... (94s)",
+            "Still working. (98s)",
+            "Still working.. (102s)",
+            "Still working... (106s)",
+            "Still working. (110s)",
+            "Still working.. (114s)",
+            "Still working... (118s)"
+          ],
+          "timed_out": true,
+          "metaui": {
+            "available": true,
+            "connected_clients": 0,
+            "session_count": 0,
+            "component_counts": {}
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "metaui_survey_flow",
+      "passed": false,
+      "errors": [
+        "metaui_survey_flow/turn[0] latency 120.01s > 110.00s",
+        "metaui_survey_flow/turn[0] MetaUI session_count 0 < required 1",
+        "metaui_survey_flow/turn[0] all MetaUI sessions have empty components."
+      ],
+      "turns": [
+        {
+          "user": "Create a survey UI with text input, checkbox, choice picker, slider, and submit button.",
+          "response": "I'm sorry, I didn't receive a response in time.",
+          "latency_seconds": 120.00742479111068,
+          "hints": [
+            "Thinking. (1s)",
+            "Acting.. (5s)",
+            "Acting... (9s)",
+            "Waiting for tools. (13s)",
+            "Waiting for tools.. (17s)",
+            "Waiting for tools... (21s)",
+            "Retrying if needed. (25s)",
+            "Retrying if needed.. (29s)",
+            "Retrying if needed... (33s)",
+            "Retrying if needed. (37s)",
+            "Still working.. (41s)",
+            "Still working... (45s)",
+            "Still working. (49s)",
+            "Still working.. (53s)",
+            "Still working... (57s)",
+            "Still working. (61s)",
+            "Still working.. (65s)",
+            "Still working... (69s)",
+            "Still working. (74s)",
+            "Still working.. (78s)",
+            "Still working... (82s)",
+            "Still working. (86s)",
+            "Still working.. (90s)",
+            "Still working... (94s)",
+            "Still working. (98s)",
+            "Still working.. (102s)",
+            "Still working... (106s)",
+            "Still working. (110s)",
+            "Still working.. (114s)",
+            "Still working... (118s)"
+          ],
+          "timed_out": true,
+          "metaui": {
+            "available": true,
+            "connected_clients": 0,
+            "session_count": 0,
+            "component_counts": {}
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "metaui_dashboard_flow",
+      "passed": false,
+      "errors": [
+        "metaui_dashboard_flow/turn[0] latency 120.01s > 110.00s",
+        "metaui_dashboard_flow/turn[0] MetaUI session_count 0 < required 1",
+        "metaui_dashboard_flow/turn[0] all MetaUI sessions have empty components."
+      ],
+      "turns": [
+        {
+          "user": "Create a dashboard UI with tabs for summary, trend chart, table, and settings.",
+          "response": "I'm sorry, I didn't receive a response in time.",
+          "latency_seconds": 120.00891045900062,
+          "hints": [
+            "Thinking. (1s)",
+            "Acting.. (5s)",
+            "Acting... (9s)",
+            "Waiting for tools. (13s)",
+            "Waiting for tools.. (17s)",
+            "Waiting for tools... (21s)",
+            "Retrying if needed. (25s)",
+            "Retrying if needed.. (29s)",
+            "Retrying if needed... (33s)",
+            "Retrying if needed. (37s)",
+            "Still working.. (41s)",
+            "Still working... (45s)",
+            "Still working. (49s)",
+            "Still working.. (53s)",
+            "Still working... (57s)",
+            "Still working. (61s)",
+            "Still working.. (65s)",
+            "Still working... (70s)",
+            "Still working. (74s)",
+            "Still working.. (78s)",
+            "Still working... (82s)",
+            "Still working. (86s)",
+            "Still working.. (90s)",
+            "Still working... (94s)",
+            "Still working. (98s)",
+            "Still working.. (102s)",
+            "Still working... (106s)",
+            "Still working. (110s)",
+            "Still working.. (114s)",
+            "Still working... (118s)"
+          ],
+          "timed_out": true,
+          "metaui": {
+            "available": true,
+            "connected_clients": 0,
+            "session_count": 0,
+            "component_counts": {}
+          }
+        }
+      ]
+    }
+  ]
+}

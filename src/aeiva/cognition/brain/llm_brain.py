@@ -55,20 +55,19 @@ class LLMBrain(Brain):
         and ensuring that all necessary resources are in place.
         """
         llm_conf_dict = self.config_dict.get('llm_gateway_config', {})
-        llm_api_key = llm_conf_dict.get('llm_api_key')
-        self.config = LLMGatewayConfig(
-            llm_api_key=llm_api_key,
-            llm_model_name=llm_conf_dict.get('llm_model_name', 'gpt-4o'),
-            llm_temperature=llm_conf_dict.get('llm_temperature', 0.7),
-            llm_max_output_tokens=llm_conf_dict.get('llm_max_output_tokens', 10000),
-            llm_timeout=llm_conf_dict.get('llm_timeout', 120),
-            llm_use_async=llm_conf_dict.get('llm_use_async', False),
-            llm_stream=llm_conf_dict.get('llm_stream', False),
-            llm_api_mode=llm_conf_dict.get("llm_api_mode", "auto"),
-            llm_tool_choice=llm_conf_dict.get("llm_tool_choice"),
-            llm_additional_params=llm_conf_dict.get("llm_additional_params") or {},
-            llm_custom_provider=llm_conf_dict.get("llm_custom_provider"),
-        )
+        valid_keys = LLMGatewayConfig.__dataclass_fields__.keys()
+        llm_kwargs = {k: v for k, v in llm_conf_dict.items() if k in valid_keys}
+        llm_kwargs.setdefault("llm_model_name", "gpt-4o")
+        llm_kwargs.setdefault("llm_max_output_tokens", 10000)
+        llm_kwargs.setdefault("llm_timeout", 120)
+        llm_kwargs.setdefault("llm_use_async", False)
+        llm_kwargs.setdefault("llm_stream", False)
+        llm_kwargs.setdefault("llm_api_mode", "auto")
+        if "llm_provider" not in llm_kwargs:
+            llm_kwargs["llm_provider"] = "litellm"
+        if "llm_provider_config" not in llm_kwargs:
+            llm_kwargs["llm_provider_config"] = {}
+        self.config = LLMGatewayConfig(**llm_kwargs)
         self.llm_client = LLMClient(self.config)
 
         system_prompt = self._build_system_prompt(llm_conf_dict)

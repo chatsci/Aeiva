@@ -23,8 +23,6 @@ class DialogueExpectation:
     excludes: tuple[str, ...] = ()
     min_response_chars: int = 1
     max_latency_seconds: Optional[float] = None
-    metaui_min_sessions: Optional[int] = None
-    metaui_require_non_empty_components: bool = False
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "DialogueExpectation":
@@ -58,25 +56,12 @@ class DialogueExpectation:
         except Exception:
             min_chars = 1
 
-        metaui_min_sessions: Optional[int] = None
-        if raw.get("metaui_min_sessions") is not None:
-            try:
-                parsed = int(raw.get("metaui_min_sessions"))
-                if parsed >= 0:
-                    metaui_min_sessions = parsed
-            except Exception:
-                metaui_min_sessions = None
-
         return cls(
             contains_all=_as_tuple(raw.get("contains_all")),
             contains_any=_as_tuple(raw.get("contains_any")),
             excludes=_as_tuple(raw.get("excludes")),
             min_response_chars=min_chars,
             max_latency_seconds=max_latency,
-            metaui_min_sessions=metaui_min_sessions,
-            metaui_require_non_empty_components=bool(
-                raw.get("metaui_require_non_empty_components", False)
-            ),
         )
 
 
@@ -163,21 +148,12 @@ def load_dialogue_scenarios_from_file(path: str | Path) -> list[DialogueScenario
 
 
 @dataclass(frozen=True)
-class MetaUISnapshot:
-    available: bool
-    connected_clients: int
-    session_count: int
-    component_counts: Dict[str, int]
-
-
-@dataclass(frozen=True)
 class DialogueTurnResult:
     user: str
     response: str
     latency_seconds: float
     hints: tuple[str, ...]
     timed_out: bool
-    metaui: Optional[MetaUISnapshot]
 
 
 @dataclass(frozen=True)
@@ -229,16 +205,6 @@ class DialogueReplayReport:
                             "latency_seconds": turn.latency_seconds,
                             "hints": list(turn.hints),
                             "timed_out": turn.timed_out,
-                            "metaui": (
-                                {
-                                    "available": turn.metaui.available,
-                                    "connected_clients": turn.metaui.connected_clients,
-                                    "session_count": turn.metaui.session_count,
-                                    "component_counts": dict(turn.metaui.component_counts),
-                                }
-                                if turn.metaui is not None
-                                else None
-                            ),
                         }
                         for turn in item.turns
                     ],
@@ -246,35 +212,6 @@ class DialogueReplayReport:
                 for item in self.scenario_results
             ],
         }
-
-
-def _start_metaui_event_bridge_or_none(
-    *,
-    config_dict: Mapping[str, Any],
-    queue_gateway: ResponseQueueGateway,
-    agent_loop_getter: Any,
-    route_token: str,
-) -> Any:
-    try:
-        from aeiva.metaui.event_bridge import start_metaui_event_bridge
-
-        return start_metaui_event_bridge(
-            config_dict=config_dict,
-            queue_gateway=queue_gateway,
-            agent_loop_getter=agent_loop_getter,
-            route_token=route_token,
-        )
-    except Exception:
-        return None
-
-
-def _get_metaui_orchestrator_or_none() -> Any:
-    try:
-        from aeiva.metaui.orchestrator import get_metaui_orchestrator
-
-        return get_metaui_orchestrator()
-    except Exception:
-        return None
 
 
 class GatewayDialogueReplay:
@@ -310,7 +247,6 @@ class GatewayDialogueReplay:
             require_route=True,
         )
         self._queue_gateway.register_handlers()
-        self._metaui_bridge = None
         self._runtime_task: Optional[asyncio.Task] = None
         self._started = False
 
@@ -334,14 +270,6 @@ class GatewayDialogueReplay:
     async def start(self) -> None:
         if self._started:
             return
-        self._metaui_bridge = _start_metaui_event_bridge_or_none(
-            config_dict=self._config_dict,
-            queue_gateway=self._queue_gateway,
-            agent_loop_getter=lambda: getattr(
-                getattr(self._agent, "event_bus", None), "loop", None
-            ),
-            route_token=self._route_token,
-        )
         session_payload = {"session_id": uuid4().hex}
         self._runtime_task = asyncio.create_task(
             self._runtime.run(raw_memory_session=session_payload)
@@ -352,8 +280,6 @@ class GatewayDialogueReplay:
     async def stop(self) -> None:
         if not self._started:
             return
-        if self._metaui_bridge is not None:
-            self._metaui_bridge.stop(timeout=1.5)
         self._runtime.request_stop()
         task = self._runtime_task
         if task is not None:
@@ -469,51 +395,12 @@ class GatewayDialogueReplay:
             if not response and not timed_out:
                 response = ""
 
-        metaui_snapshot = await self._collect_metaui_snapshot()
         return DialogueTurnResult(
             user=user_input,
             response=response,
             latency_seconds=max(0.0, time.monotonic() - started),
             hints=tuple(hints),
             timed_out=timed_out,
-            metaui=metaui_snapshot,
-        )
-
-    async def _collect_metaui_snapshot(self) -> Optional[MetaUISnapshot]:
-        orchestrator = _get_metaui_orchestrator_or_none()
-        if orchestrator is None:
-            return None
-        try:
-            status = await orchestrator.status()
-            sessions_resp = await orchestrator.list_sessions()
-        except Exception:
-            return None
-
-        if not isinstance(status, Mapping) or not isinstance(sessions_resp, Mapping):
-            return None
-        sessions = sessions_resp.get("sessions")
-        if not isinstance(sessions, Sequence):
-            sessions = []
-        component_counts: Dict[str, int] = {}
-        for item in sessions:
-            if not isinstance(item, Mapping):
-                continue
-            ui_id = str(item.get("ui_id") or "").strip()
-            if not ui_id:
-                continue
-            try:
-                session_payload = await orchestrator.get_session(ui_id)
-            except Exception:
-                continue
-            spec = session_payload.get("spec") if isinstance(session_payload, Mapping) else None
-            components = spec.get("components") if isinstance(spec, Mapping) else None
-            component_counts[ui_id] = len(components) if isinstance(components, Sequence) else 0
-
-        return MetaUISnapshot(
-            available=True,
-            connected_clients=int(status.get("connected_clients") or 0),
-            session_count=len(sessions),
-            component_counts=component_counts,
         )
 
     async def run_scenario(
@@ -584,24 +471,6 @@ def validate_turn_expectation(
                 f"{scenario_id}/turn[{turn_index}] response contains forbidden token: {token!r}"
             )
 
-    if expectation.metaui_min_sessions is not None:
-        snapshot = result.metaui
-        if snapshot is None:
-            errors.append(f"{scenario_id}/turn[{turn_index}] MetaUI snapshot unavailable.")
-        elif snapshot.session_count < expectation.metaui_min_sessions:
-            errors.append(
-                f"{scenario_id}/turn[{turn_index}] MetaUI session_count {snapshot.session_count} "
-                f"< required {expectation.metaui_min_sessions}"
-            )
-
-    if expectation.metaui_require_non_empty_components:
-        snapshot = result.metaui
-        if snapshot is None:
-            errors.append(f"{scenario_id}/turn[{turn_index}] MetaUI snapshot unavailable.")
-        elif not any(count > 0 for count in snapshot.component_counts.values()):
-            errors.append(
-                f"{scenario_id}/turn[{turn_index}] all MetaUI sessions have empty components."
-            )
     return errors
 
 
