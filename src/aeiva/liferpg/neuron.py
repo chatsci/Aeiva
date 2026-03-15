@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_INPUT_EVENTS = [
     EventNames.RAW_MEMORY_SESSION_CLOSED,
-    EventNames.RAW_MEMORY_SUMMARY_REQUEST,
     EventNames.LIFERPG_QUERY,
     EventNames.LIFERPG_UPDATE,
 ]
@@ -60,6 +59,7 @@ class LifeRPGNeuronConfig(NeuronConfig):
     enabled: bool = True
     startup_catchup_enabled: bool = True
     llm_gateway_config: Dict[str, Any] = field(default_factory=dict)
+    default_profile: Dict[str, Any] = field(default_factory=dict)
     decision_temperature: float = 0.2
     max_context_chars: int = 12000
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
@@ -93,7 +93,7 @@ class LifeRPGNeuron(BaseNeuron):
 
     async def setup(self) -> None:
         await super().setup()
-        self.store.ensure_initialized()
+        self.store.ensure_initialized(default_profile=self.config.default_profile)
         self._runtime_state = self.store.read_runtime_state()
         if not self.config.enabled:
             self._llm_client = None
@@ -129,8 +129,6 @@ class LifeRPGNeuron(BaseNeuron):
             return self._handle_query()
         if source == EventNames.LIFERPG_UPDATE:
             return await self._handle_manual_update(signal)
-        if source == EventNames.RAW_MEMORY_SUMMARY_REQUEST:
-            return await self._handle_summary_request(signal)
         if source == EventNames.RAW_MEMORY_SESSION_CLOSED:
             return await self._handle_session_closed(signal)
         return None
@@ -174,14 +172,6 @@ class LifeRPGNeuron(BaseNeuron):
                 changed_keys=changed_keys,
             )
             return {"type": "updated", "updated": True, "period": "manual", "changed_keys": changed_keys}
-
-    async def _handle_summary_request(self, signal: Signal) -> Dict[str, Any]:
-        payload = signal.data if isinstance(signal.data, Mapping) else {}
-        period = str(payload.get("period") or "").strip().lower()
-        if period not in {"daily", "weekly", "monthly", "yearly", "session"}:
-            return {"type": "updated", "updated": False, "reason": "unsupported_period"}
-        timestamp = self._extract_datetime(payload.get("timestamp")) or self._from_signal_ts(signal)
-        return await self._run_period_update(period=period, timestamp=timestamp, context=str(payload.get("context") or ""))
 
     async def _handle_session_closed(self, signal: Signal) -> Dict[str, Any]:
         payload = signal.data if isinstance(signal.data, Mapping) else {}
