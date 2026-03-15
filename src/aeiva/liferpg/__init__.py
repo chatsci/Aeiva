@@ -1,4 +1,4 @@
-from aeiva.liferpg.neuron import LifeRPGNeuron, LifeRPGNeuronConfig
+from aeiva.liferpg.liferpg import LifeRPGNeuron, LifeRPGNeuronConfig
 from aeiva.liferpg.panel import (
     LifeRPGPanelComponents,
     PanelSnapshot,

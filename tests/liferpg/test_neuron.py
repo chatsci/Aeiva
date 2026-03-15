@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
 from aeiva.event.event_names import EventNames
-from aeiva.liferpg.neuron import LifeRPGNeuron
+from aeiva.liferpg.liferpg import LifeRPGNeuron
 from aeiva.neuron import Signal
 
 
 pytest_plugins = ("pytest_asyncio",)
+
+
+def test_liferpg_concept_module_hosts_neuron_pattern() -> None:
+    module = importlib.import_module("aeiva.liferpg.liferpg")
+
+    assert module.LifeRPGNeuron is LifeRPGNeuron
 
 
 @pytest.mark.asyncio

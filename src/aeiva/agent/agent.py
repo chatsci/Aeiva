@@ -35,7 +35,7 @@ from aeiva.cognition.memory.summary_memory import SummaryMemoryNeuron
 from aeiva.cognition.emotion.emotion import EmotionNeuron
 from aeiva.cognition.goal.goal import GoalNeuron
 from aeiva.cognition.world_model.world_model import WorldModelNeuron
-from aeiva.liferpg.neuron import LifeRPGNeuron
+from aeiva.liferpg.liferpg import LifeRPGNeuron
 from aeiva.event.event_names import EventNames
 from aeiva.action.actuator import ActuatorNeuron
 from aeiva.tool.registry import bind_tool_executor, reset_tool_executor
