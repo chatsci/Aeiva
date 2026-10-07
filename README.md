@@ -127,6 +127,11 @@ AEIVA includes a local browser automation tool for real web tasks:
 
 Enable it in `action_config.tools` with `browser`.
 
+For optional free, keyless web search with source excerpts, install
+`uv sync --extra search` and add `parallel_search` to `action_config.tools`.
+See [Parallel web search](docs/reference/parallel-search.md) for a runnable example
+and free-tier limits.
+
 ### 5) Dialogue Replay Testing (Real Conversations)
 
 You can replay real multi-turn dialogue scenarios against a live AEIVA runtime
